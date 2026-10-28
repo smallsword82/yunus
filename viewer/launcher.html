@@ -149,7 +149,15 @@ button { font-family:inherit; color:inherit; }
 #bsCam.warn { box-shadow:0 0 0 6px #e5484d, 0 10px 30px rgba(0,0,0,.5); }
 #outTemp { position:absolute; top:84px; right:36px; font-size:22px; color:var(--mu); z-index:2; }
 #car3d { position:absolute; inset:0; }
+#fpsMeter { position:absolute; top:84px; left:36px; z-index:5; font:500 18px/1.3 ui-monospace,monospace; color:var(--mu); background:var(--cd); padding:6px 10px; border-radius:8px; pointer-events:none; display:none; }
+#fpsMeter.show { display:block; }
+/* Performance mode: the map's dark look comes from recoloured layers instead of a full-screen filter */
+#stage.perf #map .maplibregl-canvas { filter:none !important; }
 .hot { position:absolute; transform:translate(-50%,-50%); z-index:3; background:none; border:0; text-align:center; font-size:20px; cursor:pointer; color:var(--tx); text-shadow:0 1px 4px rgba(0,0,0,.6); white-space:nowrap; transition:opacity .3s; }
+.glassDot { position:absolute; width:34px; height:34px; margin:-17px 0 0 -17px; border-radius:50%; z-index:3; opacity:0; cursor:grab; touch-action:none;
+  display:flex; align-items:center; justify-content:center; font-size:20px; color:#16181b; background:rgba(255,255,255,.95);
+  box-shadow:0 0 0 7px rgba(255,255,255,.22), 0 3px 10px rgba(0,0,0,.5); transition:opacity .25s, transform .12s; }
+.glassDot:active { cursor:grabbing; transform:scale(1.15); }
 .hot b { display:block; font-size:22px; font-weight:500; }
 .hot span { color:var(--mu); font-size:18px; }
 #lockBtn { position:absolute; left:50%; bottom:250px; transform:translateX(-50%); z-index:3; width:72px; height:72px; border-radius:50%; border:0; background:var(--cd); font-size:34px; cursor:pointer; }
@@ -183,8 +191,8 @@ button { font-family:inherit; color:inherit; }
 .seatBtn .lv span { width:14px; height:5px; border-radius:3px; background:var(--bg); }
 .seatBtn.heat .lv span.on { background:#ef7a3c; }
 .seatBtn.vent .lv span.on { background:#4aa3ff; }
-.seatBtn.heat.act i { color:#ef7a3c; }
-.seatBtn.vent.act i { color:#4aa3ff; }
+.seatBtn.heat.act i, .seatBtn.heat.act svg { color:#ef7a3c; }
+.seatBtn.vent.act i, .seatBtn.vent.act svg { color:#4aa3ff; }
 
 /* map */
 /* clip, not hidden: a hidden overflow box can still be scrolled by focus, which pulled the
@@ -306,15 +314,31 @@ button { font-family:inherit; color:inherit; }
 .tempCtl b { font-size:40px; font-weight:400; min-width:110px; text-align:center; cursor:pointer; }
 .sep { flex:1; }
 /* Seat climate and defrost in the dock (Tesla: tap a seat to step the heat, hold for the full set) */
-.seatDk { flex-direction:column; gap:4px; font-size:38px; color:var(--mu); touch-action:none; }
-.seatDk .lv { display:flex; gap:3px; height:5px; }
-.seatDk .lv span { width:12px; height:5px; border-radius:3px; background:var(--cd2); }
-.seatDk.heat, .seatDk.heat .lv span.on { color:#ef7a3c; } .seatDk.heat .lv span.on { background:#ef7a3c; }
-.seatDk.vent, .seatDk.vent .lv span.on { color:#4aa3ff; } .seatDk.vent .lv span.on { background:#4aa3ff; }
-.seatDk { position:relative; }
-.seatDk em { position:absolute; top:8px; right:12px; font-style:normal; font-size:15px; font-weight:600; color:var(--tx); }
-.dk svg { width:44px; height:44px; color:var(--mu); }
-.dk.lit svg { color:#ef7a3c; }
+/* Climate keys (seats, demisters, air direction): raised tiles with a soft top highlight; a key
+   that is working takes its colour (orange heat, blue cooling/air) with a glow. */
+.clim { position:relative; width:80px; height:80px; border-radius:20px; color:var(--tx); opacity:.92;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--cd) 100%, #fff 6%), var(--cd));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 6px rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.05);
+  transition:transform .12s, background .25s, box-shadow .25s, color .25s; }
+.clim:hover { background:linear-gradient(180deg, color-mix(in srgb, var(--cd2) 100%, #fff 6%), var(--cd2)); }
+.clim:active { transform:scale(.93); }
+.clim svg { width:46px; height:46px; color:inherit; }
+.clim.heat, .clim.lit { color:#ff8a4c; opacity:1; border-color:rgba(255,138,76,.45);
+  background:radial-gradient(circle at 50% 30%, rgba(255,138,76,.32), rgba(255,138,76,.08) 70%), var(--cd);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 0 18px rgba(255,138,76,.28); }
+.clim.vent { color:#5cb2ff; opacity:1; border-color:rgba(92,178,255,.45);
+  background:radial-gradient(circle at 50% 30%, rgba(92,178,255,.32), rgba(92,178,255,.08) 70%), var(--cd);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 0 18px rgba(92,178,255,.28); }
+/* The level bars sit below the icon without pushing it up, so every dock icon shares one centre line. */
+.seatDk { touch-action:none; }
+.seatDk svg { margin-top:-8px; }
+.seatDk .lv { position:absolute; bottom:9px; left:50%; transform:translateX(-50%); display:flex; gap:3px; height:4px; }
+.seatDk .lv span { width:11px; height:4px; border-radius:2px; background:rgba(255,255,255,.14); }
+.seatDk .lv span.on { background:currentColor; box-shadow:0 0 6px currentColor; }
+.seatDk em { position:absolute; top:6px; right:9px; font-style:normal; font-size:14px; font-weight:700; color:inherit; }
+.seatDk[data-seatdk="pass"] svg { transform:scaleX(-1); }
+#airFlow .on { color:#5cb2ff; filter:drop-shadow(0 0 3px rgba(92,178,255,.8)); }
+.seatIco { width:30px; height:30px; }
 #seatPop { position:absolute; bottom:124px; z-index:20; width:430px; padding:22px 24px; border-radius:22px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
   opacity:0; transform:translateY(12px); pointer-events:none; transition:opacity .2s, transform .2s; }
 #seatPop.show { opacity:1; transform:none; pointer-events:auto; }
@@ -357,11 +381,17 @@ button { font-family:inherit; color:inherit; }
       <div id="powerKw">0 kW</div>
     </div>
     <div id="outTemp">Dış 18°</div>
+    <div id="fpsMeter"></div>
     <div id="limitSign" class="hide"><span id="limitVal">50</span></div>
     <div id="car3d"></div>
     <div id="bsCam"><canvas id="bsCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="bsArrow"></i><span id="bsTxt">Sol kamera</span></div></div>
     <button class="hot" id="hTrunk" data-act="trunk"><b>Aç</b><span>Bagaj</span></button>
     <button class="hot" id="hShade" data-act="shade"><b>Aç</b><span>Tavan perdesi</span></button>
+    <div class="glassDot" data-dot="FL" aria-label="Sol ön cam"><i class="ti ti-arrows-vertical"></i></div>
+    <div class="glassDot" data-dot="RL" aria-label="Sol arka cam"><i class="ti ti-arrows-vertical"></i></div>
+    <div class="glassDot" data-dot="FR" aria-label="Sağ ön cam"><i class="ti ti-arrows-vertical"></i></div>
+    <div class="glassDot" data-dot="RR" aria-label="Sağ arka cam"><i class="ti ti-arrows-vertical"></i></div>
+    <div class="glassDot" data-dot="shade" aria-label="Tavan perdesi"><i class="ti ti-arrows-vertical"></i></div>
     <button class="hot" id="hCharge" data-act="charge"><i class="ti ti-bolt" style="font-size:30px"></i><span style="display:block">Şarj portu</span></button>
     <button id="lockBtn" aria-label="Kilit"><i class="ti ti-lock"></i></button>
     <div id="carCards">
@@ -451,9 +481,10 @@ button { font-family:inherit; color:inherit; }
       <b id="tVal" data-card="climate">22.0°</b>
       <button class="dk" id="tUp" aria-label="Sıcaklığı artır"><i class="ti ti-chevron-right"></i></button>
     </div>
-    <button class="dk seatDk" data-seatdk="driver" aria-label="Sürücü koltuğu (basılı tut: tüm seçenekler)"></button>
-    <button class="dk" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5C8 5.5 16 5.5 21.5 8.5L19 19H5z"/><path d="M8.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M12 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M15.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4"/></svg></button>
-    <button class="dk" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
+    <button class="dk clim seatDk" data-seatdk="driver" aria-label="Sürücü koltuğu (basılı tut: tüm seçenekler)"></button>
+    <button class="dk clim" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5C8 5.5 16 5.5 21.5 8.5L19 19H5z"/><path d="M8.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M12 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M15.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4"/></svg></button>
+    <button class="dk clim" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
+    <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
     <div class="sep"></div>
     <button class="dk dkApp" data-card="phone" aria-label="Telefon"><div style="background:#30a46c"><i class="ti ti-phone"></i></div></button>
     <button class="dk dkApp" data-card="music" aria-label="Müzik"><div style="background:#1db954"><i class="ti ti-music"></i></div></button>
@@ -461,7 +492,7 @@ button { font-family:inherit; color:inherit; }
     <button class="dk dkApp" data-card="climate" aria-label="Klima"><div style="background:#2f7fd1"><i class="ti ti-air-conditioning"></i></div></button>
     <button class="dk dkApp" data-card="apps" aria-label="Tüm uygulamalar"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-layout-grid"></i></div></button>
     <div class="sep"></div>
-    <button class="dk seatDk" data-seatdk="pass" aria-label="Yolcu koltuğu (basılı tut: tüm seçenekler)"></button>
+    <button class="dk clim seatDk" data-seatdk="pass" aria-label="Yolcu koltuğu (basılı tut: tüm seçenekler)"></button>
     <button class="dk" id="vDn" aria-label="Sesi kıs"><i class="ti ti-chevron-left" style="font-size:36px;color:var(--mu)"></i></button>
     <button class="dk" id="vIcon" aria-label="Ses"><i class="ti ti-volume"></i></button>
     <button class="dk" id="vUp" aria-label="Sesi aç"><i class="ti ti-chevron-right" style="font-size:36px;color:var(--mu)"></i></button>
@@ -554,7 +585,7 @@ const SETTING_DEFAULTS = {
   mirrorFold: true, mirrorTilt: true, mirrorHeat: false, seatEasy: false,
   mediaVol: 12, spdVol: 'low', avas: true, touchSound: true,
   mapArea: 'map', bt: true, wifi: true, hotspot: false, carplay: true,
-  units: 'km', lang: 'tr', autoTime: true,
+  units: 'km', lang: 'tr', autoTime: true, perf: false, fps: false,
 };
 S.set = { ...SETTING_DEFAULTS };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('settings') || '{}')); } catch {}
@@ -815,7 +846,7 @@ function onCarLoaded(gltf) {
   car.traverse((o) => { if (o.isMesh && /^Trunk/.test(o.name)) moving.trunk.push(o); });
   setupLamps(car);
   setupSunshade(car);
-  if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW };
+  if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, get map() { return map; } };
   placePlates(car);
   controls.target.copy(target);
   cam.position.copy(presetPos(PRESETS.default));
@@ -865,7 +896,7 @@ function setupSunshade(car) {
   if (!glass) return;
   car.updateMatrixWorld(true);
   const b = new THREE.Box3().setFromObject(glass);
-  SHADE.front = b.max.z; SHADE.rear = b.min.z;
+  SHADE.front = b.max.z; SHADE.rear = b.min.z; SHADE.top = b.max.y;
   SHADE.plane.constant = SHADE.front;
   Object.assign(glass.material, { transparent: true, opacity: 0.3, depthWrite: false });
   const shade = new THREE.Mesh(glass.geometry.clone().applyMatrix4(glass.matrixWorld),
@@ -1171,6 +1202,7 @@ function placeHotspots() {
     el.style.opacity = (S.gear === 'P' && facing && carObj) ? 1 : 0;
     el.style.pointerEvents = el.style.opacity === '1' ? 'auto' : 'none';
   }
+  placeGlassDots();
 }
 
 function resize3d() {
@@ -1411,10 +1443,72 @@ renderer.setAnimationLoop(() => {
   const mapW = $('mapWrap').clientWidth;
   if (mapW !== lastBox.map) { lastBox.map = mapW; map && mapW > 10 && map.resize(); }
   stepViewShift();
-  controls.update();
-  placeHotspots();
-  renderer.render(scene, cam);
+  // Performance mode: the 3D view is only drawn while something in it moves (camera, a part
+  // easing open or shut, blinking lamps, the road while driving), at most 30 times a second.
+  // Parked and untouched, the last frame just stays on screen.
+  frames++;
+  let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || S.signal || S.hazard || now < awakeUntil;
+  if (draw && S.set.perf && now - lastDraw < 32) draw = false;
+  if (draw) {
+    controls.update();
+    placeHotspots();
+    renderer.render(scene, cam);
+    lastDraw = now; draws++;
+  }
+  if (now - fpsAt >= 1000) {
+    $('fpsMeter').textContent = `${Math.round(frames * 1000 / (now - fpsAt))} fps · 3D ${Math.round(draws * 1000 / (now - fpsAt))}/sn${S.set.perf ? ' · performans' : ''}`;
+    frames = draws = 0; fpsAt = now;
+  }
 });
+let frames = 0, draws = 0, fpsAt = performance.now(), lastDraw = 0, awakeUntil = 0;
+const wake = (ms = 3000) => { awakeUntil = Math.max(awakeUntil, performance.now() + ms); };
+// Anything touched or changed may set a part moving, so keep drawing for a few seconds after it.
+addEventListener('pointerdown', () => wake(), true);
+addEventListener('click', () => wake(), true);
+controls.addEventListener('change', () => wake(400));
+controls.addEventListener('end', () => wake(1500)); // let the orbit damping settle
+function applyPerf() {
+  stage.classList.toggle('perf', S.set.perf);
+  $('fpsMeter').classList.toggle('show', S.set.fps);
+  renderer.setPixelRatio(S.set.perf ? 1 : Math.min(devicePixelRatio, 2));
+  resize3d();
+  darkMapLayers();
+  wake();
+}
+
+// Dark map without the CSS filter: the light "positron" style's colours are flipped in lightness
+// (hue kept, saturation lowered), as the filter did, but once per style instead of per frame.
+const mapColorsLight = new Map();
+const COLOR_PROPS = ['background-color', 'fill-color', 'fill-outline-color', 'line-color', 'text-color', 'text-halo-color'];
+const colorCtx = document.createElement('canvas').getContext('2d');
+function darkColor(c) {
+  colorCtx.fillStyle = '#000'; colorCtx.fillStyle = c;
+  const v = colorCtx.fillStyle; // "#rrggbb" or "rgba(...)"
+  const m = v.startsWith('#') ? [1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)) : v.match(/[\d.]+/g).slice(0, 3).map(Number);
+  const a = v.startsWith('#') ? 1 : +(v.match(/[\d.]+/g)[3] ?? 1);
+  const col = new THREE.Color(m[0] / 255, m[1] / 255, m[2] / 255), hsl = {};
+  col.getHSL(hsl);
+  col.setHSL(hsl.h, hsl.s * 0.6, (1 - hsl.l) * 0.88 + 0.03);
+  return `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${a})`;
+}
+function darkMapLayers() {
+  if (!map || !map.getLayer('route')) return; // not loaded yet: the map's load handler calls this
+  const dark = S.set.perf && S.theme !== 'light';
+  for (const layer of map.getStyle().layers) {
+    if (layer.id === 'sat' || layer.id === 'route') continue;
+    // Only the layer's own paint properties: asking a layer for one its type lacks throws.
+    for (const p of COLOR_PROPS) {
+      const key = layer.id + '|' + p;
+      if (!mapColorsLight.has(key)) {
+        const v = layer.paint?.[p];
+        if (typeof v !== 'string') continue; // zoom-dependent colours stay as they are
+        mapColorsLight.set(key, v);
+      }
+      const light = mapColorsLight.get(key);
+      map.setPaintProperty(layer.id, p, dark ? darkColor(light) : light);
+    }
+  }
+}
 
 // ---------- car interactions ----------
 function setLock(v) {
@@ -1475,7 +1569,9 @@ box.addEventListener('pointerdown', (e) => {
   if (e.target !== renderer.domElement) return;
   rayAt(e);
   const g = glassAt(e);
-  if (!g) return;
+  if (g) beginGlassDrag(g);
+}, true);
+function beginGlassDrag(g) {
   controls.enabled = false; // the finger moves the glass, not the camera
   const p = g.point;
   if (g.kind === 'window') {
@@ -1489,8 +1585,46 @@ box.addEventListener('pointerdown', (e) => {
   }
   g.start = p.clone();
   glassDrag = g;
-}, true);
-box.addEventListener('pointermove', (e) => {
+}
+// Grab dots: one on the top edge of each side window and one on the sunshade's edge, shown on
+// the side (or roof) facing the camera. Holding a dot drags that glass like the glass itself.
+const dotBox = new THREE.Box3();
+function placeGlassDots() {
+  const w = box.clientWidth, h = box.clientHeight;
+  document.querySelectorAll('[data-dot]').forEach((el) => {
+    const k = el.dataset.dot;
+    let p = null, facing = false;
+    if (k === 'shade' && SHADE.node) {
+      const z = THREE.MathUtils.clamp(SHADE.plane.constant, SHADE.rear + 0.06, SHADE.front - 0.06);
+      p = new THREE.Vector3(0, SHADE.top, z);
+      facing = cam.position.clone().sub(p).normalize().y > 0.25;
+    } else if (moving.windows[k]) {
+      dotBox.setFromObject(moving.windows[k]);
+      p = dotBox.getCenter(new THREE.Vector3());
+      p.y = dotBox.max.y - 0.04;
+      const toCam = cam.position.clone().sub(p).normalize();
+      facing = k[1] === 'L' ? toCam.x > 0.35 : toCam.x < -0.35;
+    }
+    const show = !!p && facing && S.gear === 'P';
+    el.style.opacity = show ? 1 : 0;
+    el.style.pointerEvents = show ? 'auto' : 'none';
+    if (!p) return;
+    el._p = p;
+    const v = p.clone().project(cam);
+    el.style.left = ((v.x + 1) / 2 * w) + 'px';
+    el.style.top = ((1 - v.y) / 2 * h) + 'px';
+  });
+}
+document.querySelectorAll('[data-dot]').forEach((el) => {
+  el.addEventListener('pointerdown', (e) => {
+    if (!el._p) return;
+    e.stopPropagation();
+    rayAt(e);
+    const k = el.dataset.dot;
+    beginGlassDrag(k === 'shade' ? { kind: 'shade', point: el._p.clone() } : { kind: 'window', k, point: el._p.clone() });
+  });
+});
+addEventListener('pointermove', (e) => {
   if (!glassDrag) return;
   const p = rayAt(e).intersectPlane(glassDrag.plane, new THREE.Vector3());
   if (!p) return;
@@ -1620,6 +1754,7 @@ try {
     map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': '#4a78e8', 'line-width': 9 } });
     setMapStyle(S.mapStyle);
+    darkMapLayers();
   });
   const me = document.createElement('div');
   me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
@@ -1689,8 +1824,8 @@ const CARDS = {
         <div class="seats">${[['driver', 'Sürücü'], ['pass', 'Yolcu']].map(([k, label]) => {
           const st = S.seats[k], lv = (n, kind) => `<div class="lv">${[1, 2, 3].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
           return `<div class="seat"><p>${label}</p><div class="row">
-            <button class="seatBtn heat ${st.heat ? 'act' : ''}" data-seat="${k}" data-kind="heat" aria-label="${label} koltuk ısıtma"><i class="ti ti-armchair"></i>${lv(st.heat)}</button>
-            <button class="seatBtn vent ${st.vent ? 'act' : ''}" data-seat="${k}" data-kind="vent" aria-label="${label} koltuk havalandırma"><i class="ti ti-wind"></i>${lv(st.vent)}</button>
+            <button class="seatBtn heat ${st.heat ? 'act' : ''}" data-seat="${k}" data-kind="heat" aria-label="${label} koltuk ısıtma">${seatSvg('heat', 'seatIco')}${lv(st.heat)}</button>
+            <button class="seatBtn vent ${st.vent ? 'act' : ''}" data-seat="${k}" data-kind="vent" aria-label="${label} koltuk havalandırma">${seatSvg('vent', 'seatIco')}${lv(st.vent)}</button>
           </div></div>`; }).join('')}</div>
       </div>
     </div>` },
@@ -1736,7 +1871,9 @@ const CARDS = {
       <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
     if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v < 2.2 ? 'low' : ''}">${v.toFixed(1)} bar<span>${v < 2.2 ? 'Düşük basınç' : '24°C'}</span></div>`;
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
-    if (tab === 'display') content = `<div class="grid" style="grid-template-columns:repeat(2,1fr)">
+    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi']])}
+      <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
+      <div class="grid" style="grid-template-columns:repeat(2,1fr)">
       <button class="btn ${S.theme === 'dark' ? 'on' : ''}" data-theme="dark"><i class="ti ti-moon"></i>Koyu</button>
       <button class="btn ${S.theme === 'light' ? 'on' : ''}" data-theme="light"><i class="ti ti-sun"></i>Açık</button></div>
       ${[['tr', 'Araç rengi · Türkiye'], ['world', 'Çift renk · diğer pazarlar']].map(([g, label]) => `
@@ -1914,7 +2051,7 @@ body.addEventListener('click', (e) => {
     c.tab = t.dataset.tab;
     if (S.gear === 'P') camTo({ tyres: 'overhead', windows: 'left', doors: 'left', mirrors: 'left', charge: 'right', locks: 'actions', quick: 'actions' }[c.tab] || 'default');
   }
-  if (t.dataset.flow) S.flow[t.dataset.flow] = !S.flow[t.dataset.flow];
+  if (t.dataset.flow) { S.flow[t.dataset.flow] = !S.flow[t.dataset.flow]; renderAirFlow(); }
   if (t.dataset.theme) setTheme(t.dataset.theme);
   if (t.dataset.paint) {
     S.paintId = t.dataset.paint;
@@ -1929,6 +2066,7 @@ body.addEventListener('click', (e) => {
     S.set[k] = t.dataset.val === 'toggle' ? !S.set[k] : t.dataset.val;
     saveSettings();
     if (k === 'mapArea') setProjection(S.set.mapArea);
+    if (k === 'perf' || k === 'fps') applyPerf();
   }
   if (t.dataset.door) {
     const k = t.dataset.door;
@@ -2026,11 +2164,22 @@ function seatAuto() {
   for (const st of Object.values(S.seats)) if (st.auto) Object.assign(st, autoLevel());
   renderSeatDock();
 }
+// Car seat in side view (headrest, raked backrest, cushion on its rail), facing left; heat adds
+// rising waves in front of the backrest, ventilation airflow lines.
+function seatSvg(kind, cls = '') {
+  const extra = kind === 'heat' ? '<path d="M5 13.5c-.9-1 .9-2 0-3s.9-2 0-3M8.5 13.5c-.9-1 .9-2 0-3s.9-2 0-3"/>'
+    : kind === 'vent' ? '<path d="M3.5 8.5h4.5M3.5 11.5h6M3.5 14.5h4.5"/>' : '';
+  return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="15.2" y="1.8" width="5" height="3.6" rx="1.6" transform="rotate(14 17.7 3.6)"/>
+    <path d="M15.4 6.6h3.9c.7 0 1.2.7 1 1.4l-2.4 9.5h-5.1z"/>
+    <path d="M5.2 17.5h13.6c.8 0 1.4.6 1.4 1.4s-.6 1.4-1.4 1.4H6.4c-1 0-1.8-.8-1.8-1.8 0-.6.3-1 .6-1z"/>
+    <path d="M8.5 20.3v2M16.5 20.3v2"/>${extra}</svg>`;
+}
 function renderSeatDock() {
   document.querySelectorAll('[data-seatdk]').forEach((el) => {
     const st = S.seats[el.dataset.seatdk], kind = st.heat ? 'heat' : st.vent ? 'vent' : '', n = st.heat || st.vent;
-    el.className = `dk seatDk ${kind}`;
-    el.innerHTML = `${st.auto ? '<em>A</em>' : ''}<i class="ti ti-armchair"></i><div class="lv">${[1, 2, 3].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
+    el.className = `dk clim seatDk ${kind}`;
+    el.innerHTML = `${st.auto ? '<em>A</em>' : ''}${seatSvg(kind)}<div class="lv">${[1, 2, 3].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
   });
   if (seatPopFor) renderSeatPop();
 }
@@ -2100,7 +2249,27 @@ let preDefrost = null, rearTimer = 0;
 function renderDefrost() {
   $('defFront').classList.toggle('lit', S.defrost);
   $('defRear').classList.toggle('lit', S.rearDefrost);
+  renderAirFlow();
 }
+// Air direction: a seated figure with an arrow to the face, the feet and the windscreen; the
+// arrows in use are lit. Each tap steps face → face + feet → feet → feet + windscreen.
+const FLOW_STEPS = [{ face: true, foot: false, defrost: false }, { face: true, foot: true, defrost: false },
+  { face: false, foot: true, defrost: false }, { face: false, foot: true, defrost: true }];
+function renderAirFlow() {
+  const f = S.flow, on = (k) => (f[k] ? 'on' : '');
+  $('airFlow').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="14.5" cy="5" r="1.8"/><path d="M14 8l-1.5 6h5l1.5 6M12.5 14l-1 4"/>
+    <path class="${on('defrost')}" d="M3 3.5l5 0M6.5 2l1.5 1.5L6.5 5"/>
+    <path class="${on('face')}" d="M3 8.5h6M7.5 7l1.5 1.5L7.5 10"/>
+    <path class="${on('foot')}" d="M3 19h6M7.5 17.5L9 19l-1.5 1.5"/></svg>`;
+}
+$('airFlow').onclick = () => {
+  const i = FLOW_STEPS.findIndex((s) => s.face === S.flow.face && s.foot === S.flow.foot && s.defrost === S.flow.defrost);
+  S.flow = { ...FLOW_STEPS[(i + 1) % FLOW_STEPS.length] };
+  if (S.defrost) { S.defrost = false; preDefrost = null; } // choosing a direction ends the demister
+  renderDefrost();
+  if (current === 'climate') refreshCard();
+};
 $('defFront').onclick = () => {
   S.defrost = !S.defrost;
   if (S.defrost) { preDefrost = { flow: { ...S.flow }, fan: S.fan, ac: S.ac }; S.flow = { face: false, foot: false, defrost: true }; S.fan = 7; S.ac = true; }
@@ -2115,6 +2284,7 @@ $('defRear').onclick = () => {
   renderDefrost();
 };
 renderSeatDock();
+renderAirFlow();
 const volIcon = () => $('vIcon').innerHTML = `<i class="ti ti-volume${S.vol === 0 ? '-3' : S.vol < 10 ? '-2' : ''}"></i>`;
 $('vUp').onclick = () => { S.vol = Math.min(30, S.vol + 1); volIcon(); };
 $('vDn').onclick = () => { S.vol = Math.max(0, S.vol - 1); volIcon(); };
@@ -2125,7 +2295,9 @@ function setTheme(t) {
   stage.classList.toggle('light', t === 'light');
   groundMat.color.set(t === 'light' ? 0xd9dce1 : 0x1b1d21);
   roadMat.color.set(t === 'light' ? 0xb9bdc4 : 0x1e2024);
+  darkMapLayers();
 }
+applyPerf();
 </script>
 </body>
 </html>
