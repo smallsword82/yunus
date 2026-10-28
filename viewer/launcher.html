@@ -121,7 +121,9 @@ button { font-family:inherit; color:inherit; }
 .trip span { display:block; font-size:16px; color:var(--mu); }
 
 /* instrument cluster tell-tales: only active warnings, in the status bar so they never cover the car */
-#telltales { flex:1; min-width:0; height:34px; display:flex; justify-content:center; gap:8px; overflow:hidden; pointer-events:none; }
+#telltales { flex:1; min-width:0; height:34px; display:flex; justify-content:center; gap:8px; overflow:hidden; }
+#telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Elms,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
+#telltales .more.red { color:#ff3b30; background:rgba(255,59,48,.14); }
 .tt { width:40px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; }
 .tt svg { width:36px; height:28px; }
 .tt b { font:700 14px Arial, sans-serif; letter-spacing:.5px; border:2.5px solid currentColor; border-radius:7px; padding:2px 5px; white-space:nowrap; }
@@ -693,7 +695,19 @@ const ttHtml = (t) => `<div class="tt ${ttColor(t)}" title="${t.name}">${t.text 
 const isWarning = (t) => ['amber', 'red'].includes(ttColor(t)) && t.id !== 'epb';
 let dismissedAlert = null;
 function updateTelltales() {
-  $('telltales').innerHTML = TELLTALES.filter((t) => !t.status && isWarning(t) && ttLit(t)).map(ttHtml).join('');
+  // Red ones first. When they don't all fit between the gear and range readouts, the last ones
+  // fold into a "+N" chip (red if a red one is folded) that opens the warnings list.
+  const lit = TELLTALES.filter((t) => !t.status && isWarning(t) && ttLit(t))
+    .sort((a, b) => (ttColor(a) === 'red' ? 0 : 1) - (ttColor(b) === 'red' ? 0 : 1));
+  const box = $('telltales'), fit = Math.max(0, Math.floor((box.clientWidth + 8) / 48));
+  const shown = lit.length > fit ? lit.slice(0, Math.max(0, Math.floor((box.clientWidth - 52) / 48))) : lit;
+  const hidden = lit.slice(shown.length);
+  const key = lit.map((t) => t.id).join() + '|' + shown.length;
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.innerHTML = shown.map(ttHtml).join('') + (hidden.length
+      ? `<span class="more ${hidden.some((t) => ttColor(t) === 'red') ? 'red' : ''}" title="${hidden.map((t) => t.name).join(', ')}">+${hidden.length}</span>` : '');
+  }
   // A red fault also pops up a notification with the manual's advice; a tap hides it until
   // a different red fault appears.
   const red = TELLTALES.find((t) => !t.auto && ttColor(t) === 'red' && S.faults[t.id]);
@@ -702,13 +716,20 @@ function updateTelltales() {
   if (red) $('warnBanner').innerHTML = `${ttHtml(red)}<div><b>${red.name}</b><br><span style="font-size:17px;color:var(--mu)">${red.desc}</span></div>`;
 }
 setInterval(updateTelltales, 250);
+$('telltales').onclick = (e) => {
+  if (!e.target.closest('.more')) return;
+  CARDS.controls.tab = 'warnings';
+  if (current !== 'controls') openCard('controls'); else refreshCard();
+};
 $('warnBanner').onclick = () => {
   const red = TELLTALES.find((t) => !t.auto && ttColor(t) === 'red' && S.faults[t.id]);
   dismissedAlert = red ? red.id : null;
   updateTelltales();
 };
 function renderTelltaleList() {
-  return `<div class="ttList">${TELLTALES.map((t) => `<div class="setRow">${ttHtml(t)}<div class="ttInfo">${t.name}<span>${t.desc}</span></div>${
+  const all = TELLTALES.filter((t) => !t.auto).every((t) => S.faults[t.id]);
+  return `<button class="btn ${all ? 'on' : ''}" data-do="faultsAll" style="width:100%;margin-bottom:12px"><i class="ti ti-alert-triangle"></i>${all ? 'Tümünü söndür' : 'Tümünü yak (demo)'}</button>
+    <div class="ttList">${TELLTALES.map((t) => `<div class="setRow">${ttHtml(t)}<div class="ttInfo">${t.name}<span>${t.desc}</span></div>${
     t.auto ? `<span style="font-size:16px;color:var(--mu);flex:none">${ttLit(t) ? 'Yanıyor' : 'Sönük'} · otomatik</span>`
       : `<button class="tg ${S.faults[t.id] ? 'on' : ''}" data-fault="${t.id}" aria-label="${t.name}"><i></i></button>`}</div>`).join('')}</div>`;
 }
@@ -2115,6 +2136,11 @@ body.addEventListener('click', (e) => {
   if (act === 'play') S.playing = !S.playing;
   if (act === 'plate') return savePlate();
   if (act === 'hazard') S.hazard = !S.hazard;
+  if (act === 'faultsAll') {
+    const manual = TELLTALES.filter((t) => !t.auto), on = !manual.every((t) => S.faults[t.id]);
+    manual.forEach((t) => { S.faults[t.id] = on; });
+    updateTelltales();
+  }
   if (act === 'fog') S.fog = !S.fog;
   if (act === 'shade') { if (S.gear === 'P') camTo('roof'); return setShade(S.sunshade > 0 ? 0 : 100); }
   if (act === 'high') S.highBeam = !S.highBeam;
