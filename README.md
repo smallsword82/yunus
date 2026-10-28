@@ -25,8 +25,10 @@ Sonra tarayıcıda `http://localhost:8765/launcher.html` aç. Geliştirme için
 
 ## Test APK (Android)
 
-`android/` is a small WebView app that packs `viewer/` as assets and shows it full screen, so the
-design can be tried on the car's screen (no vehicle data yet; everything is the demo state).
+`android/` is a WebView app that packs `viewer/` as assets. The `codex/kinex-hal-integration`
+branch contains an experimental ADB bootstrap and HAL TCP framing client. The Kinex service
+handshake, event subscriptions, and field/unit mapping still need to be verified on the Dolphin;
+until then the screen stays in demo mode. Details: [`bridge/PROTOCOL.md`](bridge/PROTOCOL.md).
 
 ```bash
 cd android

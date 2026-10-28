@@ -735,8 +735,8 @@ function homeBlock() {
 // update check, log upload, restart. Statuses are demo values; on the car they come from the
 // HAL bridge, the ADB connection and Android's permission checks.
 const SERVICES = [
-  ['Araç servis köprüsü (HAL)', 'ok', 'Bağlı · 127.0.0.1:19322'],
-  ['ADB bağlantısı', 'ok', 'Etkin'],
+  ['Araç servis köprüsü (HAL)', 'warn', 'Henüz doğrulanmadı · 127.0.0.1:19322'],
+  ['ADB bağlantısı', 'warn', 'Araçta bağlantı bekleniyor'],
   ['Konum izni', 'ok', 'Her zaman'],
   ['Medya bildirimleri erişimi', 'warn', 'Verilmedi · müzik kartı için gerekli'],
   ['Telefon ve rehber izni', 'warn', 'Verilmedi · aramalar için gerekli'],
@@ -2812,6 +2812,13 @@ function pushSeats() { // a seat changed on screen: tell the car, unless the car
 }
 let liveRefreshAt = 0;
 window.yunusCar = (m) => {
+  // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
+  // simulation active until a validated telemetry field reaches this API.
+  if (m.bridge) { window.YunusBridgeStatus = m.bridge; return; }
+  if (m.halEvent) { window.YunusLastHalEvent = m.halEvent; return; }
+  const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults'];
+  if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
   if (m.powerKw != null) S.powerKw = m.powerKw;
