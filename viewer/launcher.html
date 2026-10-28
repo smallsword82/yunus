@@ -68,11 +68,13 @@ button { font-family:inherit; color:inherit; }
 #limitSign.hide { display:none; }
 #limitSign.over { animation:pulse .9s ease-in-out infinite; }
 @keyframes pulse { 50% { transform:scale(1.14); } }
-/* Tesla-style power meter: grey to the right while using power, green to the left while regenerating */
-#powerBar { position:relative; width:340px; height:6px; margin-top:16px; background:var(--cd2); border-radius:3px; }
-#powerBar .regen { position:absolute; right:240px; top:0; height:100%; width:0; background:#30a46c; border-radius:3px 0 0 3px; }
-#powerBar .power { position:absolute; left:100px; top:0; height:100%; width:0; background:var(--tx); border-radius:0 3px 3px 0; }
-#powerBar .zero { position:absolute; left:99px; top:-5px; width:2px; height:16px; background:var(--mu); }
+/* Tesla-style power meter, upright along the far left edge while driving: white up from the zero
+   mark while using power (240 px = 150 kW), green down while regenerating (100 px = 60 kW). */
+#powerBar { position:absolute; left:12px; top:84px; width:6px; height:340px; z-index:2; background:var(--cd2); border-radius:3px; opacity:0; transition:opacity .4s; }
+#stage.driving #powerBar { opacity:1; }
+#powerBar .regen { position:absolute; left:0; right:0; top:240px; height:0; background:#30a46c; border-radius:0 0 3px 3px; }
+#powerBar .power { position:absolute; left:0; right:0; bottom:100px; height:0; background:var(--tx); border-radius:3px 3px 0 0; }
+#powerBar .zero { position:absolute; left:-5px; top:239px; width:16px; height:2px; background:var(--mu); }
 #powerKw { font-size:18px; color:var(--mu); margin-top:8px; }
 
 /* Cards under the car, swiped sideways (Tesla: media, energy, tyre pressure, trip) */
@@ -399,9 +401,9 @@ button { font-family:inherit; color:inherit; }
     <div id="telltales"></div>
     <div id="speedBox" style="opacity:0">
       <div class="spdRow"><span id="speed">0</span><span class="spdUnit">km/h</span></div>
-      <div id="powerBar"><div class="regen"></div><div class="power"></div><div class="zero"></div></div>
       <div id="powerKw">0 kW</div>
     </div>
+    <div id="powerBar"><div class="regen"></div><div class="power"></div><div class="zero"></div></div>
     <div id="outTemp">Dış 18°</div>
     <div id="fpsMeter"></div>
     <div id="limitSign" class="hide"><span id="limitVal">50</span></div>
@@ -1312,8 +1314,8 @@ function stepDrive(dt, now) {
 function updateDriveHud() {
   $('speed').textContent = Math.round(S.speed);
   const kw = S.powerKw;
-  $('powerBar').querySelector('.power').style.width = Math.min(240, Math.max(0, kw) / 150 * 240) + 'px';
-  $('powerBar').querySelector('.regen').style.width = Math.min(100, Math.max(0, -kw) / 60 * 100) + 'px';
+  $('powerBar').querySelector('.power').style.height = Math.min(240, Math.max(0, kw) / 150 * 240) + 'px';
+  $('powerBar').querySelector('.regen').style.height = Math.min(100, Math.max(0, -kw) / 60 * 100) + 'px';
   $('powerKw').textContent = kw < -0.5 ? `Rejen ${Math.round(-kw)} kW` : `${Math.round(Math.max(0, kw))} kW`;
   const sign = $('limitSign');
   sign.classList.toggle('hide', !S.set.tsr || S.gear !== 'D');
