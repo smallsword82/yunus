@@ -187,22 +187,24 @@ public class YunusHalBridge {
         ServerSocket server = new ServerSocket(port, 16, InetAddress.getByName("127.0.0.1"));
         log("serving on 127.0.0.1:" + port);
 
-        // poll loop
-        Thread poll = new Thread(() -> {
-            while (true) {
-                try {
-                    Map<String, Object> state = readState();
-                    Map<String, Object> delta = diff(lastState, state);
-                    if (!delta.isEmpty()) {
-                        lastState = state;
-                        broadcast(toJson(delta));
+        // poll loop (plain Runnable, not a lambda: Android ART has no LambdaMetafactory)
+        Thread poll = new Thread(new Runnable() {
+            public void run() {
+                while (true) {
+                    try {
+                        Map<String, Object> state = readState();
+                        Map<String, Object> delta = diff(lastState, state);
+                        if (!delta.isEmpty()) {
+                            lastState = state;
+                            broadcast(toJson(delta));
+                        }
+                        Thread.sleep(300);
+                    } catch (InterruptedException ie) {
+                        return;
+                    } catch (Throwable t) {
+                        log("poll error: " + t);
+                        try { Thread.sleep(1000); } catch (InterruptedException ie) { return; }
                     }
-                    Thread.sleep(300);
-                } catch (InterruptedException ie) {
-                    return;
-                } catch (Throwable t) {
-                    log("poll error: " + t);
-                    try { Thread.sleep(1000); } catch (InterruptedException ie) { return; }
                 }
             }
         }, "yunus-poll");
@@ -218,7 +220,10 @@ public class YunusHalBridge {
             try { sendLine(s, toJson(lastState.isEmpty() ? readState() : lastState)); }
             catch (Throwable t) { log("initial send failed: " + t); }
             // reader thread for commands
-            Thread reader = new Thread(() -> handleCommands(s), "yunus-cmd");
+            final Socket cs = s;
+            Thread reader = new Thread(new Runnable() {
+                public void run() { handleCommands(cs); }
+            }, "yunus-cmd");
             reader.setDaemon(true);
             reader.start();
         }

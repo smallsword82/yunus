@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 rm -rf build && mkdir -p build
 
-javac -source 11 -target 11 -d build YunusHalBridge.java
+javac -source 11 -target 11 -XDstringConcat=inline -d build YunusHalBridge.java
 
 D8="${D8:-}"
 if [ -z "$D8" ]; then

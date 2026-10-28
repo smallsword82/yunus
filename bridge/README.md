@@ -17,7 +17,7 @@ Protokol: `PROTOCOL.md`.
 
 ```bash
 cd bridge
-javac -source 11 -target 11 -d build YunusHalBridge.java
+javac -source 11 -target 11 -XDstringConcat=inline -d build YunusHalBridge.java
 # d8 Android SDK build-tools içinde (ör. ~/Android/Sdk/build-tools/34.0.0/d8)
 d8 --output build build/*.class
 # -> build/classes.dex
