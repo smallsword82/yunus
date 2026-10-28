@@ -121,7 +121,11 @@ button { font-family:inherit; color:inherit; }
 .trip span { display:block; font-size:16px; color:var(--mu); }
 
 /* instrument cluster tell-tales: only active warnings, in the status bar so they never cover the car */
-#telltales { flex:1; min-width:0; height:34px; display:flex; justify-content:center; gap:8px; overflow:hidden; }
+/* Active tell-tales: a column under the gear letters (under the speed while driving), red first,
+   flowing into a second column when there are more than nine. */
+#telltales { position:absolute; left:30px; top:78px; z-index:2; max-height:372px; display:flex; flex-flow:column wrap; align-content:flex-start; gap:8px 10px; transition:top .4s; }
+#stage.driving #telltales { top:300px; }
+#status .batt { margin-left:auto; }
 #telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Elms,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
 #telltales .more.red { color:#ff3b30; background:rgba(255,59,48,.14); }
 .tt { width:40px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; }
@@ -390,9 +394,9 @@ button { font-family:inherit; color:inherit; }
         <svg id="indLow" viewBox="0 0 40 28" aria-label="Kısa far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6 3 10M14 12 3 16M14 18 3 22"/></svg>
         <svg id="indHigh" viewBox="0 0 40 28" aria-label="Uzun far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6H2M14 11H2M14 17H2M14 22H2"/></svg>
       </div>
-      <div id="telltales"></div>
       <div class="batt"><span style="color:var(--mu)">312 km</span><div class="cell"><div style="width:78%"></div></div><span>78%</span></div>
     </div>
+    <div id="telltales"></div>
     <div id="speedBox" style="opacity:0">
       <div class="spdRow"><span id="speed">0</span><span class="spdUnit">km/h</span></div>
       <div id="powerBar"><div class="regen"></div><div class="power"></div><div class="zero"></div></div>
@@ -695,12 +699,12 @@ const ttHtml = (t) => `<div class="tt ${ttColor(t)}" title="${t.name}">${t.text 
 const isWarning = (t) => ['amber', 'red'].includes(ttColor(t)) && t.id !== 'epb';
 let dismissedAlert = null;
 function updateTelltales() {
-  // Red ones first. When they don't all fit between the gear and range readouts, the last ones
-  // fold into a "+N" chip (red if a red one is folded) that opens the warnings list.
+  // Red ones first, two columns of nine at most; beyond that the last ones fold into a "+N"
+  // chip (red if a red one is folded) that opens the warnings list.
   const lit = TELLTALES.filter((t) => !t.status && isWarning(t) && ttLit(t))
     .sort((a, b) => (ttColor(a) === 'red' ? 0 : 1) - (ttColor(b) === 'red' ? 0 : 1));
-  const box = $('telltales'), fit = Math.max(0, Math.floor((box.clientWidth + 8) / 48));
-  const shown = lit.length > fit ? lit.slice(0, Math.max(0, Math.floor((box.clientWidth - 52) / 48))) : lit;
+  const box = $('telltales'), fit = 18;
+  const shown = lit.length > fit ? lit.slice(0, fit - 1) : lit;
   const hidden = lit.slice(shown.length);
   const key = lit.map((t) => t.id).join() + '|' + shown.length;
   if (box.dataset.key !== key) {
@@ -1687,6 +1691,7 @@ function setGear(g) {
   S.gear = g;
   [...$('gears').children].forEach((s) => s.classList.toggle('on', s.textContent === g));
   const driving = g === 'D';
+  stage.classList.toggle('driving', driving);
   road.visible = driving; ground.visible = !driving;
   $('speedBox').style.opacity = driving ? 1 : 0;
   $('lockBtn').style.display = driving ? 'none' : '';
