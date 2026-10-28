@@ -452,6 +452,40 @@ button { font-family:inherit; color:inherit; }
 #seatPop .auto.on { background:var(--tx); color:var(--bg); }
 #seatPop p { margin:12px 0 0; font-size:17px; color:var(--mu); line-height:1.35; }
 </style>
+<!-- Tanılama (geçici): hataları ve ekran ölçülerini araç ekranının altında gösterir. -->
+<script>
+(function () {
+  function box() {
+    var d = document.getElementById('yDiag');
+    if (!d) {
+      d = document.createElement('div'); d.id = 'yDiag';
+      d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;max-height:45%;overflow:auto;' +
+        'background:rgba(0,0,0,.85);color:#5f5;font:12px/1.4 monospace;padding:6px 8px;white-space:pre-wrap;pointer-events:none';
+      (document.body || document.documentElement).appendChild(d);
+    }
+    return d;
+  }
+  function line(s, c) { var p = document.createElement('div'); if (c) p.style.color = c; p.textContent = s; box().appendChild(p); }
+  window.addEventListener('error', function (e) {
+    line('HATA: ' + (e.message || e.error) + '  @ ' + (e.filename || '') + ':' + (e.lineno || ''), '#ff6b6b');
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    line('PROMISE HATA: ' + (e.reason && (e.reason.message || e.reason)), '#ff6b6b');
+  });
+  function info() {
+    var imap = (window.HTMLScriptElement && HTMLScriptElement.supports) ? HTMLScriptElement.supports('importmap') : 'bilinmiyor';
+    line('ekran: ' + innerWidth + 'x' + innerHeight + '  dpr=' + (window.devicePixelRatio || 1));
+    line('importmap destegi: ' + imap);
+    line('UA: ' + navigator.userAgent);
+  }
+  if (document.readyState !== 'loading') info(); else addEventListener('DOMContentLoaded', info);
+})();
+</script>
+
+<!-- importmap'i eski WebView'lerde de calistiran yama (modern tarayicida etkisizdir). -->
+<script>window.esmsInitOptions = { polyfill: true, shimMode: false };</script>
+<script async src="vendor/es-module-shims/es-module-shims.js"></script>
+
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three/build/three.module.js",
