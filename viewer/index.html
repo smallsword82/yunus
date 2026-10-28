@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dolphin 3D</title>
+<style>
+  :root { --bg:#0e0f11; --pn:#17191c; --cd:#24272c; --tx:#f2f3f5; --mu:#8a8f98; --ac:#3e6ae1; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--tx); font-family:system-ui,sans-serif; overflow:hidden; }
+  #c { position:fixed; inset:0; }
+  .bar { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); display:flex; gap:6px; background:var(--pn); padding:6px; border-radius:12px; flex-wrap:wrap; justify-content:center; max-width:calc(100% - 32px); }
+  .bar button { background:var(--cd); color:var(--tx); border:0; border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  .bar button.on { background:var(--ac); }
+  .sw { width:26px; height:26px; border-radius:50%; border:2px solid transparent; padding:0 !important; }
+  .sw.on { border-color:#fff; background-clip:padding-box; }
+  #msg { position:fixed; top:16px; left:16px; font-size:13px; color:var(--mu); }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="c"></div>
+<div id="msg">Model yükleniyor…</div>
+<div class="bar" id="presets"></div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// Camera presets and material names taken from Kinex's kinex_car_models.json (Dolphin entry).
+const PRESETS = {
+  'Varsayılan': { theta: 20, phi: 70, r: 70 },
+  'Sol': { theta: 90, phi: 83, r: 55 },
+  'Sağ': { theta: 270, phi: 83, r: 55 },
+  'Üstten': { theta: 270, phi: 1, r: 90 },
+  'Sürüş': { theta: 180, phi: 64, r: 174 },
+  'Bekleme': { theta: 31.94, phi: 82.96, r: 55 },
+};
+const BODY_PAINT = ['bodypaint_A_CarPaint_1_0'];
+const DARK_GLASS = ['f_gls_winsows_0', 'b_gls_winsows_0', 'sunroof_D_Glass_0'];
+const COLORS = { 'Gri': 0x9aa0a6, 'Pembe': 0xd99a9a, 'Mavi': 0x3f6f9a, 'Beyaz': 0xeeeeea, 'Siyah': 0x15171a, 'Yeşil': 0x8fa77d };
+
+const box = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+box.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e0f11);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 200);
+const controls = new OrbitControls(cam, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+
+let baseRadius = 5, paintMats = [];
+const target = new THREE.Vector3(0, 0.6, 0);
+let anim = null;
+
+function presetPos(p) {
+  const r = baseRadius * p.r / 100, th = THREE.MathUtils.degToRad(p.theta), ph = THREE.MathUtils.degToRad(p.phi);
+  return new THREE.Vector3(r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph), r * Math.sin(ph) * Math.cos(th)).add(target);
+}
+function goTo(name) {
+  anim = { from: cam.position.clone(), to: presetPos(PRESETS[name]), t: 0 };
+  document.querySelectorAll('[data-p]').forEach(b => b.classList.toggle('on', b.dataset.p === name));
+}
+
+const draco = new DRACOLoader().setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+new GLTFLoader().setDRACOLoader(draco).load('dolphin.glb', (gltf) => {
+  const car = gltf.scene;
+  // Normalise: centre on the ground, scale to the real Dolphin length (4.29 m).
+  let b = new THREE.Box3().setFromObject(car), size = b.getSize(new THREE.Vector3());
+  car.scale.setScalar(4.29 / Math.max(size.x, size.z));
+  b = new THREE.Box3().setFromObject(car);
+  const c = b.getCenter(new THREE.Vector3());
+  car.position.sub(new THREE.Vector3(c.x, b.min.y, c.z));
+  scene.add(car);
+  b = new THREE.Box3().setFromObject(car);
+  size = b.getSize(new THREE.Vector3());
+  target.set(0, size.y * 0.4, 0);
+  baseRadius = Math.max(size.x, size.z) * 3.4;
+
+  car.traverse(o => {
+    if (!o.isMesh) return;
+    if (BODY_PAINT.some(n => o.name.startsWith(n.replace(/_0$/, '')))) {
+      o.material = o.material.clone();
+      paintMats.push(o.material);
+    }
+    if (DARK_GLASS.some(n => o.name.startsWith(n.replace(/_0$/, '')))) {
+      o.material = o.material.clone();
+      o.material.color.set(0x050608);
+    }
+  });
+  document.getElementById('msg').textContent = `Dolphin · ${paintMats.length ? '' : 'boya parçası bulunamadı · '}sürükle: döndür, tekerlek: yakınlaş`;
+  controls.target.copy(target);
+  cam.position.copy(presetPos(PRESETS['Varsayılan']));
+  goTo('Varsayılan');
+}, undefined, (e) => { document.getElementById('msg').textContent = 'Model yüklenemedi: ' + e.message; });
+
+const bar = document.getElementById('presets');
+for (const name of Object.keys(PRESETS)) {
+  const b = document.createElement('button');
+  b.textContent = name; b.dataset.p = name; b.onclick = () => goTo(name);
+  bar.appendChild(b);
+}
+for (const [name, hex] of Object.entries(COLORS)) {
+  const b = document.createElement('button');
+  b.className = 'sw'; b.title = name; b.style.background = '#' + hex.toString(16).padStart(6, '0');
+  b.onclick = () => {
+    paintMats.forEach(m => m.color.setHex(hex));
+    document.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === b));
+  };
+  bar.appendChild(b);
+}
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+
+renderer.setAnimationLoop(() => {
+  if (anim) {
+    anim.t = Math.min(1, anim.t + 0.03);
+    const k = 1 - Math.pow(1 - anim.t, 3);
+    cam.position.lerpVectors(anim.from, anim.to, k);
+    if (anim.t >= 1) anim = null;
+  }
+  controls.update();
+  renderer.render(scene, cam);
+});
+</script>
+</body>
+</html>

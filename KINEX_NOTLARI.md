@@ -1,0 +1,81 @@
+# Kinex 0.5.4 incelemesi — launcher için çıkarılan bilgiler
+
+Kişisel kullanım içindir. Model dosyası (`viewer/dolphin.glb`) Kinex APK'sından alındı;
+kaynağı bir Sketchfab modeli (`Sketchfab_model` / `FINAL_MODEL_24D.fbx` düğümleri), Kinex README'si
+Ddiaz Design'a teşekkür ediyor. Başkasıyla paylaşma.
+
+## Uygulama yapısı
+- Flutter uygulaması (`libapp.so`, `libflutter.so`), harita MapLibre (`libmaplibre.so`),
+  sesli komut sherpa-onnx, Android Auto alıcısı `libgalreceiver_jni.so`.
+- 14 araç modeli `assets/flutter_assets/assets/models/*.glb` (glTF-Transform ile sıkıştırılmış,
+  Draco geometri + WebP doku).
+
+## Dolphin modeli (`2024_byd_dolphin.glb`, 2.2 MB)
+- ~113 bin üçgen, 34 materyal, 26 doku, animasyon yok.
+- Kapılar/bagaj **ayrı hareketli parça değil** (tek parça gövde). Kinex kapı/bagaj/cam durumunu
+  model animasyonuyla değil, kamera odak noktaları (hotspot) ve işaretlerle gösteriyor.
+- Boya: `bodypaint_A_CarPaint_1_0` meshinin materyali değiştirilerek renk veriliyor.
+  `upper_bodypaint_PCrPaint_2_0` = siyah tavan/üst kısım.
+- Koyu cam olarak zorlanan meshler: `f_gls_winsows_0`, `b_gls_winsows_0`, `sunroof_D_Glass_0`.
+- Gerekli glTF uzantıları: `KHR_draco_mesh_compression`, `EXT_texture_webp`,
+  `KHR_materials_clearcoat`, `KHR_materials_specular`, `KHR_materials_transmission`.
+  Android'de SceneView/Filament ile yüklerken Draco ve WebP desteği gerekiyor.
+
+## Kamera mantığı (`kinex_car_models.json`, Dolphin girdisi)
+Küresel koordinat: `theta` yatay açı (0 = ön, 90 = sol, 180 = arka, 270 = sağ),
+`phi` dikeyden açı (1 = tam üstten), `radiusPercent` uzaklık.
+
+| Ön ayar | theta | phi | radius |
+|---|---|---|---|
+| varsayılan | 20 | 70 | 70 |
+| sol | 90 | 83 | 55 |
+| sağ | 270 | 83 | 55 |
+| üstten | 270 | 1 | 90 |
+| sürüş (arkadan) | 180 | 64 | 174 |
+| bekleme | 31.94 | 82.96 | 55 |
+
+Hotspot konumları (model uzayı): ön camlar z=+0.35, arka camlar z=-0.45, sol x≈+0.74,
+sağ x≈-0.75, bagaj (0, 0.95, -2.35). Lastik etiketleri: FL (1.05, 0.85, 1.9),
+FR (-1.05, 0.85, 1.9), RL (1.2, 0.6, -2.2), RR (-1.2, 0.6, -2.2).
+Dolphin için: pencere kontrolü var, hassas pencere kontrolü yok, tavan kontrolü var, platform `dl3`.
+
+## Araç verileri nasıl okunuyor (en önemli kısım)
+Normal (sideload) bir uygulama BYD izinlerini (`BYDAUTO_*_GET`) alamıyor — Kinex'in kendi log
+mesajı: "PM refused this grant ... signature/OEM policy". Çözümü:
+
+1. Araçta **kablosuz ADB** açılıyor (mühendislik menüsü → Test Tool).
+2. Uygulama kendi içindeki ADB istemcisiyle `127.0.0.1:5555`'e bağlanıyor
+   (kendi RSA anahtarı: `kinex_adb_private.key`).
+3. Gömülü `kinex_hal_api_service.jar`'ı `/data/local/tmp/`'ye koyup **shell yetkisiyle**
+   `app_process` ile çalıştırıyor:
+   `CLASSPATH=/data/local/tmp/kinex_hal_api_service.jar app_process / com.lexwah.kinex.hal.HalApiServiceMain 19322`
+4. Bu süreç BYD'nin gizli framework sınıflarını kullanıyor ve verileri
+   `127.0.0.1:19322` üzerinden TCP ile uygulamaya aktarıyor.
+   Gösterge paneli için ayrı bir servis (`kinex_cluster_service.jar`, port 19324) var.
+
+### DiLink 3 (Dolphin) — `android.hardware.bydauto.*`
+Cihaz sınıfları (`getInstance(context)` ile alınıyor) ve dinleyiciler:
+- `ac.BYDAutoAcDevice` / `AbsBYDAutoAcListener` — klima
+- `bodywork.BYDAutoBodyworkDevice` / `AbsBYDAutoBodyworkListener` — kapı, cam, bagaj, batarya
+- `doorlock` / `AbsBYDAutoDoorLockListener` — kilit
+- `charging` / `AbsBYDAutoChargingListener` — şarj
+- `gearbox.BYDAutoGearboxDevice` / `AbsBYDAutoGearboxListener` — vites
+- `speed.BYDAutoSpeedDevice` / `AbsBYDAutoSpeedListener` — hız
+- `tyre.BYDAutoTyreDevice` / `AbsBYDAutoTyreListener` — lastik basınç/sıcaklık
+- `light` / `AbsBYDAutoLightListener` — farlar
+- `instrument` / `AbsBYDAutoInstrumentListener` — gösterge
+- `statistic.BYDAutoStatisticDevice` / `AbsBYDAutoStatisticListener` — menzil, tüketim, km
+- `pm2p5.BYDAutoPM2p5Device` — hava kalitesi
+- `setting.BYDAutoSettingDevice`, `multimedia.BYDAutoMultimediaDevice`
+- Klima sıcaklığı bazı araçlarda yarım derece kodlamalı (Kinex'te "half-degree HAL encoding").
+
+### DiLink 5 (Sealion 7 vb.) — `com.ts.lib.caradapter.*`
+`CarAdapterManager`, `body.CarBodyManager`, `sensor.CarSensorAdapterManager`,
+`general.CarGeneralAdapterManager`. Dolphin için gerekmiyor.
+
+## Bizim proje için sonuç
+- Tasarım aynı: Tesla mantığı + gerçek `dolphin.glb` + Kinex'in kamera ön ayarları.
+- Araç verisi için aynı mimari: launcher (UI) + ADB/shell ile başlatılan küçük bir Java
+  "HAL köprüsü" süreci + localhost TCP. Köprüyü kendimiz yazacağız; Kinex'in kodu kopyalanmayacak,
+  yalnızca hangi BYD sınıflarının kullanıldığı biliniyor.
+- Bu sınıfların metot imzaları araç üzerinde (`adb shell` ile framework jar'larından) doğrulanmalı.

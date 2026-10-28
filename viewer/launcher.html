@@ -1,0 +1,2131 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dolphin Launcher</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" rel="stylesheet">
+<style>
+@font-face { font-family: Elms; src: url(img/ElmsSans-Light.ttf); font-weight: 300; }
+@font-face { font-family: Elms; src: url(img/ElmsSans-Regular.ttf); font-weight: 400; }
+@font-face { font-family: Elms; src: url(img/ElmsSans-Medium.ttf); font-weight: 500; }
+@font-face { font-family: Elms; src: url(img/ElmsSans-Bold.ttf); font-weight: 700; }
+:root {
+  --bg:#0b0c0e; --pn:#141619; --cd:#1d2024; --cd2:#272b31; --tx:#f2f3f5; --mu:#8a8f98; --ac:#3e6ae1; --dn:#e5484d; --ok:#30a46c;
+}
+.light { --bg:#e9ebee; --pn:#f6f7f9; --cd:#ffffff; --cd2:#e4e7eb; --tx:#16181b; --mu:#6b717b; }
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; background:#000; overflow:hidden; font-family:Elms,system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
+input { user-select:text; -webkit-user-select:text; }
+#stage { position:absolute; width:1920px; height:1080px; left:0; top:0; transform-origin:0 0; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
+  /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
+     stacks its app list into one tall column and would push the dock off screen) */
+  grid-template-columns:var(--carW, 720px) 1fr var(--sideW, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
+/* hidden third column on the right: an app window, pulled out from the right edge */
+#sidePanel { min-width:0; min-height:0; overflow:clip; background:var(--pn); border-left:1px solid var(--cd); display:flex; flex-direction:column; }
+#sideHandle { position:absolute; top:0; bottom:112px; width:36px; z-index:7; cursor:ew-resize; touch-action:none;
+  left:1884px; display:flex; align-items:center; justify-content:center; transition:left .35s cubic-bezier(.2,.8,.2,1); }
+#stage.dragging #sideHandle { transition:none; }
+#sideHandle div { width:8px; height:110px; border-radius:4px; background:var(--cd2); }
+#sideHandle:hover div { background:var(--mu); }
+.sideHead { display:flex; align-items:center; gap:12px; padding:22px 24px 10px; font-size:26px; font-weight:500; white-space:nowrap; }
+.sideHead button { background:var(--cd); border:0; width:52px; height:52px; border-radius:50%; font-size:26px; cursor:pointer; flex:none; }
+#sideApps { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:26px 6px; padding:14px 18px; overflow-y:auto; }
+#sideApp { flex:1; margin:8px 18px 18px; border-radius:18px; background:var(--cd); display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; text-align:center; color:var(--mu); font-size:20px; padding:20px; }
+#sideApp .big { width:120px; height:120px; border-radius:28px; display:flex; align-items:center; justify-content:center; font-size:64px; color:#fff; }
+#sidePanel.appOpen #sideApps { display:none; }
+#sidePanel.appOpen #sideApp { display:flex; }
+#stage.dragging { transition:none; }
+#mapWrap, #carPanel { min-width:0; }
+/* Tesla: drag the edge of the car view to widen it up to full screen */
+#divider { position:absolute; top:0; bottom:112px; left:clamp(0px, calc(var(--carW, 720px) - 18px), 1884px); width:36px; z-index:7; cursor:ew-resize; touch-action:none;
+  display:flex; align-items:center; justify-content:center; transition:left .35s cubic-bezier(.2,.8,.2,1); }
+#stage.dragging #divider { transition:none; }
+#divider div { width:8px; height:110px; border-radius:4px; background:var(--cd2); }
+#divider:hover div { background:var(--mu); }
+button { font-family:inherit; color:inherit; }
+
+/* car panel */
+#carPanel { position:relative; background:var(--pn); overflow:hidden; }
+#status { position:absolute; top:28px; left:36px; right:36px; display:flex; align-items:center; font-size:26px; z-index:2; }
+#gears { display:flex; gap:18px; font-weight:500; cursor:pointer; }
+#gears span { color:var(--mu); }
+#gears span.on { color:var(--tx); }
+.batt { margin-left:auto; display:flex; align-items:center; gap:10px; white-space:nowrap; }
+.batt .cell { width:44px; height:20px; border:2px solid var(--mu); border-radius:5px; padding:2px; }
+.batt .cell div { height:100%; background:var(--ok); border-radius:2px; }
+#speedBox { position:absolute; top:80px; left:36px; z-index:2; transition:opacity .4s; }
+/* As on Tesla: big speed, the unit right under it, the power meter under that */
+.spdRow { display:flex; flex-direction:column; }
+#speed { font-size:110px; font-weight:300; line-height:1; }
+.spdUnit { font-size:24px; color:var(--mu); margin-top:2px; }
+/* Speed limit read by traffic sign recognition: the European round sign, top right of the
+   car panel under the battery readout, where Tesla puts it */
+#limitSign { position:absolute; top:120px; right:36px; z-index:2; width:76px; height:76px; border-radius:50%; background:#fff;
+  border:8px solid #d42a2a; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
+  color:#111; font:700 28px Arial, sans-serif; }
+#limitSign.hide { display:none; }
+#limitSign.over { animation:pulse .9s ease-in-out infinite; }
+@keyframes pulse { 50% { transform:scale(1.14); } }
+/* Tesla-style power meter: grey to the right while using power, green to the left while regenerating */
+#powerBar { position:relative; width:340px; height:6px; margin-top:16px; background:var(--cd2); border-radius:3px; }
+#powerBar .regen { position:absolute; right:240px; top:0; height:100%; width:0; background:#30a46c; border-radius:3px 0 0 3px; }
+#powerBar .power { position:absolute; left:100px; top:0; height:100%; width:0; background:var(--tx); border-radius:0 3px 3px 0; }
+#powerBar .zero { position:absolute; left:99px; top:-5px; width:2px; height:16px; background:var(--mu); }
+#powerKw { font-size:18px; color:var(--mu); margin-top:8px; }
+
+/* Cards under the car, swiped sideways (Tesla: media, energy, tyre pressure, trip) */
+#carCards { position:absolute; left:24px; right:24px; bottom:20px; height:196px; z-index:4; background:var(--cd); border-radius:18px; overflow:hidden; touch-action:pan-y; }
+/* Wide car view (car column dragged wide or full screen): like Tesla, the cards, tell-tales and
+   warning stay a centred block instead of stretching across the screen, and grow a little. */
+#stage.car-wide #carCards { left:calc(50% - 440px); right:auto; width:880px; }
+#stage.car-wide #carCards { height:236px; bottom:28px; }
+#stage.car-wide .cc { padding:16px 30px 26px; }
+#stage.car-wide .cc h4 { font-size:20px; }
+#stage.car-wide .mm .art { width:120px; height:120px; font-size:54px; }
+#stage.car-wide .mm b { font-size:28px; }
+#stage.car-wide .mm span { font-size:19px; }
+#stage.car-wide .mm .ctl { font-size:36px; gap:40px; }
+#stage.car-wide #enChart { height:130px !important; }
+#stage.car-wide .ccTyres { height:180px; } #stage.car-wide .ccTyres img { height:176px; }
+#stage.car-wide .trip div { font-size:34px; }
+#stage.car-wide #lockBtn { bottom:290px; }
+/* Dragged down, the cards slide away leaving only their grab bar; dragged up they come back. */
+#carCards { transition:transform .3s cubic-bezier(.2,.8,.2,1); touch-action:none; }
+#ccGrab { position:absolute; top:7px; left:50%; width:56px; height:5px; margin-left:-28px; border-radius:3px; background:var(--cd2); z-index:2; pointer-events:none; }
+#stage.cc-off #carCards { transform:translateY(calc(100% - 22px)); cursor:pointer; }
+#stage.cc-off #ccTrack, #stage.cc-off #ccDots { opacity:0; pointer-events:none; }
+#stage.cc-off #lockBtn { bottom:70px; }
+#ccTrack { display:flex; height:100%; transition:transform .3s cubic-bezier(.2,.8,.2,1); }
+.cc { flex:0 0 100%; padding:12px 22px 22px; box-sizing:border-box; position:relative; }
+.cc h4 { margin:0 0 8px; font-size:18px; font-weight:500; color:var(--mu); display:flex; justify-content:space-between; }
+.cc h4 b { color:var(--tx); font-weight:500; }
+#ccDots { position:absolute; bottom:10px; left:0; right:0; display:flex; justify-content:center; gap:8px; pointer-events:none; }
+#ccDots i { width:8px; height:8px; border-radius:50%; background:var(--cd2); }
+#ccDots i.on { background:var(--tx); }
+.mm { display:flex; gap:18px; align-items:center; }
+.mm .art { width:88px; height:88px; border-radius:12px; flex:none; background:linear-gradient(135deg,#3e6ae1,#7f77dd 60%,#d4537e); display:flex; align-items:center; justify-content:center; font-size:40px; color:#fff; }
+.mm b { display:block; font-size:22px; font-weight:500; }
+.mm span { font-size:17px; color:var(--mu); }
+.mm .bar { height:5px; border-radius:3px; background:var(--cd2); margin:8px 0 6px; overflow:hidden; }
+.mm .bar div { height:100%; background:var(--tx); width:0; }
+.mm .ctl { display:flex; gap:28px; font-size:30px; }
+.mm .ctl button { background:none; border:0; cursor:pointer; padding:0; font-size:inherit; }
+.ccTyres { position:relative; height:140px; display:flex; justify-content:center; }
+.ccTyres img { height:136px; }
+.ccTyres div { position:absolute; font-size:20px; text-align:center; }
+.ccTyres div span { display:block; font-size:14px; color:var(--mu); }
+.trip { display:grid; grid-template-columns:1fr 1fr; gap:8px 30px; }
+.trip div { font-size:26px; font-weight:300; }
+.trip span { display:block; font-size:16px; color:var(--mu); }
+
+/* instrument cluster tell-tales: only active warnings, in the status bar so they never cover the car */
+#telltales { flex:1; min-width:0; height:34px; display:flex; justify-content:center; gap:8px; overflow:hidden; pointer-events:none; }
+.tt { width:40px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; }
+.tt svg { width:36px; height:28px; }
+.tt b { font:700 14px Arial, sans-serif; letter-spacing:.5px; border:2.5px solid currentColor; border-radius:7px; padding:2px 5px; white-space:nowrap; }
+.tt.red { color:#ff3b30; } .tt.amber { color:#ffb020; } .tt.green { color:#30d158; } .tt.blue { color:#3d8bff; } .tt.grey { color:#8a8f98; }
+/* red warning: a notification at the top centre of the screen, tap to dismiss */
+#warnBanner { position:absolute; left:50%; top:76px; transform:translateX(-50%); width:760px; z-index:9; display:none; align-items:center; gap:14px;
+  background:var(--pn); border:2px solid #ff3b30; border-radius:16px; padding:14px 18px; font-size:21px; box-shadow:0 10px 30px rgba(0,0,0,.45); cursor:pointer; }
+#warnBanner.show { display:flex; }
+#warnBanner .tt { flex:none; }
+.ttList .setRow { align-items:flex-start; }
+.ttList .ttInfo { flex:1; }
+.ttList .ttInfo span { display:block; font-size:16px; color:var(--mu); margin-top:4px; }
+
+/* settings rows */
+.setRow { display:flex; justify-content:space-between; align-items:center; padding:14px 4px; border-bottom:1px solid var(--cd2); font-size:21px; gap:20px; }
+.seg { display:flex; background:var(--cd); border-radius:12px; padding:4px; gap:4px; flex:none; }
+.seg button { background:none; border:0; padding:10px 16px; border-radius:9px; font-size:18px; cursor:pointer; }
+.seg button.on { background:var(--ac); color:#fff; }
+.tg { width:62px; height:34px; border-radius:17px; background:var(--cd2); border:0; position:relative; cursor:pointer; flex:none; }
+.tg i { position:absolute; top:4px; left:4px; width:26px; height:26px; border-radius:50%; background:#fff; transition:left .2s; }
+.tg.on { background:var(--ac); } .tg.on i { left:32px; }
+.rng { display:flex; align-items:center; gap:12px; flex:none; }
+.rng input { width:260px; accent-color:var(--ac); }
+.rng b { min-width:64px; text-align:right; font-weight:500; }
+#bsCam.warn { box-shadow:0 0 0 6px #e5484d, 0 10px 30px rgba(0,0,0,.5); }
+#outTemp { position:absolute; top:84px; right:36px; font-size:22px; color:var(--mu); z-index:2; }
+#car3d { position:absolute; inset:0; }
+.hot { position:absolute; transform:translate(-50%,-50%); z-index:3; background:none; border:0; text-align:center; font-size:20px; cursor:pointer; color:var(--tx); text-shadow:0 1px 4px rgba(0,0,0,.6); white-space:nowrap; transition:opacity .3s; }
+.hot b { display:block; font-size:22px; font-weight:500; }
+.hot span { color:var(--mu); font-size:18px; }
+#lockBtn { position:absolute; left:50%; bottom:250px; transform:translateX(-50%); z-index:3; width:72px; height:72px; border-radius:50%; border:0; background:var(--cd); font-size:34px; cursor:pointer; }
+#lockBtn.open { color:var(--dn); }
+
+/* turn signals + blind-spot camera */
+#sig { display:flex; gap:18px; margin-left:28px; }
+#sig button { background:none; border:0; font-size:38px; color:var(--cd2); cursor:pointer; padding:0; line-height:1; }
+#sig button.on { color:#2fd06a; animation:blink .7s steps(1) infinite; }
+@keyframes blink { 50% { opacity:.15; } }
+#beamInd { display:flex; gap:10px; margin-left:20px; cursor:pointer; }
+#beamInd svg { width:40px; height:28px; fill:none; stroke:var(--cd2); stroke-width:2.6; stroke-linecap:round; }
+#beamInd svg path:first-child { fill:var(--cd2); }
+#indLow.on { stroke:#2fd06a; } #indLow.on path:first-child { fill:#2fd06a; }
+#indHigh.on { stroke:#3d8bff; } #indHigh.on path:first-child { fill:#3d8bff; }
+#bsCam { position:absolute; top:225px; left:24px; width:672px; height:380px; border-radius:18px; overflow:hidden; z-index:4; background:#000;
+  box-shadow:0 10px 30px rgba(0,0,0,.5); opacity:0; transform:scale(.96); transition:opacity .25s, transform .25s; pointer-events:none; }
+#bsCam.show { opacity:1; transform:none; }
+#bsCam canvas { width:100%; height:100%; display:block; }
+.bsLbl { position:absolute; top:16px; left:16px; display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.55); color:#fff; padding:8px 14px; border-radius:10px; font-size:20px; }
+.bsLbl i { color:#2fd06a; font-size:26px; animation:blink .7s steps(1) infinite; }
+#bsCam.right .bsLbl { left:auto; right:16px; }
+
+/* seats */
+.seats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.seat { background:var(--cd); border-radius:14px; padding:12px; }
+.seat p { margin:0 0 10px; font-size:18px; color:var(--mu); }
+.seat .row { display:flex; gap:8px; }
+.seatBtn { flex:1; background:var(--cd2); border:0; border-radius:12px; padding:10px 0 8px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:6px; font-size:28px; }
+.seatBtn .lv { display:flex; gap:4px; }
+.seatBtn .lv span { width:14px; height:5px; border-radius:3px; background:var(--bg); }
+.seatBtn.heat .lv span.on { background:#ef7a3c; }
+.seatBtn.vent .lv span.on { background:#4aa3ff; }
+.seatBtn.heat.act i { color:#ef7a3c; }
+.seatBtn.vent.act i { color:#4aa3ff; }
+
+/* map */
+/* clip, not hidden: a hidden overflow box can still be scrolled by focus, which pulled the
+   parked card (below the bottom edge) into view */
+#mapWrap { position:relative; overflow:clip; }
+#carPanel { overflow:clip; }
+#map { position:absolute; inset:0; background:#1a1c20; }
+#stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
+#mapStyleBtn { right:24px; top:24px; height:64px; padding:0 20px; display:flex; align-items:center; gap:10px; font-size:20px; border:0; cursor:pointer; }
+#mapStyleBtn i { font-size:28px; }
+#satCredit { position:absolute; left:12px; bottom:8px; font-size:13px; color:#fff; text-shadow:0 1px 2px #000; display:none; z-index:1; }
+#stage.sat-map #satCredit { display:block; }
+
+/* phone projection in the map area */
+#proj { position:absolute; inset:0; z-index:2; background:#000; }
+#proj.hidden { display:none; }
+.projScreen { position:absolute; inset:0 0 104px; display:none; }
+#proj.carplay #projCarplay, #proj.auto #projAuto { display:flex; }
+#stage.projecting #search, #stage.projecting #navCard, #stage.projecting #recenter, #stage.projecting #mapStyleBtn { display:none; }
+.projBadge { position:absolute; left:0; right:0; bottom:110px; text-align:center; font-size:15px; color:#8a8f98; }
+/* CarPlay-like dashboard: status sidebar with app shortcuts, tiles on the right */
+.cp { font-family:-apple-system, 'SF Pro Display', Elms, sans-serif; color:#fff; }
+.cpSide { width:130px; background:#1c1c1e; display:flex; flex-direction:column; align-items:center; gap:22px; padding:22px 0; }
+.cpTime { font-size:24px; font-weight:600; }
+.cpApp { width:76px; height:76px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; }
+.cpGrid { margin-top:auto; font-size:40px; color:#aaa; }
+.cpMain { flex:1; display:grid; grid-template-columns:1.4fr 1fr; grid-template-rows:1fr 1fr; gap:16px; padding:22px; }
+.cpTile { background:#2c2c2e; border-radius:22px; padding:26px; display:flex; flex-direction:column; gap:8px; }
+.cpTile.big { grid-row:1 / 3; background:linear-gradient(160deg,#2c3e50,#1c2833); }
+.cpTile span { font-size:18px; color:#9a9aa0; } .cpTile b { font-size:32px; font-weight:600; } .cpTile em { font-style:normal; font-size:22px; color:#c7c7cc; }
+/* Android Auto-like: rail with apps and mic, navigation and media cards */
+.aa { font-family:Roboto, Elms, sans-serif; color:#e8eaed; background:#202124; }
+.aaRail { width:120px; background:#000; display:flex; flex-direction:column; align-items:center; gap:18px; padding:22px 0; }
+.aaBtn { width:72px; height:72px; border-radius:50%; background:#303134; display:flex; align-items:center; justify-content:center; font-size:36px; }
+.aaMic { background:#8ab4f8; color:#202124; margin-top:auto; }
+.aaTime { font-size:22px; }
+.aaMain { flex:1; display:flex; flex-direction:column; gap:16px; padding:22px; background:linear-gradient(180deg,#2b3a2f,#202124 60%); }
+.aaNav { background:#0b8043; border-radius:20px; padding:24px; display:flex; align-items:center; gap:22px; max-width:560px; }
+.aaNav i { font-size:64px; } .aaNav b { display:block; font-size:36px; } .aaNav span { font-size:21px; }
+.aaMedia { margin-top:auto; background:#303134; border-radius:20px; padding:20px 24px; display:flex; align-items:center; gap:18px; font-size:34px; max-width:560px; }
+.aaMedia div { flex:1; } .aaMedia b { display:block; font-size:24px; } .aaMedia span { font-size:18px; color:#9aa0a6; }
+.floating { position:absolute; background:var(--pn); border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.35); }
+#search { top:24px; left:24px; width:520px; height:72px; display:flex; align-items:center; gap:16px; padding:0 24px; font-size:24px; color:var(--mu); }
+#navCard { top:110px; left:24px; width:520px; padding:18px 24px; font-size:20px; }
+#navCard b { font-size:24px; font-weight:500; display:block; color:var(--tx); }
+#navCard span { color:var(--mu); }
+#recenter { right:24px; bottom:24px; width:72px; height:72px; display:flex; align-items:center; justify-content:center; font-size:32px; border:0; cursor:pointer; }
+
+/* cards (Tesla: apps open over the map, never replace it) */
+#card { position:absolute; left:20px; right:20px; bottom:0; height:600px; background:var(--pn); border-radius:24px 24px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,.45); transform:translateY(105%); transition:transform .35s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1), border-radius .3s; z-index:5; display:flex; flex-direction:column; }
+#card.open { transform:none; }
+#card.tall { height:880px; }
+#card.full { height:968px; border-radius:0; }
+#card.sizing { transition:none; }
+#cardGrip { height:34px; display:flex; align-items:center; justify-content:center; cursor:grab; touch-action:none; }
+#cardGrip div { width:80px; height:7px; border-radius:4px; background:var(--cd2); }
+#cardClose { position:absolute; top:16px; right:20px; width:56px; height:56px; border-radius:50%; border:0; background:var(--cd); font-size:28px; cursor:pointer; }
+#cardBody { flex:1; min-height:0; overflow:hidden; padding:0 36px 28px; display:flex; flex-direction:column; }
+#cardBody > .climate, #cardBody > .controls { flex:1; min-height:0; height:auto; }
+.title { font-size:30px; font-weight:500; margin:0 0 20px; }
+.btn { background:var(--cd); border:0; border-radius:14px; padding:18px 22px; font-size:22px; cursor:pointer; display:flex; align-items:center; gap:12px; justify-content:center; }
+.btn.on { background:var(--ac); color:#fff; }
+.btn i { font-size:30px; }
+.grid { display:grid; gap:14px; }
+
+/* climate */
+.climate { display:grid; grid-template-columns:1fr 330px; gap:28px; height:100%; }
+.dash { position:relative; border-radius:18px; overflow:hidden; background:#202327; }
+.dash img.base { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.dash img.flow { position:absolute; left:0; width:100%; transition:opacity .4s; pointer-events:none; }
+.dashTemp { position:absolute; left:28px; bottom:22px; display:flex; align-items:center; gap:10px; font-size:52px; font-weight:300; }
+.dashTemp button { width:64px; height:64px; border-radius:50%; border:0; background:rgba(0,0,0,.45); color:#fff; font-size:30px; cursor:pointer; }
+.flowBtns { position:absolute; right:22px; bottom:22px; display:flex; gap:10px; }
+.flowBtns .btn { background:rgba(0,0,0,.5); color:#fff; padding:14px 18px; font-size:20px; }
+.flowBtns .btn.on { background:var(--ac); }
+.fan { display:flex; align-items:center; gap:14px; font-size:22px; }
+.fan input { flex:1; accent-color:var(--ac); height:30px; }
+
+/* controls */
+.controls { display:grid; grid-template-columns:300px 1fr; gap:28px; height:100%; }
+.tabs { display:flex; flex-direction:column; gap:6px; overflow-y:auto; min-height:0; }
+.tabs button { text-align:left; background:none; border:0; border-radius:12px; padding:16px 20px; font-size:22px; cursor:pointer; display:flex; gap:14px; align-items:center; }
+.tabs button.on { background:var(--cd); }
+.tabs i { font-size:28px; color:var(--mu); }
+.tabBody { overflow-y:auto; min-height:0; padding-right:8px; }
+.paints { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+.paint { display:flex; align-items:center; gap:14px; background:var(--cd); border:3px solid transparent; border-radius:14px; padding:10px 14px; font-size:20px; cursor:pointer; text-align:left; }
+.paint.on { border-color:var(--ac); }
+.paint span { width:44px; height:44px; flex:none; border-radius:50%; box-shadow:inset 0 0 0 2px rgba(127,127,127,.35); }
+.tyres { display:flex; align-items:center; justify-content:center; gap:60px; height:100%; }
+.tyres .col { display:flex; flex-direction:column; justify-content:space-between; height:360px; font-size:30px; }
+.tyres .col div span { display:block; font-size:18px; color:var(--mu); }
+.tyres img { height:400px; }
+.low { color:var(--dn); }
+
+/* music */
+.music { display:grid; grid-template-columns:260px 1fr; gap:36px; align-items:center; height:100%; }
+.cover { width:260px; height:260px; border-radius:16px; background:linear-gradient(135deg,#3e6ae1,#7f77dd 60%,#d4537e); display:flex; align-items:center; justify-content:center; font-size:90px; color:#fff; }
+.track b { font-size:36px; font-weight:500; display:block; }
+.track span { font-size:24px; color:var(--mu); }
+.prog { height:8px; border-radius:4px; background:var(--cd2); margin:30px 0 10px; overflow:hidden; }
+.prog div { height:100%; width:35%; background:var(--tx); }
+.player { display:flex; gap:40px; align-items:center; margin-top:24px; font-size:48px; }
+.player button { background:none; border:0; cursor:pointer; font-size:inherit; }
+
+/* apps */
+.apps { grid-template-columns:repeat(8,1fr); gap:30px 10px; }
+.app { display:flex; flex-direction:column; align-items:center; gap:10px; font-size:18px; background:none; border:0; cursor:pointer; }
+.app div { width:84px; height:84px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:44px; color:#fff; }
+
+/* dock */
+#dock { grid-column:1 / 4; display:flex; align-items:center; padding:0 28px; gap:14px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
+.dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
+.dk:hover { background:var(--cd); }
+.dk.on { background:var(--cd); }
+.dkApp div { width:72px; height:72px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; color:#fff; }
+.tempCtl { display:flex; align-items:center; gap:2px; }
+.tempCtl .dk { width:60px; font-size:36px; color:var(--mu); }
+.tempCtl b { font-size:40px; font-weight:400; min-width:110px; text-align:center; cursor:pointer; }
+.sep { flex:1; }
+/* Seat climate and defrost in the dock (Tesla: tap a seat to step the heat, hold for the full set) */
+.seatDk { flex-direction:column; gap:4px; font-size:38px; color:var(--mu); touch-action:none; }
+.seatDk .lv { display:flex; gap:3px; height:5px; }
+.seatDk .lv span { width:12px; height:5px; border-radius:3px; background:var(--cd2); }
+.seatDk.heat, .seatDk.heat .lv span.on { color:#ef7a3c; } .seatDk.heat .lv span.on { background:#ef7a3c; }
+.seatDk.vent, .seatDk.vent .lv span.on { color:#4aa3ff; } .seatDk.vent .lv span.on { background:#4aa3ff; }
+.seatDk { position:relative; }
+.seatDk em { position:absolute; top:8px; right:12px; font-style:normal; font-size:15px; font-weight:600; color:var(--tx); }
+.dk svg { width:44px; height:44px; color:var(--mu); }
+.dk.lit svg { color:#ef7a3c; }
+#seatPop { position:absolute; bottom:124px; z-index:20; width:430px; padding:22px 24px; border-radius:22px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
+  opacity:0; transform:translateY(12px); pointer-events:none; transition:opacity .2s, transform .2s; }
+#seatPop.show { opacity:1; transform:none; pointer-events:auto; }
+#seatPop h5 { margin:0 0 16px; font-size:24px; font-weight:500; display:flex; justify-content:space-between; align-items:center; }
+#seatPop .row { display:grid; grid-template-columns:110px repeat(4, 1fr); gap:8px; align-items:center; margin-bottom:12px; font-size:19px; color:var(--mu); }
+#seatPop .row button { height:58px; border:0; border-radius:12px; background:var(--cd2); color:var(--tx); font-size:20px; cursor:pointer; }
+#seatPop .row.heat button.on { background:#ef7a3c; color:#fff; }
+#seatPop .row.vent button.on { background:#4aa3ff; color:#fff; }
+#seatPop .auto { width:100%; height:62px; border:0; border-radius:12px; background:var(--cd2); color:var(--tx); font-size:21px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; margin-top:4px; }
+#seatPop .auto.on { background:var(--tx); color:var(--bg); }
+#seatPop p { margin:12px 0 0; font-size:17px; color:var(--mu); line-height:1.35; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="stage">
+  <section id="carPanel">
+    <div id="status">
+      <div id="gears" title="Demo: vitesi değiştirmek için dokun"><span class="on">P</span><span>R</span><span>N</span><span>D</span></div>
+      <div id="sig" title="Demo: sinyal vermek için dokun">
+        <button id="sigL" aria-label="Sol sinyal"><i class="ti ti-arrow-big-left"></i></button>
+        <button id="sigR" aria-label="Sağ sinyal"><i class="ti ti-arrow-big-right"></i></button>
+      </div>
+      <div id="beamInd" title="Demo: uzun far için dokun">
+        <!-- Standard low / high beam tell-tales: lamp body with dipped or straight rays. -->
+        <svg id="indLow" viewBox="0 0 40 28" aria-label="Kısa far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6 3 10M14 12 3 16M14 18 3 22"/></svg>
+        <svg id="indHigh" viewBox="0 0 40 28" aria-label="Uzun far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6H2M14 11H2M14 17H2M14 22H2"/></svg>
+      </div>
+      <div id="telltales"></div>
+      <div class="batt"><span style="color:var(--mu)">312 km</span><div class="cell"><div style="width:78%"></div></div><span>78%</span></div>
+    </div>
+    <div id="speedBox" style="opacity:0">
+      <div class="spdRow"><span id="speed">0</span><span class="spdUnit">km/h</span></div>
+      <div id="powerBar"><div class="regen"></div><div class="power"></div><div class="zero"></div></div>
+      <div id="powerKw">0 kW</div>
+    </div>
+    <div id="outTemp">Dış 18°</div>
+    <div id="limitSign" class="hide"><span id="limitVal">50</span></div>
+    <div id="car3d"></div>
+    <div id="bsCam"><canvas id="bsCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="bsArrow"></i><span id="bsTxt">Sol kamera</span></div></div>
+    <button class="hot" id="hTrunk" data-act="trunk"><b>Aç</b><span>Bagaj</span></button>
+    <button class="hot" id="hShade" data-act="shade"><b>Aç</b><span>Tavan perdesi</span></button>
+    <button class="hot" id="hCharge" data-act="charge"><i class="ti ti-bolt" style="font-size:30px"></i><span style="display:block">Şarj portu</span></button>
+    <button id="lockBtn" aria-label="Kilit"><i class="ti ti-lock"></i></button>
+    <div id="carCards">
+      <div id="ccGrab"></div>
+      <div id="ccTrack">
+        <div class="cc"><h4>Müzik <b>Spotify</b></h4>
+          <div class="mm"><div class="art"><i class="ti ti-music"></i></div>
+            <div style="flex:1"><b id="mmTitle" style="cursor:pointer">Sahil Yolu</b><span>Örnek Sanatçı</span>
+              <div class="bar"><div id="mmProg"></div></div>
+              <div class="ctl"><button><i class="ti ti-player-skip-back"></i></button><button id="mmPlay"><i class="ti ti-player-play"></i></button><button><i class="ti ti-player-skip-forward"></i></button></div>
+            </div></div></div>
+        <div class="cc"><h4>Enerji <b id="enNow">0 kW · — Wh/km</b></h4>
+          <canvas id="enChart" width="620" height="130" style="width:100%;height:96px"></canvas>
+          <div style="font-size:16px;color:var(--mu);margin-top:4px" id="enAvg">Son 5 km ortalaması —</div></div>
+        <div class="cc"><h4>Lastik basıncı <b id="tyreState">Normal</b></h4><div class="ccTyres" id="ccTyres"></div></div>
+        <div class="cc"><h4>Yolculuk <b>Son şarjdan beri</b></h4>
+          <div class="trip"><div id="trDist">0,0<span>km</span></div><div id="trKwh">0,00<span>kWh</span></div>
+            <div id="trAvg">—<span>Wh/km ortalama</span></div><div id="trTime">0:00<span>süre</span></div></div></div>
+      </div>
+      <div id="ccDots"><i class="on"></i><i></i><i></i><i></i></div>
+    </div>
+  </section>
+
+  <div id="divider" aria-label="Araç görünümünü genişlet"><div></div></div>
+
+  <section id="mapWrap">
+    <div id="map"></div>
+    <div class="floating" id="search"><i class="ti ti-search"></i>Nereye gidiyoruz?</div>
+    <div class="floating" id="navCard"><b>Kadıköy İskele</b><span>12 dk · 5,4 km · varışta %75</span></div>
+    <button class="floating" id="recenter" aria-label="Konumuma dön"><i class="ti ti-current-location"></i></button>
+    <button class="floating" id="mapStyleBtn" aria-label="Harita görünümü"></button>
+    <div id="satCredit">Uydu görüntüsü: Esri, Maxar, Earthstar Geographics</div>
+    <!-- Phone projection takes the map's place; the car panel and dock stay. Placeholder screens:
+         on the car this panel will show the Dolphin's own CarPlay / Android Auto output. -->
+    <div id="proj" class="hidden">
+      <div id="projCarplay" class="projScreen cp">
+        <div class="cpSide">
+          <div class="cpTime" id="cpTime">12:00</div>
+          <div class="cpApp" style="background:#34c759"><i class="ti ti-phone"></i></div>
+          <div class="cpApp" style="background:#fa2d48"><i class="ti ti-music"></i></div>
+          <div class="cpApp" style="background:#0a84ff"><i class="ti ti-map-2"></i></div>
+          <div class="cpGrid"><i class="ti ti-layout-grid"></i></div>
+        </div>
+        <div class="cpMain">
+          <div class="cpTile big"><span>Haritalar</span><b>Kadıköy İskele</b><em>12 dk · 5,4 km</em></div>
+          <div class="cpTile"><span>Müzik</span><b>Sahil Yolu</b><em>Örnek Sanatçı</em></div>
+          <div class="cpTile"><span>Takvim</span><b>Toplantı 14:00</b><em>Ofis</em></div>
+        </div>
+      </div>
+      <div id="projAuto" class="projScreen aa">
+        <div class="aaRail">
+          <div class="aaBtn" style="color:#4285f4"><i class="ti ti-navigation"></i></div>
+          <div class="aaBtn" style="color:#1db954"><i class="ti ti-music"></i></div>
+          <div class="aaBtn"><i class="ti ti-phone"></i></div>
+          <div class="aaBtn"><i class="ti ti-layout-grid"></i></div>
+          <div class="aaBtn aaMic"><i class="ti ti-microphone"></i></div>
+          <div class="aaTime" id="aaTime">12:00</div>
+        </div>
+        <div class="aaMain">
+          <div class="aaNav"><i class="ti ti-arrow-up-right"></i><div><b>300 m</b><span>Söğütlüçeşme Cd. üzerinden sağa</span></div></div>
+          <div class="aaMedia"><i class="ti ti-music"></i><div><b>Sahil Yolu</b><span>Örnek Sanatçı</span></div><i class="ti ti-player-pause"></i></div>
+        </div>
+      </div>
+      <div class="projBadge">Temsili görünüm · telefon bağlanınca gerçek ekran burada</div>
+    </div>
+    <div id="card">
+      <div id="cardGrip"><div></div></div>
+      <button id="cardClose" aria-label="Kapat"><i class="ti ti-x"></i></button>
+      <div id="cardBody"></div>
+    </div>
+  </section>
+
+  <!-- Third column: an app window kept off-screen until pulled out from the right edge -->
+  <section id="sidePanel">
+    <div class="sideHead"><button id="sideBack" aria-label="Geri" style="display:none"><i class="ti ti-arrow-left"></i></button><span id="sideTitle">Uygulamalar</span></div>
+    <div id="sideApps"></div>
+    <div id="sideApp"></div>
+  </section>
+  <div id="sideHandle" aria-label="Uygulama penceresi"><div></div></div>
+  <div id="warnBanner" role="alert"></div>
+
+  <div id="seatPop" role="dialog"></div>
+  <footer id="dock">
+    <button class="dk" data-card="controls" aria-label="Araç kontrolleri"><i class="ti ti-car"></i></button>
+    <div class="tempCtl">
+      <button class="dk" id="tDn" aria-label="Sıcaklığı düşür"><i class="ti ti-chevron-left"></i></button>
+      <b id="tVal" data-card="climate">22.0°</b>
+      <button class="dk" id="tUp" aria-label="Sıcaklığı artır"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <button class="dk seatDk" data-seatdk="driver" aria-label="Sürücü koltuğu (basılı tut: tüm seçenekler)"></button>
+    <button class="dk" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5C8 5.5 16 5.5 21.5 8.5L19 19H5z"/><path d="M8.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M12 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M15.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4"/></svg></button>
+    <button class="dk" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
+    <div class="sep"></div>
+    <button class="dk dkApp" data-card="phone" aria-label="Telefon"><div style="background:#30a46c"><i class="ti ti-phone"></i></div></button>
+    <button class="dk dkApp" data-card="music" aria-label="Müzik"><div style="background:#1db954"><i class="ti ti-music"></i></div></button>
+    <button class="dk dkApp" data-card="camera" aria-label="Kamera"><div style="background:#4a5059"><i class="ti ti-camera"></i></div></button>
+    <button class="dk dkApp" data-card="climate" aria-label="Klima"><div style="background:#2f7fd1"><i class="ti ti-air-conditioning"></i></div></button>
+    <button class="dk dkApp" data-card="apps" aria-label="Tüm uygulamalar"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-layout-grid"></i></div></button>
+    <div class="sep"></div>
+    <button class="dk seatDk" data-seatdk="pass" aria-label="Yolcu koltuğu (basılı tut: tüm seçenekler)"></button>
+    <button class="dk" id="vDn" aria-label="Sesi kıs"><i class="ti ti-chevron-left" style="font-size:36px;color:var(--mu)"></i></button>
+    <button class="dk" id="vIcon" aria-label="Ses"><i class="ti ti-volume"></i></button>
+    <button class="dk" id="vUp" aria-label="Sesi aç"><i class="ti ti-chevron-right" style="font-size:36px;color:var(--mu)"></i></button>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (id) => document.getElementById(id);
+const stage = $('stage');
+
+// ---------- vehicle state (fake; later fed by the HAL bridge) ----------
+const S = { gear: 'P', speed: 0, sunshade: 0, locked: true, trunk: false, charging: false, temp: 22, ac: true, fan: 3,
+  flow: { face: true, foot: false, defrost: false }, vol: 12, theme: 'dark', paintId: 'dag-grisi',
+  signal: null, bsMode: 'always', hazard: false, lights: 'auto', highBeam: false,
+  speedLimit: 50, powerKw: 0,
+  set: null, // vehicle settings, filled from SETTING_DEFAULTS below
+  doors: { FL: false, FR: false, RL: false, RR: false }, windows: { FL: 0, FR: 0, RL: 0, RR: 0 },
+  seats: { driver: { heat: 0, vent: 0, auto: false }, pass: { heat: 0, vent: 0, auto: false } },
+  outside: 18, defrost: false, rearDefrost: false,
+  tyres: { FL: 2.5, FR: 2.5, RL: 2.4, RR: 2.1 } };
+
+// ---------- vehicle settings (the car's own setup menus) ----------
+// Built from the Dolphin's feature list; on the car each one maps to a BYD HAL setting.
+// Row types: seg (choice), tog (on/off), range (slider), info, btn.
+const SETTINGS = {
+  drive: [
+    ['seg', 'mode', 'Sürüş modu', [['eco', 'Eco'], ['normal', 'Normal'], ['sport', 'Sport']]],
+    ['seg', 'regen', 'Rejeneratif fren', [['std', 'Standart'], ['high', 'Yüksek']]],
+    ['seg', 'steer', 'Direksiyon hissi', [['comfort', 'Konfor'], ['sport', 'Sport']]],
+    ['tog', 'esp', 'ESP (denge kontrolü)'],
+    ['tog', 'autoHold', 'Otomatik park freni (Auto Hold)'],
+    ['tog', 'creep', 'Sürünme modu'],
+  ],
+  adas: [
+    ['tog', 'acc', 'Adaptif hız sabitleyici (ACC)'],
+    ['tog', 'lka', 'Şerit takip asistanı (LKA)'],
+    ['tog', 'ldw', 'Şeritten ayrılma uyarısı (LDW)'],
+    ['tog', 'elka', 'Acil şerit asistanı (ELKA)'],
+    ['tog', 'bsd', 'Kör nokta uyarısı (BSD)'],
+    ['tog', 'rcta', 'Arka çapraz trafik uyarısı (RCTA)'],
+    ['tog', 'dow', 'Kapı açma uyarısı (DOW)'],
+    ['tog', 'fcw', 'Ön çarpışma uyarısı ve acil fren (FCW/AEB)'],
+    ['tog', 'tsr', 'Trafik işareti tanıma (TSR)'],
+    ['seg', 'tsrWarn', 'Hız sınırı aşım uyarısı', [['off', 'Kapalı'], ['visual', 'Görsel'], ['sound', 'Sesli']]],
+  ],
+  charge: [
+    ['range', 'soc', 'Hedef şarj seviyesi', 50, 100, '%'],
+    ['range', 'acCurrent', 'AC şarj akımı', 6, 32, ' A'],
+    ['tog', 'sched', 'Planlı şarj'],
+    ['tog', 'v2l', 'Dışarıya güç verme (V2L)'],
+  ],
+  mirrors: [
+    ['tog', 'mirrorFold', 'Kilitlenince aynaları katla'],
+    ['tog', 'mirrorTilt', 'Geri viteste sağ aynayı indir'],
+    ['tog', 'mirrorHeat', 'Ayna ısıtma'],
+    ['tog', 'seatEasy', 'Kolay iniş-biniş (koltuk geri)'],
+  ],
+  sound: [
+    ['range', 'mediaVol', 'Medya sesi', 0, 30, ''],
+    ['seg', 'spdVol', 'Hıza duyarlı ses', [['off', 'Kapalı'], ['low', 'Düşük'], ['high', 'Yüksek']]],
+    ['tog', 'avas', 'Yaya uyarı sesi'],
+    ['tog', 'touchSound', 'Dokunma sesi'],
+  ],
+  conn: [
+    ['seg', 'mapArea', 'Harita alanında göster', [['map', 'Harita'], ['carplay', 'CarPlay'], ['auto', 'Android Auto']]],
+    ['tog', 'bt', 'Bluetooth'],
+    ['tog', 'wifi', 'Wi-Fi'],
+    ['tog', 'hotspot', 'Mobil erişim noktası'],
+    ['tog', 'carplay', 'Kablosuz CarPlay / Android Auto'],
+  ],
+  system: [
+    ['seg', 'units', 'Birimler', [['km', 'km, °C'], ['mi', 'mil, °F']]],
+    ['seg', 'lang', 'Dil', [['tr', 'Türkçe'], ['en', 'English']]],
+    ['tog', 'autoTime', 'Otomatik saat'],
+    ['info', 'Yazılım', 'Dolphin Launcher 0.1 · DiLink 3.0'],
+    ['btn', 'Ayarları varsayılana döndür', 'resetSettings'],
+  ],
+};
+const SETTING_DEFAULTS = {
+  mode: 'normal', regen: 'std', steer: 'comfort', esp: true, autoHold: true, creep: false,
+  acc: true, lka: true, ldw: true, elka: true, bsd: true, rcta: true, dow: true, fcw: true, tsr: true, tsrWarn: 'visual',
+  soc: 90, acCurrent: 16, sched: false, v2l: false,
+  mirrorFold: true, mirrorTilt: true, mirrorHeat: false, seatEasy: false,
+  mediaVol: 12, spdVol: 'low', avas: true, touchSound: true,
+  mapArea: 'map', bt: true, wifi: true, hotspot: false, carplay: true,
+  units: 'km', lang: 'tr', autoTime: true,
+};
+S.set = { ...SETTING_DEFAULTS };
+try { Object.assign(S.set, JSON.parse(localStorage.getItem('settings') || '{}')); } catch {}
+function saveSettings() { try { localStorage.setItem('settings', JSON.stringify(S.set)); } catch {} }
+function renderSettings(rows) {
+  return rows.map(([type, key, label, a, b, unit]) => {
+    if (type === 'seg') return `<div class="setRow"><span>${label}</span><div class="seg">${a.map(([v, l]) =>
+      `<button class="${S.set[key] === v ? 'on' : ''}" data-set="${key}" data-val="${v}">${l}</button>`).join('')}</div></div>`;
+    if (type === 'tog') return `<div class="setRow"><span>${label}</span><button class="tg ${S.set[key] ? 'on' : ''}" data-set="${key}" data-val="toggle" aria-label="${label}"><i></i></button></div>`;
+    if (type === 'range') return `<div class="setRow"><span>${label}</span><div class="rng"><input type="range" min="${a}" max="${b}" value="${S.set[key]}" data-setr="${key}" data-unit="${unit}"><b>${S.set[key]}${unit}</b></div></div>`;
+    if (type === 'info') return `<div class="setRow"><span>${key}</span><span style="color:var(--mu)">${label}</span></div>`;
+    return `<div class="setRow"><button class="btn" data-do="${label}">${key}</button></div>`;
+  }).join('');
+}
+
+// ---------- instrument cluster tell-tales ----------
+// The 28 lights in the Dolphin owner's manual (Instrument Cluster, pp. 35-40), in its order.
+// The manual draws them as pictures, so the colours follow the usual cluster convention
+// (red: stop, amber: get it checked, green/blue/grey: information). `auto` lights follow the car's
+// state; the rest are faults, switched on from Vehicle > Warnings in the demo and by the HAL on
+// the car. `status` ones already live in the status bar, so the row under the car skips them.
+const svg = (inner) => `<svg viewBox="0 0 40 30" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const dot = (x, y) => `<circle cx="${x}" cy="${y}" r="1.5" fill="currentColor"/>`;
+const ring = (inner) => svg(`<circle cx="20" cy="15" r="9"/><path d="M8 7c-3 5-3 11 0 16M32 7c3 5 3 11 0 16"/>${inner}`);
+const label = (t, size = 13) => `<text x="20" y="${15 + size * 0.36}" text-anchor="middle" font-size="${size}" font-weight="700" fill="currentColor" stroke="none" font-family="Arial">${t}</text>`;
+const ICONS = {
+  turn: svg('<path d="M4 15l8-7v4h7v6h-7v4zM36 15l-8-7v4h-7v6h7v4z" fill="currentColor"/>'),
+  pos: svg('<path d="M15 8a7 7 0 0 0 0 14z" fill="currentColor"/><path d="M25 8a7 7 0 0 1 0 14z" fill="currentColor"/><path d="M10 10 5 8M10 15H4M10 20l-5 2M30 10l5-2M30 15h6M30 20l5 2"/>'),
+  high: svg('<path d="M24 5c8 0 12 5 12 10s-4 10-12 10c-2 0-3-2-3-10s1-10 3-10z" fill="currentColor"/><path d="M16 7H4M16 12H4M16 18H4M16 23H4"/>'),
+  power: svg('<path d="M7 20c0-7 5-11 11-11s11 4 11 11z"/><path d="M29 18c2 0 4-1 5-3"/><circle cx="35" cy="13" r="2.5"/><path d="M10 20v4M25 20v4M13 13l5 4 5-4"/>'),
+  main: svg(`<path d="M20 3l16 24H4z"/><path d="M20 11v8"/>${dot(20, 23)}`),
+  key: svg('<circle cx="11" cy="15" r="6"/><path d="M17 15h17M28 15v5M33 15v4"/>'),
+  abs: ring(label('ABS', 8)),
+  esc: svg('<path d="M10 15l3-6h14l3 6v6H10z"/><circle cx="14" cy="21" r="1.8"/><circle cx="26" cy="21" r="1.8"/><path d="M8 27c3-2 5 2 8 0M24 27c3-2 5 2 8 0"/>'),
+  escoff: svg(`<path d="M6 15l3-6h14l3 6v6H6z"/><circle cx="10" cy="21" r="1.8"/><circle cx="22" cy="21" r="1.8"/><path d="M4 27c3-2 5 2 8 0M16 27c3-2 5 2 8 0"/>${'<text x="34" y="13" text-anchor="middle" font-size="8" font-weight="700" fill="currentColor" stroke="none" font-family="Arial">OFF</text>'}`),
+  tpms: svg(`<path d="M10 6c-3 3-4 7-4 10s1 6 3 8h22c2-2 3-5 3-8s-1-7-4-10"/><path d="M8 26h24"/><path d="M20 9v8"/>${dot(20, 21)}`),
+  daw: svg('<path d="M9 12h18v6a7 7 0 0 1-7 7h-4a7 7 0 0 1-7-7z"/><path d="M27 14h3a3 3 0 0 1 0 6h-3"/><path d="M14 4c-1 2 1 3 0 5M20 4c-1 2 1 3 0 5"/>'),
+  fog: svg('<path d="M26 5c-7 0-11 4-11 10s4 10 11 10z" fill="currentColor"/><path d="M12 9H3M12 15H3M12 21H3"/><path d="M8 4c-2 4 2 7 0 11s2 7 0 11"/>'),
+  brake: ring(`<path d="M20 10v6"/>${dot(20, 19.5)}`),
+  steer: svg(`<circle cx="17" cy="15" r="11"/><circle cx="17" cy="15" r="3"/><path d="M6 13h8M20 13h8M17 18v8M35 6v10"/>${dot(35, 21)}`),
+  belt: svg('<circle cx="18" cy="6" r="3.5" fill="currentColor"/><path d="M12 28V17c0-4 3-6 6-6s6 2 6 6v11M11 12l16 14"/>'),
+  coolant: svg('<path d="M20 3v14M20 3h5M20 8h5M20 13h5"/><circle cx="20" cy="20" r="3.5" fill="currentColor"/><path d="M4 26c3-2 5 2 8 0s5 2 8 0 5 2 8 0 5 2 8 0"/>'),
+  plug: svg('<path d="M14 3v6M26 3v6M10 9h20v5a10 10 0 0 1-20 0zM20 24v5"/>'),
+  lowv: svg('<rect x="5" y="9" width="30" height="17" rx="2"/><path d="M11 9V6M29 9V6M10 17h6M26 14v6M23 17h6"/>'),
+  hvhot: svg('<rect x="5" y="8" width="30" height="18" rx="2"/><path d="M11 8V5M29 8V5M20 11v6M13 13c-2 2 2 4 0 6M27 13c-2 2 2 4 0 6"/><circle cx="20" cy="20" r="2.5" fill="currentColor"/>'),
+  hvfault: svg(`<rect x="5" y="8" width="30" height="18" rx="2"/><path d="M11 8V5M29 8V5M20 11v8"/>${dot(20, 23)}`),
+  powertrain: svg('<rect x="8" y="9" width="20" height="14" rx="2"/><path d="M28 13h5v6h-5M4 13v6M8 16H4M14 9V5h8v4M19 12l-3 4h4l-3 4"/>'),
+  epb: ring(label('P')),
+  airbag: svg('<circle cx="11" cy="6" r="3.5" fill="currentColor"/><path d="M9 28V18l4-6 4 5h5"/><circle cx="29" cy="15" r="7"/>'),
+};
+const TELLTALES = [
+  { id: 'turn', name: 'Sinyal', color: 'green', status: true, auto: () => !!S.signal || S.hazard, desc: 'Sinyal veya dörtlü açık (üst çubukta gösterilir).' },
+  { id: 'pos', name: 'Park lambası', color: 'green', auto: () => S.lights !== 'off', desc: 'Park/konum lambaları yanıyor.' },
+  { id: 'high', name: 'Uzun far', color: 'blue', status: true, auto: () => lightState().high, desc: 'Uzun far açık (üst çubukta gösterilir).' },
+  { id: 'mode', name: 'Sürüş modu', color: 'green', text: () => ({ eco: 'ECO', normal: 'NORMAL', sport: 'SPORT' })[S.set.mode], auto: () => true, desc: 'Seçili sürüş modu.' },
+  { id: 'ok', name: 'OK (sürüşe hazır)', color: 'green', text: () => 'OK', auto: () => true, desc: 'Araç sürüşe hazır.' },
+  { id: 'acc', name: 'Adaptif hız sabitleyici', color: 'green', text: () => 'ACC', auto: () => S.set.acc && S.gear === 'D' && S.speed > 30, desc: 'ACC devrede.' },
+  { id: 'avh', name: 'AVH (otomatik bekletme)', text: () => 'AVH', color: () => (S.gear === 'D' && S.speed < 1 ? 'green' : 'grey'), auto: () => S.set.autoHold, desc: 'Gri: beklemede. Yeşil: aracı durakta tutuyor.' },
+  { id: 'power', name: 'Sürüş gücü sınırlı', color: 'amber', desc: 'Batarya düşük, motor gücü sınırlandı. Yetkili servise başvurun.' },
+  { id: 'main', name: 'Ana uyarı', color: 'red', desc: 'Göstergedeki arıza mesajını kontrol edin.' },
+  { id: 'key', name: 'Akıllı anahtar', color: 'amber', desc: 'Anahtar algılanmadı; yanıp sönüyorsa anahtar pili zayıf.' },
+  { id: 'abs', name: 'ABS arızası', color: 'amber', desc: 'ABS çalışmıyor, frenler çalışır. Sert frende tekerlek kilitlenebilir.' },
+  { id: 'escoff', name: 'ESC kapalı', color: 'amber', auto: () => !S.set.esp, desc: 'Denge kontrolü kapatıldı; virajlarda yavaş sürün.' },
+  { id: 'esc', name: 'ESC arızası', color: 'amber', desc: 'Denge kontrolü arızalı. Kısa yanıp sönme: sistem devrede.' },
+  { id: 'tpms', name: 'Lastik basıncı', color: 'amber', auto: () => Object.values(S.tyres).some((v) => v < 2.2), desc: 'Düşük basınç ya da TPMS arızası. Lastikleri kontrol edin.' },
+  { id: 'daw', name: 'Sürücü dikkat uyarısı', color: 'amber', desc: 'Yorgunluk belirtisi algılandı; mola verin.' },
+  { id: 'cpd', name: 'Çocuk algılama (CPD)', color: 'amber', text: () => 'CPD', desc: 'CPD kapalı ya da arızalı.' },
+  { id: 'fog', name: 'Arka sis lambası', color: 'amber', auto: () => S.fog, desc: 'Arka sis lambası açık.' },
+  { id: 'brake', name: 'Fren/park sistemi arızası', color: 'red', desc: 'Fren hidroliği düşük ya da fren sistemi arızalı. Güvenli bir yerde hemen durun.' },
+  { id: 'steer', name: 'Direksiyon sistemi arızası', color: 'red', desc: 'Direksiyon ağırlaşabilir. Güvenli bir yerde hemen durun.' },
+  { id: 'belt', name: 'Emniyet kemeri', color: 'red', desc: 'Bir koltukta emniyet kemeri takılı değil.' },
+  { id: 'coolant', name: 'Motor soğutma sıvısı aşırı ısındı', color: 'red', desc: 'Motor soğutması çok sıcak; durup kontrol ettirin.' },
+  { id: 'plug', name: 'Şarj kablosu bağlı', color: 'red', auto: () => S.charging, desc: 'Yüksek voltaj şarj bağlantısı takılı.' },
+  { id: 'lowv', name: '12 V sistem arızası', color: 'red', desc: 'Düşük voltaj beslemesi arızalı. Klima ve radyoyu kapatıp güvenli yerde durun.' },
+  { id: 'hvhot', name: 'Batarya aşırı ısındı', color: 'red', desc: 'Batarya çok sıcak; durup soğutun. Yanıp sönüyorsa aracı hemen durdurup terk edin.' },
+  { id: 'hvfault', name: 'Batarya arızası', color: 'red', desc: 'Yüksek voltaj bataryası arızalı; yetkili servise başvurun.' },
+  { id: 'powertrain', name: 'Güç aktarma arızası', color: 'red', desc: 'Güç aktarma sistemi arızalı; mümkünse sürmeyin.' },
+  { id: 'epb', name: 'Elektronik park freni', color: 'red', auto: () => S.gear === 'P', desc: 'Park freni çekili.' },
+  { id: 'airbag', name: 'Hava yastığı arızası', color: 'red', desc: 'Hava yastıkları açılmayabilir; servise başvurun.' },
+];
+S.faults = {};
+S.fog = false;
+const ttColor = (t) => (typeof t.color === 'function' ? t.color() : t.color);
+const ttLit = (t) => (t.auto ? t.auto() : !!S.faults[t.id]);
+const ttHtml = (t) => `<div class="tt ${ttColor(t)}" title="${t.name}">${t.text ? `<b>${t.text()}</b>` : ICONS[t.id]}</div>`;
+// The status bar shows only active warnings (amber and red). Always-on information lights (OK,
+// drive mode, AVH standby, park brake in P, ...) stay in the Warnings list, as on Tesla.
+const isWarning = (t) => ['amber', 'red'].includes(ttColor(t)) && t.id !== 'epb';
+let dismissedAlert = null;
+function updateTelltales() {
+  $('telltales').innerHTML = TELLTALES.filter((t) => !t.status && isWarning(t) && ttLit(t)).map(ttHtml).join('');
+  // A red fault also pops up a notification with the manual's advice; a tap hides it until
+  // a different red fault appears.
+  const red = TELLTALES.find((t) => !t.auto && ttColor(t) === 'red' && S.faults[t.id]);
+  if (!red) dismissedAlert = null;
+  $('warnBanner').classList.toggle('show', !!red && red.id !== dismissedAlert);
+  if (red) $('warnBanner').innerHTML = `${ttHtml(red)}<div><b>${red.name}</b><br><span style="font-size:17px;color:var(--mu)">${red.desc}</span></div>`;
+}
+setInterval(updateTelltales, 250);
+$('warnBanner').onclick = () => {
+  const red = TELLTALES.find((t) => !t.auto && ttColor(t) === 'red' && S.faults[t.id]);
+  dismissedAlert = red ? red.id : null;
+  updateTelltales();
+};
+function renderTelltaleList() {
+  return `<div class="ttList">${TELLTALES.map((t) => `<div class="setRow">${ttHtml(t)}<div class="ttInfo">${t.name}<span>${t.desc}</span></div>${
+    t.auto ? `<span style="font-size:16px;color:var(--mu);flex:none">${ttLit(t) ? 'Yanıyor' : 'Sönük'} · otomatik</span>`
+      : `<button class="tg ${S.faults[t.id] ? 'on' : ''}" data-fault="${t.id}" aria-label="${t.name}"><i></i></button>`}</div>`).join('')}</div>`;
+}
+
+// ---------- fit 1920x1080 stage to the window ----------
+let stageScale = 1;
+function fit() {
+  const k = stageScale = Math.min(innerWidth / 1920, innerHeight / 1080);
+  stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+}
+addEventListener('resize', fit); fit();
+
+// ---------- 3D car (camera presets from Kinex's Dolphin config) ----------
+const PRESETS = {
+  default: { theta: 20, phi: 70, r: 70 }, actions: { theta: 20, phi: 70, r: 55 },
+  left: { theta: 90, phi: 83, r: 55 }, right: { theta: 270, phi: 83, r: 55 },
+  overhead: { theta: 270, phi: 1, r: 90 }, rear: { theta: 160, phi: 72, r: 60 },
+  drive: { theta: 180, phi: 58, r: 120 }, roof: { theta: 25, phi: 38, r: 60 },
+};
+const box = $('car3d');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.localClippingEnabled = true; // the sunshade is cut back by a clipping plane
+box.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const cam = new THREE.PerspectiveCamera(30, 720 / 968, 0.05, 300);
+const controls = new OrbitControls(cam, renderer.domElement);
+// Drag to orbit, pinch (or mouse wheel) to zoom; double-tap returns to the default view.
+controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = true;
+controls.zoomSpeed = 0.8;
+controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x1b1d21, roughness: 1 });
+const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 64), groundMat);
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+// Drive mode road: a dark strip with moving lane dashes.
+const road = new THREE.Group(); road.visible = false; scene.add(road);
+const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e2024, roughness: 1 });
+const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(14, 120), roadMat);
+asphalt.rotation.x = -Math.PI / 2; road.add(asphalt);
+const dashes = new THREE.Group(); road.add(dashes);
+// Own-lane lines get their own materials so a blind-spot warning can turn that side red.
+const dashMat = new THREE.MeshBasicMaterial({ color: 0x9aa0a8 });
+const laneLine = { left: dashMat.clone(), right: dashMat.clone() };
+for (let i = -20; i < 20; i++) for (const x of [-1.9, 1.9, 5.7, -5.7]) {
+  const mat = x === 1.9 ? laneLine.left : x === -1.9 ? laneLine.right : dashMat;
+  const d = new THREE.Mesh(new THREE.PlaneGeometry(x === 1.9 || x === -1.9 ? 0.16 : 0.12, 1.6), mat);
+  d.rotation.x = -Math.PI / 2; d.position.set(x, 0.01, i * 3.2); dashes.add(d);
+}
+
+// ---------- traffic in the next lanes (Tesla draws surrounding cars as plain grey shapes) ----------
+// On the car this would come from the BSD radar; here a car overtakes now and then on each side.
+// Left lane is +x (the car's left), front is +z.
+function makeTrafficCar() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6b7078, roughness: 0.5, metalness: 0.2, emissive: 0x000000 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 4.3), mat); body.position.y = 0.55;
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 2.3), mat); cabin.position.set(0, 1.15, -0.2);
+  g.add(body, cabin);
+  g.userData.mat = mat;
+  return g;
+}
+const traffic = ['left', 'right'].map((side) => {
+  const car = makeTrafficCar();
+  car.position.set(side === 'left' ? 3.8 : -3.8, 0, -40);
+  road.add(car);
+  return { side, car, rel: 0, wait: 2 + Math.random() * 4 };
+});
+const BSD_ZONE = [-7, 1.5]; // metres along the car: from behind the rear bumper to the B-pillar
+const bsd = { left: false, right: false };
+function stepTraffic(dt) {
+  for (const t of traffic) {
+    const z = t.car.position.z;
+    if (t.wait > 0) {
+      t.wait -= dt;
+      if (t.wait <= 0) {
+        // Mostly overtaking from behind, sometimes being passed by us from ahead.
+        const fromBehind = Math.random() < 0.75;
+        t.car.position.z = fromBehind ? -28 : 26;
+        t.rel = (fromBehind ? 1 : -1) * (6 + Math.random() * 10) / 3.6;
+      }
+      continue;
+    }
+    t.car.position.z = z + t.rel * dt;
+    if (t.car.position.z > 30 || t.car.position.z < -32) { t.car.position.z = -40; t.wait = 3 + Math.random() * 6; }
+    const inZone = S.set.bsd && t.car.position.z > BSD_ZONE[0] && t.car.position.z < BSD_ZONE[1];
+    bsd[t.side] = inZone;
+  }
+}
+
+let baseRadius = 14, paintMats = [], upperMeshes = [], carObj = null;
+const target = new THREE.Vector3(0, 0.6, 0);
+let camAnim = null;
+// While driving the camera looks at the road ahead of the car, so the car sits low and small in
+// the panel above the cards, as on Tesla. Parked views look at the car itself.
+const DRIVE_TARGET = new THREE.Vector3(0, 0.4, 3.2);
+const presetPos = (p, center = target) => {
+  const r = baseRadius * p.r / 100, th = THREE.MathUtils.degToRad(p.theta), ph = THREE.MathUtils.degToRad(p.phi);
+  return new THREE.Vector3(r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph), r * Math.sin(ph) * Math.cos(th)).add(center);
+};
+function camTo(name) {
+  const center = name === 'drive' ? DRIVE_TARGET : target;
+  camAnim = { from: cam.position.clone(), to: presetPos(PRESETS[name], center), fromT: controls.target.clone(), toT: center.clone(), t: 0 };
+}
+renderer.domElement.addEventListener('dblclick', () => { if (S.gear === 'P') camTo('default'); });
+
+const draco = new DRACOLoader().setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+const carLoader = new GLTFLoader().setDRACOLoader(draco);
+// Development: launcher.html?model=x.glb#debug loads another model and exposes the scene.
+const DEV = location.hash === '#debug';
+carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
+function onCarLoaded(gltf) {
+  const car = gltf.scene; carObj = car;
+  let b = new THREE.Box3().setFromObject(car), size = b.getSize(new THREE.Vector3());
+  car.scale.setScalar(4.29 / Math.max(size.x, size.z));
+  b = new THREE.Box3().setFromObject(car);
+  const c = b.getCenter(new THREE.Vector3());
+  car.position.sub(new THREE.Vector3(c.x, b.min.y, c.z));
+  scene.add(car);
+  b = new THREE.Box3().setFromObject(car); size = b.getSize(new THREE.Vector3());
+  target.set(0, size.y * 0.35, 0);
+  baseRadius = Math.max(size.x, size.z) * 4;
+  // Close enough to read the plate, far enough to keep the drive-view preset reachable.
+  controls.minDistance = baseRadius * 0.25;
+  controls.maxDistance = baseRadius * 1.3;
+  car.traverse((o) => {
+    if (!o.isMesh) return;
+    // Match paint by material, not mesh name: the split-off parts also carry dark trim and
+    // gap materials under the same mesh names, and those must keep their own colour.
+    const mat = o.material.name;
+    if (mat === 'CarPaint_1') { o.material = o.material.clone(); paintMats.push(o.material); }
+    // Hood + roof: black on two-tone cars, body colour on single-tone ones. Its material
+    // gets its colour from a black texture, so single-tone swaps in the body paint material.
+    if (mat === 'PCrPaint_2' && !o.name.startsWith('antena')) { o.userData.blackMat = o.material; upperMeshes.push(o); }
+    if (/^(f_gls|b_gls|sunroof|Window_)/.test(o.name)) { o.material = o.material.clone(); o.material.color.set(0x050608); }
+  });
+  applyPaint();
+  // dolphin_parts.glb has the moving parts cut out in Blender (tools/split_parts.py);
+  // the original model only gets the cruder runtime tailgate split.
+  const gateNode = car.getObjectByName('Tailgate');
+  if (gateNode) gateTarget = gateNode; else splitTailgate(car);
+  for (const k of CORNERS) {
+    moving.doors[k] = car.getObjectByName('Door_' + k);
+    const w = moving.windows[k] = car.getObjectByName('Window_' + k);
+    if (w) w.userData.y0 = w.position.y;
+  }
+  moving.flap = car.getObjectByName('ChargeFlap');
+  car.traverse((o) => { if (o.isMesh && /^Trunk/.test(o.name)) moving.trunk.push(o); });
+  setupLamps(car);
+  setupSunshade(car);
+  if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW };
+  placePlates(car);
+  controls.target.copy(target);
+  cam.position.copy(presetPos(PRESETS.default));
+}
+// ---------- tailgate ----------
+// The model's tailgate is not a separate part, so at load time the triangles in the
+// tailgate region are moved into their own meshes under a pivot on the hinge line.
+// Region values are in metres in the normalised model (rear = -z). `?gate=debug` paints them red.
+const GATE = { depth: 0.5, minY: 0.62, halfWidth: 0.62, openAngle: 1.15 };
+const SKIP_GATE = /^(interior|sticker|UC|uc_tex|tyre|Rim|disk|calipar|Black_alloy|bodypaint_rim|rubber|mudflap|bumper)/;
+const gatePivot = new THREE.Group();
+let gateAngle = 0, gateTarget = gatePivot;
+
+// ---------- doors, side windows, charge flap (nodes from dolphin_parts.glb) ----------
+// Doors hinge on their front edge; left doors swing towards +x, right doors towards -x.
+const CORNERS = ['FL', 'FR', 'RL', 'RR'];
+const DOOR_OPEN = 1.05, WINDOW_DROP = 0.42, FLAP_OPEN = 1.6;
+const moving = { doors: {}, windows: {}, flap: null, trunk: [], anim: { doors: {}, windows: {}, flap: 0 } };
+function animateParts() {
+  const a = moving.anim, ease = 0.08;
+  for (const k of CORNERS) {
+    a.doors[k] = (a.doors[k] || 0) + ((S.doors[k] ? DOOR_OPEN : 0) - (a.doors[k] || 0)) * ease;
+    if (moving.doors[k]) moving.doors[k].rotation.y = (k[1] === 'L' ? -1 : 1) * a.doors[k];
+    a.windows[k] = (a.windows[k] || 0) + (S.windows[k] / 100 - (a.windows[k] || 0)) * ease;
+    const w = moving.windows[k];
+    if (w) w.position.y = w.userData.y0 - WINDOW_DROP * a.windows[k];
+  }
+  a.flap += ((S.charging ? FLAP_OPEN : 0) - a.flap) * ease;
+  if (moving.flap) moving.flap.rotation.y = a.flap;
+  // The sunshade rolls back from the front edge of the glass towards the rear.
+  if (SHADE.node) {
+    a.shade = (a.shade || 0) + (S.sunshade / 100 - (a.shade || 0)) * 0.05;
+    SHADE.plane.constant = SHADE.front + (SHADE.rear - SHADE.front) * a.shade;
+    SHADE.node.visible = a.shade < 0.995;
+  }
+}
+
+// ---------- sunshade ----------
+// The model's glass roof is one mesh drawn opaque black. It becomes tinted see-through glass,
+// and a black copy just under it plays the shade: closed it covers the whole glass (the roof
+// looks black as before), opening cuts it back from the front with a clipping plane that keeps
+// only the part behind the shade's moving edge (z ≤ edge; the car's front is +z).
+const SHADE = { node: null, glass: null, plane: new THREE.Plane(new THREE.Vector3(0, 0, -1), 0), front: 0, rear: 0 };
+function setupSunshade(car) {
+  let glass = null;
+  car.traverse((o) => { if (o.isMesh && /^sunroof/.test(o.name)) glass = o; });
+  if (!glass) return;
+  car.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(glass);
+  SHADE.front = b.max.z; SHADE.rear = b.min.z;
+  SHADE.plane.constant = SHADE.front;
+  Object.assign(glass.material, { transparent: true, opacity: 0.3, depthWrite: false });
+  const shade = new THREE.Mesh(glass.geometry.clone().applyMatrix4(glass.matrixWorld),
+    new THREE.MeshStandardMaterial({ color: 0x050608, roughness: 0.85, side: THREE.DoubleSide, clippingPlanes: [SHADE.plane] }));
+  shade.position.y = -0.008;
+  scene.add(shade);
+  SHADE.node = shade; SHADE.glass = glass;
+}
+
+// ---------- lamps ----------
+// Lamp meshes in the model by function, identified by lighting each one up in turn and checked
+// against a photo of the car at night: the daytime running light is one continuous white line
+// along the bottom of both headlights and under the grille.
+//   drl     - the headlight part of that line; also the front turn signal (goes amber and
+//             blinks, white light off meanwhile)
+//   drlBar  - the part of the line under the grille, always white
+//   low     - the projector lens
+//   high    - the slanted LED segments beside the projector and the small reflector above them
+//   lens    - the clear outer headlight glass, given a faint glow while the beams are on
+// Each mesh gets its own material so it can glow on its own.
+const LAMP_PARTS = {
+  drl: /^(tex\.001|tex001)/,
+  drlBar: /^inner_glass_tex/,
+  low: /^projector_lamp_tex/,
+  high: /^(radgestex|reflector_tex)/,
+  lens: /^(outer_glass_Light_glass|glass_Light_glass)/,
+  tail: /^(red_led_strip|Outer_glas)/,
+  rearSignal: /^side_ind_tex/,
+};
+const lamps = { drl: { left: [], right: [] }, drlBar: [], low: [], high: [], lens: [], tail: [], rearSignal: { left: [], right: [] } };
+let beams = null;
+// Emissive alone barely shows on these textured lamp materials, so every lamp mesh also gets an
+// additive overlay on the same geometry that shines in the lamp's colour while it is lit.
+function addOverlay(o) {
+  const ov = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false }));
+  ov.position.copy(o.position); ov.quaternion.copy(o.quaternion); ov.scale.copy(o.scale);
+  ov.renderOrder = 2;
+  o.parent.add(ov);
+  o.userData.overlay = ov;
+}
+// Some lamp meshes cover both sides of the car, so split each one into a left and a right half.
+function splitBySide(o, target) {
+  const g = o.geometry, pos = g.attributes.position, v = new THREE.Vector3();
+  const idx = g.index ? g.index.array : [...Array(pos.count).keys()];
+  const sides = { left: [], right: [] };
+  for (let i = 0; i < idx.length; i += 3) {
+    let x = 0;
+    for (let k = 0; k < 3; k++) x += v.fromBufferAttribute(pos, idx[i + k]).applyMatrix4(o.matrixWorld).x;
+    (x > 0 ? sides.left : sides.right).push(idx[i], idx[i + 1], idx[i + 2]);
+  }
+  for (const side of ['left', 'right']) {
+    if (!sides[side].length) continue;
+    const geo = g.clone(); geo.setIndex(sides[side]);
+    const m = new THREE.Mesh(geo, o.material.clone());
+    m.material.emissive = new THREE.Color(0x000000); m.material.emissiveIntensity = 0;
+    m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.scale.copy(o.scale);
+    o.parent.add(m);
+    addOverlay(m);
+    target[side].push(m);
+  }
+  o.visible = false;
+}
+function setupLamps(car) {
+  car.updateMatrixWorld(true);
+  const found = [];
+  car.traverse((o) => { if (o.isMesh) found.push(o); });
+  for (const o of found) {
+    if (LAMP_PARTS.drl.test(o.name)) { splitBySide(o, lamps.drl); continue; }
+    if (LAMP_PARTS.rearSignal.test(o.name)) { splitBySide(o, lamps.rearSignal); continue; }
+    for (const role of ['drlBar', 'low', 'high', 'lens', 'tail']) {
+      if (!LAMP_PARTS[role].test(o.name)) continue;
+      o.material = o.material.clone();
+      o.material.emissive = new THREE.Color(0x000000);
+      if (role !== 'lens') addOverlay(o);
+      lamps[role].push(o);
+    }
+  }
+  // Soft light pools on the road (cheaper than real spotlights): a short one for low beam and
+  // a longer, wider one that adds on for high beam.
+  const pool = (w, l, z) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshBasicMaterial({ map: glowTexture(),
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+    m.rotation.x = -Math.PI / 2; m.position.set(0, 0.02, z);
+    scene.add(m);
+    return m;
+  };
+  beams = { low: pool(2.6, 4.2, 4.2), high: pool(3.4, 9, 7.5) };
+  // Lit lenses alone barely show without a bloom pass, so lamps also get halo sprites.
+  // Positions in the normalised model (front = +z, x + = car's left), from tools/inspect_parts.py.
+  // The last argument is the direction the lamp faces; a halo only shows while that side of
+  // the car faces the camera, so it never glows through the body.
+  for (const sx of [1, -1]) {
+    const side = sx > 0 ? 'left' : 'right';
+    halos.low.push(addHalo(0xfff6e8, 0.45, sx * 0.60, 0.83, 1.86, [sx * 0.3, 0, 1]));
+    halos.high.push(addHalo(0xeef4ff, 0.6, sx * 0.47, 0.80, 1.95, [sx * 0.2, 0, 1]));
+    halos.tail.push(addHalo(0xff2020, 0.4, sx * 0.68, 1.0, -1.98, [sx * 0.3, 0, -1]));
+    halos.signal[side].push(addHalo(0xff7a00, 0.34, sx * 0.66, 0.79, 1.80, [sx, 0, 0.8]));
+    halos.signal[side].push(addHalo(0xff7a00, 0.32, sx * 0.70, 1.0, -1.92, [sx, 0, -0.8]));
+  }
+}
+const halos = { low: [], high: [], tail: [], signal: { left: [], right: [] } };
+let glowTex = null;
+function glowTexture() {
+  if (glowTex) return glowTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), grad = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.25, 'rgba(255,255,255,0.55)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+  return (glowTex = new THREE.CanvasTexture(c));
+}
+function addHalo(color, size, x, y, z, facing) {
+  // No depth test: the halo sits inside the lens, so the facing check below does the hiding.
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0,
+    depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
+  s.scale.setScalar(size); s.position.set(x, y, z);
+  s.userData = { level: 0, facing: new THREE.Vector3(...facing).normalize() };
+  scene.add(s);
+  return s;
+}
+// 0 when the lamp faces away from the camera, 1 when it faces it.
+function facingCamera(h) {
+  const toCam = cam.position.clone().sub(h.position).normalize();
+  return THREE.MathUtils.smoothstep(toCam.dot(h.userData.facing), 0.05, 0.35);
+}
+// Which lights are on. "auto" stands in for the light sensor and reads as night in the demo.
+function lightState() {
+  const low = S.lights === 'on' || S.lights === 'auto';
+  return { low, high: low && S.highBeam, park: low || S.lights === 'park' };
+}
+function updateLamps(now) {
+  const L = lightState();
+  const blink = Math.floor(now / 380) % 2 === 0;
+  const light = (o, hex, k) => {
+    o.material.emissive.setHex(hex); o.material.emissiveIntensity = k;
+    const ov = o.userData.overlay;
+    if (ov) { ov.material.color.setHex(hex); ov.material.opacity = Math.min(1, k / 2.6); }
+  };
+  const glow = (list, hex, k) => list.forEach((o) => light(o, hex, k));
+  const fade = (list, target) => list.forEach((h) => {
+    h.userData.level += (target - h.userData.level) * 0.25;
+    h.material.opacity = h.userData.level * facingCamera(h);
+  });
+  glow(lamps.drlBar, 0xf4f7ff, L.low ? 1.8 : 2.6);
+  glow(lamps.low, 0xfff6e8, L.low ? 3 : 0);
+  glow(lamps.high, 0xeef4ff, L.high ? 3.5 : 0);
+  glow(lamps.lens, 0xffffff, L.high ? 0.45 : L.low ? 0.25 : 0);
+  glow(lamps.tail, 0xff1a1a, L.park ? 2.0 : 0);
+  fade(halos.low, L.low ? 0.85 : 0);
+  fade(halos.high, L.high ? 1 : 0);
+  fade(halos.tail, L.park ? 0.75 : 0);
+  for (const side of ['left', 'right']) {
+    const signalling = S.signal === side || S.hazard, lit = signalling && blink;
+    // Daytime running light: white whenever the car is on, dimmed while the low beam is on,
+    // and handed over to the amber turn signal while that side is signalling.
+    lamps.drl[side].forEach((o) => light(o, signalling ? 0xff7a00 : 0xf4f7ff, signalling ? (lit ? 3.5 : 0) : (L.low ? 1.8 : 2.6)));
+    lamps.rearSignal[side].forEach((o) => light(o, 0xff7a00, lit ? 3 : 0));
+    // Signals switch hard, like the real lamps, instead of fading.
+    halos.signal[side].forEach((h) => { h.material.opacity = lit ? facingCamera(h) : 0; });
+  }
+  if (beams) {
+    const k = S.theme === 'dark' ? 1 : 0.45;
+    beams.low.material.opacity += ((L.low ? 0.55 * k : 0) - beams.low.material.opacity) * 0.1;
+    beams.high.material.opacity += ((L.high ? 0.5 * k : 0) - beams.high.material.opacity) * 0.1;
+  }
+  updateBeamIndicators(L);
+}
+// Status bar tell-tales, like the ones on the instrument cluster.
+function updateBeamIndicators(L) {
+  $('indLow').classList.toggle('on', L.low && !L.high);
+  $('indHigh').classList.toggle('on', L.high);
+}
+function splitTailgate(car) {
+  car.updateMatrixWorld(true);
+  const zLimit = new THREE.Box3().setFromObject(car).min.z + GATE.depth;
+  const debug = new URLSearchParams(location.search).get('gate') === 'debug';
+  const v = new THREE.Vector3(), parts = [];
+  let hinge = null;
+  car.traverse((o) => {
+    if (!o.isMesh || SKIP_GATE.test(o.name)) return;
+    const g = o.geometry, pos = g.attributes.position;
+    const idx = g.index ? g.index.array : [...Array(pos.count).keys()];
+    const keep = [], gate = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      let cx = 0, cy = 0, cz = 0;
+      for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, idx[i + k]).applyMatrix4(o.matrixWorld); cx += v.x; cy += v.y; cz += v.z; }
+      cx /= 3; cy /= 3; cz /= 3;
+      const inGate = cz < zLimit && cy > GATE.minY && Math.abs(cx) < GATE.halfWidth;
+      (inGate ? gate : keep).push(idx[i], idx[i + 1], idx[i + 2]);
+      if (inGate && (!hinge || cy > hinge.y)) hinge = { y: cy, z: cz };
+    }
+    if (gate.length) parts.push({ o, keep, gate });
+  });
+  if (!hinge) return;
+  gatePivot.position.set(0, hinge.y, hinge.z);
+  scene.add(gatePivot);
+  gatePivot.updateMatrixWorld(true);
+  const toPivot = gatePivot.matrixWorld.clone().invert();
+  for (const { o, keep, gate } of parts) {
+    const base = o.geometry.clone();
+    o.geometry = base.clone(); o.geometry.setIndex(keep);
+    const gg = base.clone(); gg.setIndex(gate);
+    const m = new THREE.Mesh(gg, debug ? new THREE.MeshBasicMaterial({ color: 0xff0000 }) : o.material);
+    m.name = o.name + '_gate';
+    m.matrixAutoUpdate = false;
+    m.matrix.copy(toPivot).multiply(o.matrixWorld);
+    gatePivot.add(m);
+    // Keep paint swaps (single/two-tone) working on the split-off roof/hood triangles too.
+    if (upperMeshes.includes(o)) { m.userData.blackMat = o.userData.blackMat; upperMeshes.push(m); }
+  }
+}
+
+// ---------- Turkish licence plates ----------
+// Real plate is 520 x 110 mm: white, blue "TR" band on the left, black characters.
+const plateCanvas = document.createElement('canvas');
+plateCanvas.width = 1040; plateCanvas.height = 220;
+const plateTex = new THREE.CanvasTexture(plateCanvas);
+plateTex.colorSpace = THREE.SRGBColorSpace;
+plateTex.anisotropy = 4;
+function drawPlate(text) {
+  const c = plateCanvas.getContext('2d'), W = 1040, H = 220;
+  c.clearRect(0, 0, W, H);
+  c.fillStyle = '#111'; c.beginPath(); c.roundRect(0, 0, W, H, 18); c.fill();
+  c.fillStyle = '#fafafa'; c.beginPath(); c.roundRect(6, 6, W - 12, H - 12, 14); c.fill();
+  c.fillStyle = '#0a3d9e'; c.beginPath(); c.roundRect(6, 6, 104, H - 12, [14, 0, 0, 14]); c.fill();
+  c.fillStyle = '#fff'; c.font = '700 54px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  c.fillText('TR', 58, H - 30);
+  c.fillStyle = '#111'; c.textBaseline = 'middle';
+  let size = 150;
+  c.font = `700 ${size}px "Arial Narrow", "Roboto Condensed", Arial, sans-serif`;
+  while (c.measureText(text).width > W - 170 && size > 60) { size -= 6; c.font = `700 ${size}px "Arial Narrow", "Roboto Condensed", Arial, sans-serif`; }
+  c.fillText(text, 110 + (W - 110) / 2, H / 2 + 6);
+  plateTex.needsUpdate = true;
+}
+const plateMat = new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.45, metalness: 0 });
+// Find the bumper surface by casting a ray at plate height, then sit the plate on it.
+function placePlates(car) {
+  car.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster(), geo = new THREE.PlaneGeometry(0.52, 0.11);
+  const spots = [{ y: PLATE_Y.front, from: 5, dir: -1 }, { y: PLATE_Y.rear, from: -5, dir: 1 }];
+  for (const s of spots) {
+    ray.set(new THREE.Vector3(0, s.y, s.from), new THREE.Vector3(0, 0, s.dir));
+    const hit = ray.intersectObject(car, true)[0];
+    if (!hit) continue;
+    const plate = new THREE.Mesh(geo, plateMat);
+    const n = new THREE.Vector3(0, 0, -s.dir);
+    if (hit.face) {
+      n.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+      n.x = 0; n.normalize();
+      if (n.z * -s.dir < 0.5) n.set(0, 0, -s.dir);
+    }
+    plate.position.copy(hit.point).addScaledVector(n, 0.012);
+    plate.lookAt(plate.position.clone().add(n));
+    scene.add(plate);
+  }
+}
+// Front: on the bumper just under the front camera (camera sits at ~0.63 m).
+// Rear: in the black bumper panel (0.45-0.66 m), below the tailgate cut line at 0.62 m.
+const PLATE_Y = { front: 0.55, rear: 0.55 };
+const loadPlate = () => { try { return localStorage.getItem('plate'); } catch { return null; } };
+S.plate = loadPlate() || '34 ABC 123';
+drawPlate(S.plate);
+
+// Factory paints. Turkey sells the Dolphin in single colours only; the two-tone schemes
+// (contrasting roof, pillars and hood) are from other markets' ranges (UK, Indonesia, Malaysia).
+// BYD publishes no colour codes, so the tones are matched by eye to the names and photos.
+const PAINTS = [
+  { id: 'kar-beyazi', name: 'Kar Beyazı', body: 0xe9eae8, group: 'tr' },
+  { id: 'krem-beyazi', name: 'Krem Beyazı', body: 0xe6dfcf, group: 'tr' },
+  { id: 'dag-grisi', name: 'Dağ Grisi', body: 0x8e9398, group: 'tr' },
+  { id: 'karbon-siyah', name: 'Karbon Siyah', body: 0x1b1c1e, group: 'tr' },
+  { id: 'ski-white', name: 'Ski White / Urban Grey', body: 0xe9eae8, roof: 0x55595e, group: 'world' },
+  { id: 'coral-pink', name: 'Coral Pink / Urban Grey', body: 0xd9a39b, roof: 0x55595e, group: 'world' },
+  { id: 'surf-blue', name: 'Surf Blue / Urban Grey', body: 0x5f8db1, roof: 0x55595e, group: 'world' },
+  { id: 'atlantis-grey', name: 'Atlantis Grey / Delan Black', body: 0x9aa1a7, roof: 0x141517, group: 'world' },
+];
+const paint = () => PAINTS.find((p) => p.id === S.paintId) || PAINTS[0];
+try { const saved = localStorage.getItem('paint'); if (PAINTS.some((p) => p.id === saved)) S.paintId = saved; } catch {}
+let roofMat = null;
+function applyPaint() {
+  const p = paint();
+  paintMats.forEach((m) => m.color.setHex(p.body));
+  // Hood, roof and pillars take the body colour, or their own on two-tone schemes. They use the
+  // body paint material (their own material gets its colour from a black texture).
+  if (paintMats[0] && !roofMat) roofMat = paintMats[0].clone();
+  if (roofMat) roofMat.color.setHex(p.roof ?? p.body);
+  upperMeshes.forEach((o) => { o.material = !paintMats[0] ? o.userData.blackMat : p.roof ? roofMat : paintMats[0]; });
+}
+
+// Hotspots in model space (metres, car centred, front = +z). Trunk from Kinex config.
+// Charge flap: right front fender, 0.94-1.11 m back from the front bumper (tools/dump_seams.py).
+// Sunshade: above the middle of the glass roof, shown whenever the roof is in view from above.
+const HOT = { hTrunk: new THREE.Vector3(0, 1.25, -2.45), hCharge: new THREE.Vector3(-0.95, 1.02, 1.12),
+  hShade: new THREE.Vector3(0, 1.75, -0.4) };
+function placeHotspots() {
+  const w = box.clientWidth, h = box.clientHeight;
+  for (const [id, p] of Object.entries(HOT)) {
+    const v = p.clone().project(cam), el = $(id);
+    const toCam = cam.position.clone().sub(p).normalize();
+    const facing = id === 'hTrunk' ? toCam.z < 0.1 : id === 'hShade' ? toCam.y > 0.25 && !!SHADE.node : toCam.x < -0.3;
+    el.style.left = ((v.x + 1) / 2 * w) + 'px';
+    el.style.top = ((1 - v.y) / 2 * h) + 'px';
+    el.style.opacity = (S.gear === 'P' && facing && carObj) ? 1 : 0;
+    el.style.pointerEvents = el.style.opacity === '1' ? 'auto' : 'none';
+  }
+}
+
+function resize3d() {
+  const w = box.clientWidth, h = box.clientHeight;
+  renderer.setSize(w, h, false); renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
+  cam.aspect = w / h;
+  applyViewShift();
+}
+// The car is framed in the space above the cards rather than the whole panel, so the cards
+// never cover it: the rendered image is shifted up by half the cards' height (none when the
+// cards are dragged away).
+let viewShift = 0;
+function applyViewShift() {
+  const w = box.clientWidth, h = box.clientHeight;
+  if (Math.abs(viewShift) > 0.5) cam.setViewOffset(w, h, 0, viewShift, w, h); else cam.clearViewOffset();
+  // Also scale the picture down so the whole car fits in the space left above the cards.
+  // Driving, only the shift: the road view should keep its width.
+  cam.zoom = h > 0 && S.gear === 'P' ? (h - viewShift * 2) / h : 1;
+  cam.updateProjectionMatrix();
+}
+function stepViewShift() {
+  let cardsH = stage.classList.contains('car-wide') ? 236 + 28 : 196 + 20; // #carCards height + bottom
+  if (stage.classList.contains('cc-off')) cardsH = 0;
+  const want = cardsH / 2;
+  if (Math.abs(want - viewShift) < 0.5) return;
+  viewShift += (want - viewShift) * 0.12;
+  applyViewShift();
+}
+resize3d();
+
+const lastBox = { w: 0, h: 0 };
+
+// ---------- driving: speed, power and regen, speed limits, energy and trip ----------
+// Demo stand-in for the speed, motor power and TSR data the HAL bridge will provide.
+const SIM = { target: 0, nextTarget: 0, nextLimit: 0, histAt: 0, hist: [], trip: { km: 0, kwh: 0, start: Date.now() } };
+const LIMITS = [30, 50, 50, 70, 82, 90, 110];
+const MAX_ACCEL = { eco: 2.5, normal: 4, sport: 6 }; // km/h per second
+function stepDrive(dt, now) {
+  if (S.gear !== 'D') { S.speed = 0; S.powerKw += (0 - S.powerKw) * 0.2; return; }
+  if (now > SIM.nextLimit) {
+    S.speedLimit = LIMITS[Math.floor(Math.random() * LIMITS.length)];
+    SIM.nextLimit = now + 14000 + Math.random() * 8000;
+  }
+  if (now > SIM.nextTarget) {
+    const options = [S.speedLimit - 20, S.speedLimit - 10, S.speedLimit, S.speedLimit, S.speedLimit + 8];
+    SIM.target = Math.max(15, options[Math.floor(Math.random() * options.length)]);
+    SIM.nextTarget = now + 5000 + Math.random() * 6000;
+  }
+  const maxA = MAX_ACCEL[S.set.mode] || 4;
+  const accel = THREE.MathUtils.clamp((SIM.target - S.speed) * 0.5, -6, maxA); // km/h/s
+  S.speed = Math.max(0, S.speed + accel * dt);
+  // Motor power from a simple longitudinal model of a 1658 kg car (Cd 0.29, A 2.3 m²).
+  const v = S.speed / 3.6, a = accel / 3.6;
+  let kw = (1658 * a * v + 0.5 * 1.225 * 0.29 * 2.3 * v ** 3 + 0.012 * 1658 * 9.81 * v) / 1000;
+  if (kw < 0) kw = Math.max(kw, S.set.regen === 'high' ? -60 : -35);
+  S.powerKw += (kw - S.powerKw) * 0.15;
+  SIM.trip.km += S.speed * dt / 3600;
+  SIM.trip.kwh += S.powerKw * dt / 3600;
+  if (now > SIM.histAt) {
+    SIM.hist.push(S.speed > 3 ? S.powerKw * 1000 / S.speed : null);
+    if (SIM.hist.length > 90) SIM.hist.shift();
+    SIM.histAt = now + 500;
+  }
+}
+function updateDriveHud() {
+  $('speed').textContent = Math.round(S.speed);
+  const kw = S.powerKw;
+  $('powerBar').querySelector('.power').style.width = Math.min(240, Math.max(0, kw) / 150 * 240) + 'px';
+  $('powerBar').querySelector('.regen').style.width = Math.min(100, Math.max(0, -kw) / 60 * 100) + 'px';
+  $('powerKw').textContent = kw < -0.5 ? `Rejen ${Math.round(-kw)} kW` : `${Math.round(Math.max(0, kw))} kW`;
+  const sign = $('limitSign');
+  sign.classList.toggle('hide', !S.set.tsr || S.gear !== 'D');
+  $('limitVal').textContent = S.speedLimit;
+  sign.classList.toggle('over', S.set.tsrWarn !== 'off' && S.speed > S.speedLimit + 3);
+}
+// Blind-spot warning: the car in the zone and the lane line on that side go red; signalling
+// towards an occupied side makes it flash and frames the side camera in red.
+function updateBlindSpotWarning(now) {
+  const flash = Math.floor(now / 250) % 2 === 0;
+  for (const side of ['left', 'right']) {
+    const danger = bsd[side] && S.gear === 'D';
+    const urgent = danger && S.signal === side;
+    const on = danger && (!urgent || flash);
+    laneLine[side].color.setHex(on ? 0xe5484d : 0x9aa0a8);
+    const t = traffic.find((x) => x.side === side);
+    t.car.userData.mat.color.setHex(danger ? 0xb83a3d : 0x6b7078);
+    t.car.userData.mat.emissive.setHex(on ? 0x5a0d0e : 0x000000);
+  }
+  $('bsCam').classList.toggle('warn', !!S.signal && bsd[S.signal] && S.gear === 'D');
+}
+
+// ---------- cards under the car ----------
+let ccIndex = 0, ccDrag = null;
+function ccGo(i) {
+  ccIndex = (i + 4) % 4;
+  $('ccTrack').style.transform = `translateX(${-ccIndex * 100}%)`;
+  [...$('ccDots').children].forEach((d, k) => d.classList.toggle('on', k === ccIndex));
+  updateCards();
+}
+function setCardsOpen(open) {
+  stage.classList.toggle('cc-off', !open);
+  try { localStorage.setItem('cardsOff', open ? '' : '1'); } catch (e) {}
+}
+try { if (localStorage.getItem('cardsOff')) stage.classList.add('cc-off'); } catch (e) {}
+// Sideways swipes change the card; a downward drag hides the cards, an upward one (or a tap on
+// the bar left behind) brings them back.
+$('carCards').addEventListener('pointerdown', (e) => { ccDrag = { x: e.clientX, y: e.clientY }; });
+$('carCards').addEventListener('pointerup', (e) => {
+  if (ccDrag === null) return;
+  const dx = (e.clientX - ccDrag.x) / stageScale, dy = (e.clientY - ccDrag.y) / stageScale; ccDrag = null;
+  const off = stage.classList.contains('cc-off');
+  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) setCardsOpen(dy < 0);
+  else if (off) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) setCardsOpen(true); }
+  else if (Math.abs(dx) > 50) ccGo(ccIndex + (dx < 0 ? 1 : -1));
+});
+$('mmTitle').onclick = () => openCard('music');
+$('mmPlay').onclick = () => { S.playing = !S.playing; $('mmPlay').innerHTML = `<i class="ti ti-player-${S.playing ? 'pause' : 'play'}"></i>`; };
+let mmPos = 84;
+function updateCards() {
+  if (S.playing) mmPos = (mmPos + 0.5) % 238;
+  $('mmProg').style.width = (mmPos / 238 * 100) + '%';
+  // Energy: instant power and consumption, plus the recent consumption trace.
+  const whkm = S.speed > 3 ? Math.round(S.powerKw * 1000 / S.speed) : null;
+  $('enNow').textContent = `${Math.round(S.powerKw)} kW · ${whkm === null ? '—' : whkm} Wh/km`;
+  const vals = SIM.hist.filter((v) => v !== null);
+  $('enAvg').textContent = vals.length ? `Son ${vals.length >> 1} sn ortalaması ${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} Wh/km` : 'Sürüşe başlayınca tüketim burada çizilir';
+  drawEnergy();
+  const t = S.tyres, low = Object.values(t).some((v) => v < 2.2);
+  $('tyreState').textContent = low ? 'Düşük basınç' : 'Normal';
+  $('tyreState').style.color = low ? 'var(--dn)' : '';
+  const tyre = (v, pos) => `<div style="${pos}" class="${v < 2.2 ? 'low' : ''}">${v.toFixed(1)}<span>bar</span></div>`;
+  $('ccTyres').innerHTML = `<img src="img/overhead.png" alt="">` +
+    tyre(t.FL, 'left:22%;top:28px') + tyre(t.FR, 'right:22%;top:28px') + tyre(t.RL, 'left:22%;bottom:22px') + tyre(t.RR, 'right:22%;bottom:22px');
+  const tr = SIM.trip, mins = Math.floor((Date.now() - tr.start) / 60000);
+  $('trDist').innerHTML = `${tr.km.toFixed(1).replace('.', ',')}<span>km</span>`;
+  $('trKwh').innerHTML = `${Math.max(0, tr.kwh).toFixed(2).replace('.', ',')}<span>kWh</span>`;
+  $('trAvg').innerHTML = `${tr.km > 0.05 ? Math.round(tr.kwh * 1000 / tr.km) : '—'}<span>Wh/km ortalama</span>`;
+  $('trTime').innerHTML = `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}<span>süre</span>`;
+}
+function drawEnergy() {
+  const c = $('enChart').getContext('2d'), W = 620, H = 130, max = 400, min = -200;
+  const y = (v) => H - (v - min) / (max - min) * H;
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = 'rgba(138,143,152,.35)'; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(0, y(0)); c.lineTo(W, y(0)); c.stroke();
+  c.fillStyle = 'rgba(138,143,152,.8)'; c.font = '16px Elms, sans-serif'; c.fillText('0', 4, y(0) - 4);
+  c.fillText('400 Wh/km', 4, 16);
+  const pts = SIM.hist, step = W / 90;
+  c.lineWidth = 3;
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i] === null || pts[i - 1] === null) continue;
+    c.strokeStyle = pts[i] < 0 ? '#30a46c' : (S.theme === 'light' ? '#16181b' : '#f2f3f5');
+    c.beginPath();
+    c.moveTo((i - 1) * step, y(THREE.MathUtils.clamp(pts[i - 1], min, max)));
+    c.lineTo(i * step, y(THREE.MathUtils.clamp(pts[i], min, max)));
+    c.stroke();
+  }
+}
+let lastFrame = performance.now(), cardsAt = 0;
+
+// ---------- column split (Tesla: drag the edge to give the car or the map the full screen) ----------
+// Resting widths for the car column: 0 = map full screen, 720 = normal, 1920 = car full screen.
+// With the side window open as well, the three columns share the screen in equal thirds.
+const CAR_W = 720, CAR_FULL = 1920, THIRD = 640;
+let carW = CAR_W, colDrag = null;
+const carSnaps = (side) => (side > 0 ? [0, THIRD, 1920 - side] : [0, CAR_W, CAR_FULL]);
+// Whenever car, map and side window are all showing, give each a third of the screen.
+function normalizeLayout() {
+  if (carW > 0 && sideW > 0 && 1920 - carW - sideW > 0) { setSideW(THIRD, true); setCarW(THIRD, true); }
+}
+function setCarW(w, animate) {
+  carW = w;
+  stage.classList.toggle('dragging', !animate);
+  stage.style.setProperty('--carW', w + 'px');
+  stage.classList.toggle('car-wide', w > 1000);
+  if (w >= CAR_FULL && current) closeCard();
+  // The side window can't be wider than what the car column leaves.
+  if (sideW > 1920 - w) setSideW(1920 - w, animate);
+  else placeHandles();
+}
+$('divider').onpointerdown = (e) => {
+  colDrag = { x: e.clientX, w: carW, side: sideW };
+  try { $('divider').setPointerCapture(e.pointerId); } catch {}
+  stage.classList.add('dragging');
+};
+addEventListener('pointermove', (e) => {
+  if (!colDrag) return;
+  const dx = (e.clientX - colDrag.x) / stageScale;
+  setCarW(Math.min(CAR_FULL, Math.max(0, colDrag.w + dx)), false);
+});
+function endColDrag(e) {
+  if (!colDrag) return;
+  const dx = (e.clientX - colDrag.x) / stageScale, from = colDrag.w, side = colDrag.side;
+  colDrag = null;
+  if (Math.abs(dx) < 6) { setCarW(from, true); return; }
+  // A decent flick moves one step in that direction; otherwise snap to the nearest width.
+  const snaps = carSnaps(side), i = snaps.indexOf(from);
+  let to = snaps.reduce((a, b) => (Math.abs(b - carW) < Math.abs(a - carW) ? b : a));
+  if (i >= 0 && Math.abs(dx) > 150) to = snaps[Math.max(0, Math.min(snaps.length - 1, i + Math.sign(dx)))];
+  setCarW(to, true);
+  // The side window gave way while dragging; give its width back if it still fits.
+  if (side > 0) setSideW(Math.min(side, 1920 - to), true);
+  normalizeLayout();
+}
+addEventListener('pointerup', endColDrag);
+addEventListener('pointercancel', endColDrag);
+// Double-tap: normal <-> car full screen; from map full screen it returns to normal.
+$('divider').ondblclick = () => setCarW(carW === CAR_W ? CAR_FULL : CAR_W, true);
+renderer.setAnimationLoop(() => {
+  if (camAnim) {
+    camAnim.t = Math.min(1, camAnim.t + 0.025);
+    const k = 1 - Math.pow(1 - camAnim.t, 3);
+    cam.position.lerpVectors(camAnim.from, camAnim.to, k);
+    controls.target.lerpVectors(camAnim.fromT, camAnim.toT, k);
+    if (camAnim.t >= 1) camAnim = null;
+  }
+  const now = performance.now(), dt = Math.min(0.05, (now - lastFrame) / 1000);
+  lastFrame = now;
+  stepDrive(dt, now);
+  if (S.gear === 'D') {
+    dashes.position.z = (dashes.position.z - S.speed / 3.6 * dt) % 3.2;
+    stepTraffic(dt);
+  }
+  updateDriveHud();
+  updateBlindSpotWarning(now);
+  if (now > cardsAt) { updateCards(); cardsAt = now + 500; }
+  gateAngle += ((S.trunk ? GATE.openAngle : 0) - gateAngle) * 0.06;
+  gateTarget.rotation.x = gateAngle;
+  // The trunk lining only exists while the tailgate is up, so it can never show through the body.
+  moving.trunk.forEach((o) => { o.visible = gateAngle > 0.02; });
+  animateParts();
+  updateLamps(performance.now());
+  // The car column and the map change width (divider and side window drags), so follow them every frame.
+  if ((box.clientWidth !== lastBox.w || box.clientHeight !== lastBox.h) && box.clientWidth > 10) {
+    lastBox.w = box.clientWidth; lastBox.h = box.clientHeight;
+    resize3d();
+  }
+  const mapW = $('mapWrap').clientWidth;
+  if (mapW !== lastBox.map) { lastBox.map = mapW; map && mapW > 10 && map.resize(); }
+  stepViewShift();
+  controls.update();
+  placeHotspots();
+  renderer.render(scene, cam);
+});
+
+// ---------- car interactions ----------
+function setLock(v) {
+  S.locked = v;
+  $('lockBtn').innerHTML = `<i class="ti ti-lock${v ? '' : '-open'}"></i>`;
+  $('lockBtn').classList.toggle('open', !v);
+  refreshCard();
+}
+function setTrunk(v) {
+  S.trunk = v;
+  $('hTrunk').innerHTML = v ? '<b style="color:var(--dn)">Kapat</b><span>Bagaj açık</span>' : '<b>Aç</b><span>Bagaj</span>';
+  if (v) camTo('rear');
+  refreshCard();
+}
+function setCharge(v) {
+  S.charging = v;
+  $('hCharge').style.color = v ? 'var(--ok)' : '';
+  $('hCharge').querySelector('span').textContent = v ? 'Şarj ediliyor' : 'Şarj portu';
+  if (v) camTo('right');
+  refreshCard();
+}
+// Sunshade opening in percent (0 closed, 100 fully back), like the window percentages.
+function setShade(p) {
+  S.sunshade = Math.round(THREE.MathUtils.clamp(p, 0, 100));
+  $('hShade').innerHTML = S.sunshade > 0 ? `<b>Kapat</b><span>Perde %${S.sunshade}</span>` : '<b>Aç</b><span>Tavan perdesi</span>';
+  refreshCard();
+}
+$('lockBtn').onclick = () => setLock(!S.locked);
+$('hTrunk').onclick = () => setTrunk(!S.trunk);
+$('hCharge').onclick = () => setCharge(!S.charging);
+$('hShade').onclick = () => setShade(S.sunshade > 0 ? 0 : 100);
+
+// Dragging the glass on the model (as in Kinex): a side window follows the finger up and down,
+// the sunshade follows it along the roof, and either stays wherever it is let go. The finger
+// is tracked on a plane through the grabbed point (vertical for windows, level for the roof),
+// so the glass edge moves with it at any camera angle.
+const pickRay = new THREE.Raycaster();
+let glassDrag = null;
+function rayAt(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  pickRay.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), cam);
+  return pickRay.ray;
+}
+function glassAt(e) {
+  if (!carObj || S.gear !== 'P') return null;
+  const targets = SHADE.node ? [carObj, SHADE.node] : [carObj];
+  // First solid hit; the additive lamp glows and halos are skipped.
+  const hit = pickRay.intersectObjects(targets, true).find((h) => h.object.visible && h.object.material.blending === THREE.NormalBlending);
+  if (!hit) return null;
+  if (hit.object === SHADE.node || hit.object === SHADE.glass) return { kind: 'shade', point: hit.point };
+  for (let o = hit.object; o; o = o.parent) {
+    const k = /^Window_(FL|FR|RL|RR)$/.exec(o.name)?.[1];
+    if (k) return { kind: 'window', k, point: hit.point };
+  }
+  return null;
+}
+box.addEventListener('pointerdown', (e) => {
+  if (e.target !== renderer.domElement) return;
+  rayAt(e);
+  const g = glassAt(e);
+  if (!g) return;
+  controls.enabled = false; // the finger moves the glass, not the camera
+  const p = g.point;
+  if (g.kind === 'window') {
+    const node = moving.windows[g.k];
+    g.plane = new THREE.Plane(new THREE.Vector3(1, 0, 0), -p.x);
+    g.drop = WINDOW_DROP * node.parent.getWorldScale(new THREE.Vector3()).y; // world metres for 100 %
+    g.from = S.windows[g.k];
+  } else {
+    g.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -p.y);
+    g.from = S.sunshade;
+  }
+  g.start = p.clone();
+  glassDrag = g;
+}, true);
+box.addEventListener('pointermove', (e) => {
+  if (!glassDrag) return;
+  const p = rayAt(e).intersectPlane(glassDrag.plane, new THREE.Vector3());
+  if (!p) return;
+  const g = glassDrag;
+  if (g.kind === 'window') {
+    S.windows[g.k] = Math.round(THREE.MathUtils.clamp(g.from + (g.start.y - p.y) / g.drop * 100, 0, 100));
+    moving.anim.windows[g.k] = S.windows[g.k] / 100; // follow the finger without easing
+  } else {
+    setShade(g.from + (g.start.z - p.z) / (SHADE.front - SHADE.rear) * 100);
+    moving.anim.shade = S.sunshade / 100;
+  }
+});
+window.addEventListener('pointerup', () => {
+  if (!glassDrag) return;
+  glassDrag = null;
+  controls.enabled = true;
+  refreshCard();
+});
+
+// Demo: tap the gear letters to toggle P / D. On the car this comes from the gearbox HAL.
+function setGear(g) {
+  S.gear = g;
+  [...$('gears').children].forEach((s) => s.classList.toggle('on', s.textContent === g));
+  const driving = g === 'D';
+  road.visible = driving; ground.visible = !driving;
+  $('speedBox').style.opacity = driving ? 1 : 0;
+  $('lockBtn').style.display = driving ? 'none' : '';
+  // While driving the view stays behind the car: no orbiting, only a limited zoom range
+  // so the road ahead stays in frame.
+  controls.enableRotate = !driving;
+  controls.minDistance = baseRadius * (driving ? 0.8 : 0.25);
+  controls.maxDistance = baseRadius * (driving ? 1.6 : 1.3);
+  SIM.nextTarget = 0;
+  if (!driving) S.speed = 0;
+  camTo(driving ? 'drive' : 'default');
+  if (driving) { closeCard(); map && map.easeTo({ zoom: 16, pitch: 55, duration: 1200 }); }
+  else map && map.easeTo({ zoom: 14, pitch: 0, duration: 1200 });
+}
+$('gears').onclick = () => { setGear(S.gear === 'P' ? 'D' : 'P'); updateBlindSpot(); };
+
+// ---------- turn signals + blind-spot camera ----------
+// On the car: signal state from the light HAL, video from the BYD AVM (360) camera.
+// Here the camera feed is a drawn placeholder.
+let bsHideTimer = null, bsSide = 'left', bsRaf = null;
+function setSignal(side) {
+  S.signal = S.signal === side ? null : side;
+  $('sigL').classList.toggle('on', S.signal === 'left');
+  $('sigR').classList.toggle('on', S.signal === 'right');
+  updateBlindSpot();
+}
+// Demo: tap the beam tell-tales to flick the high beam. On the car this comes from the light HAL.
+$('beamInd').onclick = (e) => { e.stopPropagation(); S.highBeam = !S.highBeam; refreshCard(); };
+$('sigL').onclick = (e) => { e.stopPropagation(); setSignal('left'); };
+$('sigR').onclick = (e) => { e.stopPropagation(); setSignal('right'); };
+function blindSpotWanted() {
+  if (!S.signal || S.gear !== 'D' || S.bsMode === 'off') return false;
+  return S.bsMode === 'always' || S.speed < 30;
+}
+function updateBlindSpot() {
+  const cam = $('bsCam');
+  if (blindSpotWanted()) {
+    clearTimeout(bsHideTimer); bsHideTimer = null;
+    bsSide = S.signal;
+    cam.classList.toggle('right', bsSide === 'right');
+    $('bsArrow').className = `ti ti-arrow-big-${bsSide}`;
+    $('bsTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
+    cam.classList.add('show');
+    if (!bsRaf) bsRaf = requestAnimationFrame(drawBlindSpot);
+  } else if (cam.classList.contains('show') && !bsHideTimer) {
+    // Tesla keeps the view up briefly after the stalk is released.
+    const delay = S.gear === 'D' ? 2000 : 0;
+    bsHideTimer = setTimeout(() => { cam.classList.remove('show'); bsHideTimer = null; }, delay);
+  }
+}
+const bsCtx = $('bsCanvas').getContext('2d');
+let bsT = 0;
+function drawBlindSpot() {
+  const c = bsCtx, W = 672, H = 400, flip = bsSide === 'right';
+  bsT += 0.004 + S.speed * 0.00025;
+  c.save();
+  if (flip) { c.translate(W, 0); c.scale(-1, 1); }
+  const sky = c.createLinearGradient(0, 0, 0, H * 0.42);
+  sky.addColorStop(0, '#6d7f93'); sky.addColorStop(1, '#a9b4bf');
+  c.fillStyle = sky; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#3d4249'; c.fillRect(0, H * 0.42, W, H);
+  // Vanishing point to the right: the side camera looks backwards along the car.
+  const vx = W * 0.82, vy = H * 0.42;
+  c.fillStyle = '#4b5058';
+  c.beginPath(); c.moveTo(vx, vy); c.lineTo(W * 0.05, H); c.lineTo(W * 1.2, H); c.closePath(); c.fill();
+  c.strokeStyle = '#e8e8e8'; c.lineWidth = 6;
+  for (let i = 0; i < 6; i++) {
+    const a = ((i / 6 + bsT) % 1), b = Math.min(1, a + 0.08);
+    const p = (k) => [vx + (W * 0.32 - vx) * k * k, vy + (H - vy) * k * k];
+    c.beginPath(); c.moveTo(...p(a)); c.lineTo(...p(b)); c.stroke();
+  }
+  // A car approaching in the next lane.
+  const k = (Math.sin(bsT * 3) + 1) / 2 * 0.6 + 0.15;
+  const cx = vx + (W * 0.12 - vx) * k, cy = vy + (H * 0.78 - vy) * k, s = 30 + 170 * k;
+  c.fillStyle = '#1c1f24'; c.fillRect(cx - s / 2, cy - s * 0.55, s, s * 0.55);
+  c.fillStyle = '#d9dde3'; c.fillRect(cx - s * 0.42, cy - s * 0.45, s * 0.84, s * 0.18);
+  // Own car body along the edge of the frame.
+  c.fillStyle = '#8f949b';
+  c.beginPath(); c.moveTo(W, H * 0.3); c.quadraticCurveTo(W * 0.9, H * 0.6, W * 0.78, H); c.lineTo(W, H); c.closePath(); c.fill();
+  c.restore();
+  // Guide lines are drawn unmirrored so they read the same on both sides.
+  c.strokeStyle = 'rgba(245,197,66,.8)'; c.lineWidth = 4;
+  const gx = flip ? W * 0.3 : W * 0.7;
+  c.beginPath(); c.moveTo(gx, H); c.lineTo(flip ? W * 0.45 : W * 0.55, H * 0.55); c.stroke();
+  bsRaf = $('bsCam').classList.contains('show') ? requestAnimationFrame(drawBlindSpot) : null;
+}
+
+// ---------- map ----------
+let map = null;
+const CENTER = [29.0275, 40.9905];
+const ROUTE = [CENTER, [29.0262, 40.9915], [29.0249, 40.9921], [29.0236, 40.993], [29.0215, 40.9935]];
+// OpenFreeMap's own dark style is too low-contrast for a car screen, so dark mode
+// inverts the clean "positron" style instead (see .dark-map in the CSS).
+try {
+  map = new maplibregl.Map({ container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: CENTER, zoom: 14.5, attributionControl: false });
+  map.on('load', () => {
+    // Satellite imagery (Esri World Imagery, no key; its terms require the credit shown on the
+    // map). Kept at the bottom of the stack so the street style's labels stay on top of it.
+    map.addSource('sat', { type: 'raster', tileSize: 256, maxzoom: 19,
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'] });
+    map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } }, map.getStyle().layers[0].id);
+    map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: ROUTE } } });
+    map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#4a78e8', 'line-width': 9 } });
+    setMapStyle(S.mapStyle);
+  });
+  const me = document.createElement('div');
+  me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
+  new maplibregl.Marker({ element: me }).setLngLat(CENTER).addTo(map);
+  const dest = document.createElement('div');
+  dest.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
+  new maplibregl.Marker({ element: dest }).setLngLat(ROUTE[ROUTE.length - 1]).addTo(map);
+} catch (e) { console.warn('map failed', e); }
+$('recenter').onclick = () => map && map.easeTo({ center: CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
+
+// Street map or satellite. Satellite hides the street style's fills and lines (keeping its
+// labels and the route) and turns off the dark-mode invert filter, which would ruin the photo.
+try { S.mapStyle = localStorage.getItem('mapStyle') === 'sat' ? 'sat' : 'street'; } catch { S.mapStyle = 'street'; }
+function setMapStyle(style) {
+  S.mapStyle = style;
+  try { localStorage.setItem('mapStyle', style); } catch {}
+  const sat = style === 'sat';
+  stage.classList.toggle('sat-map', sat);
+  $('mapStyleBtn').innerHTML = `<i class="ti ti-${sat ? 'map-2' : 'world'}"></i><span>${sat ? 'Harita' : 'Uydu'}</span>`;
+  if (!map || !map.getLayer('sat')) return;
+  for (const layer of map.getStyle().layers) {
+    if (layer.type === 'symbol' || layer.id === 'route') continue;
+    map.setLayoutProperty(layer.id, 'visibility', layer.id === 'sat' ? (sat ? 'visible' : 'none') : (sat ? 'none' : 'visible'));
+  }
+}
+$('mapStyleBtn').onclick = () => setMapStyle(S.mapStyle === 'sat' ? 'street' : 'sat');
+setMapStyle(S.mapStyle);
+
+// ---------- phone projection: map, CarPlay or Android Auto in the map area ----------
+// Chosen in Vehicle > Connectivity ("Harita alanında göster"), not on the main screen.
+function setProjection(mode) {
+  const p = $('proj');
+  p.classList.toggle('hidden', mode === 'map');
+  p.classList.toggle('carplay', mode === 'carplay');
+  p.classList.toggle('auto', mode === 'auto');
+  stage.classList.toggle('projecting', mode !== 'map');
+  const t = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  $('cpTime').textContent = t; $('aaTime').textContent = t;
+}
+setProjection(S.set.mapArea);
+
+// ---------- cards ----------
+let current = null;
+const card = $('card'), body = $('cardBody');
+
+const CARDS = {
+  climate: { tall: true, cam: null, render: () => `
+    <p class="title">Klima</p>
+    <div class="climate">
+      <div class="dash">
+        <img class="base" src="img/ac_dashboard_lhd.jpg" alt="">
+        <img class="flow" src="img/wind_mode_defrost_open.webp" style="top:14%;opacity:${S.ac && S.flow.defrost ? 1 : 0}" alt="">
+        <img class="flow" src="img/wind_mode_face_open.webp" style="top:34%;opacity:${S.ac && S.flow.face ? 1 : 0}" alt="">
+        <img class="flow" src="img/wind_mode_foot_open.webp" style="top:62%;opacity:${S.ac && S.flow.foot ? 1 : 0}" alt="">
+        <div class="dashTemp"><button data-do="tdn"><i class="ti ti-chevron-left"></i></button><span>${S.temp.toFixed(1)}°</span><button data-do="tup"><i class="ti ti-chevron-right"></i></button></div>
+        <div class="flowBtns">
+          <button class="btn ${S.flow.defrost ? 'on' : ''}" data-flow="defrost">Cam</button>
+          <button class="btn ${S.flow.face ? 'on' : ''}" data-flow="face">Yüz</button>
+          <button class="btn ${S.flow.foot ? 'on' : ''}" data-flow="foot">Ayak</button>
+        </div>
+      </div>
+      <div class="grid" style="align-content:start">
+        <button class="btn ${S.ac ? 'on' : ''}" data-do="ac"><i class="ti ti-snowflake"></i>${S.ac ? 'Klima açık' : 'Klima kapalı'}</button>
+        <button class="btn" data-do="auto"><i class="ti ti-wand"></i>Otomatik</button>
+        <button class="btn" data-do="recirc"><i class="ti ti-refresh"></i>İç hava</button>
+        <div class="fan"><i class="ti ti-propeller"></i><input type="range" min="1" max="7" value="${S.fan}" data-fan><b>${S.fan}</b></div>
+        <div class="seats">${[['driver', 'Sürücü'], ['pass', 'Yolcu']].map(([k, label]) => {
+          const st = S.seats[k], lv = (n, kind) => `<div class="lv">${[1, 2, 3].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
+          return `<div class="seat"><p>${label}</p><div class="row">
+            <button class="seatBtn heat ${st.heat ? 'act' : ''}" data-seat="${k}" data-kind="heat" aria-label="${label} koltuk ısıtma"><i class="ti ti-armchair"></i>${lv(st.heat)}</button>
+            <button class="seatBtn vent ${st.vent ? 'act' : ''}" data-seat="${k}" data-kind="vent" aria-label="${label} koltuk havalandırma"><i class="ti ti-wind"></i>${lv(st.vent)}</button>
+          </div></div>`; }).join('')}</div>
+      </div>
+    </div>` },
+
+  controls: { tall: true, cam: 'actions', tab: 'quick', render: function () {
+    const tab = this.tab;
+    const tabs = [['quick', 'ti-bolt', 'Hızlı kontroller'], ['lights', 'ti-bulb', 'Işıklar'], ['locks', 'ti-lock', 'Kilitler'],
+      ['doors', 'ti-door', 'Kapılar'], ['windows', 'ti-window', 'Camlar'], ['drive', 'ti-steering-wheel', 'Sürüş'],
+      ['adas', 'ti-shield-check', 'Sürüş destek'], ['charge', 'ti-charging-pile', 'Şarj'], ['mirrors', 'ti-armchair', 'Ayna ve koltuk'],
+      ['tyres', 'ti-circle-dot', 'Lastikler'], ['display', 'ti-device-desktop', 'Ekran'], ['sound', 'ti-volume', 'Ses'],
+      ['conn', 'ti-wifi', 'Bağlantı'], ['warnings', 'ti-alert-triangle', 'Uyarılar'], ['system', 'ti-settings', 'Sistem']];
+    let content = SETTINGS[tab] ? renderSettings(SETTINGS[tab]) : '';
+    if (tab === 'warnings') content = `<p style="font-size:18px;color:var(--mu);margin:0 0 6px">Gösterge panelindeki ışıklar (kullanım kılavuzu). Demo: arızaları buradan yakabilirsin; araçta sensörlerden gelecek.</p>${renderTelltaleList()}`;
+    if (tab === 'quick') content = `<div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      <button class="btn ${S.locked ? 'on' : ''}" data-do="lock"><i class="ti ti-lock${S.locked ? '' : '-open'}"></i>${S.locked ? 'Kilitli' : 'Kilit açık'}</button>
+      <button class="btn ${S.trunk ? 'on' : ''}" data-do="trunk"><i class="ti ti-car"></i>Bagaj</button>
+      <button class="btn ${S.charging ? 'on' : ''}" data-do="charge"><i class="ti ti-charging-pile"></i>Şarj portu</button>
+      <button class="btn"><i class="ti ti-arrows-minimize"></i>Aynaları katla</button>
+      <button class="btn"><i class="ti ti-sun-low"></i>Ön cam ısıtma</button>
+      <button class="btn"><i class="ti ti-steering-wheel"></i>Direksiyon</button></div>`;
+    if (tab === 'lights') content = `<div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      ${[['off', 'Kapalı'], ['park', 'Park'], ['on', 'Açık'], ['auto', 'Otomatik']].map(([k, l]) =>
+        `<button class="btn ${S.lights === k ? 'on' : ''}" data-light="${k}">${l}</button>`).join('')}</div>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:14px">
+        <button class="btn ${S.highBeam ? 'on' : ''}" data-do="high"><i class="ti ti-sun-high"></i>Uzun far</button>
+        <button class="btn ${S.hazard ? 'on' : ''}" data-do="hazard"><i class="ti ti-alert-triangle"></i>Dörtlü</button>
+        <button class="btn ${S.fog ? 'on' : ''}" data-do="fog"><i class="ti ti-haze"></i>Arka sis</button></div>
+      <p style="font-size:18px;color:var(--mu);margin-top:18px">Gündüz farı araç açıkken hep yanar. Demo: "Otomatik"te kısa far yanar (gece varsayıldı); araçta ışık sensöründen ve far kolundan okunacak.</p>`;
+    if (tab === 'doors') content = `<div class="grid" style="grid-template-columns:repeat(2,1fr)">
+      ${[['FL', 'Sol ön'], ['FR', 'Sağ ön'], ['RL', 'Sol arka'], ['RR', 'Sağ arka']].map(([k, l]) =>
+        `<button class="btn ${S.doors[k] ? 'on' : ''}" data-door="${k}"><i class="ti ti-door${S.doors[k] ? '-enter' : ''}"></i>${l} ${S.doors[k] ? 'açık' : 'kapalı'}</button>`).join('')}</div>
+      <p style="font-size:18px;color:var(--mu);margin-top:18px">Demo: kapı durumu araçta kapı sensörlerinden okunur; ekrandan kapı açılamaz.</p>`;
+    if (tab === 'locks') content = `<div class="grid" style="grid-template-columns:repeat(2,1fr)">
+      <button class="btn ${S.locked ? 'on' : ''}" data-do="lock"><i class="ti ti-lock"></i>${S.locked ? 'Kilitli' : 'Kilit açık'}</button>
+      <button class="btn on"><i class="ti ti-walk"></i>Uzaklaşınca kilitle</button>
+      <button class="btn"><i class="ti ti-baby-carriage"></i>Çocuk kilidi</button>
+      <button class="btn on"><i class="ti ti-gauge"></i>Hızda kilitle</button></div>`;
+    if (tab === 'windows') content = `<div class="grid" style="grid-template-columns:repeat(2,1fr)">
+      <button class="btn" data-win="all-0"><i class="ti ti-arrow-bar-to-up"></i>Tümünü kapat</button><button class="btn" data-win="all-15"><i class="ti ti-arrow-bar-to-down"></i>Havalandır</button>
+      ${[['FL', 'Sol ön'], ['FR', 'Sağ ön'], ['RL', 'Sol arka'], ['RR', 'Sağ arka']].map(([k, l]) =>
+        `<button class="btn ${S.windows[k] ? 'on' : ''}" data-win="${k}">${l} %${S.windows[k]}</button>`).join('')}
+      <button class="btn ${S.sunshade ? 'on' : ''}" style="grid-column:1/3" data-do="shade"><i class="ti ti-sun"></i>Cam tavan perdesi %${S.sunshade}</button></div>
+      <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
+    if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v < 2.2 ? 'low' : ''}">${v.toFixed(1)} bar<span>${v < 2.2 ? 'Düşük basınç' : '24°C'}</span></div>`;
+      content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
+    if (tab === 'display') content = `<div class="grid" style="grid-template-columns:repeat(2,1fr)">
+      <button class="btn ${S.theme === 'dark' ? 'on' : ''}" data-theme="dark"><i class="ti ti-moon"></i>Koyu</button>
+      <button class="btn ${S.theme === 'light' ? 'on' : ''}" data-theme="light"><i class="ti ti-sun"></i>Açık</button></div>
+      ${[['tr', 'Araç rengi · Türkiye'], ['world', 'Çift renk · diğer pazarlar']].map(([g, label]) => `
+        <p style="font-size:22px;color:var(--mu);margin:28px 0 14px">${label}</p>
+        <div class="paints">${PAINTS.filter((p) => p.group === g).map((p) => {
+          const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+          const swatch = p.roof ? `linear-gradient(135deg, ${hex(p.roof)} 0 50%, ${hex(p.body)} 50% 100%)` : hex(p.body);
+          return `<button class="paint ${p.id === S.paintId ? 'on' : ''}" data-paint="${p.id}"><span style="background:${swatch}"></span>${p.name}</button>`;
+        }).join('')}</div>`).join('')}
+      <p style="font-size:22px;color:var(--mu);margin:28px 0 14px">Plaka</p>
+      <div style="display:flex;gap:14px;align-items:center">
+        <input id="plateIn" value="${S.plate}" maxlength="12" autocomplete="off" spellcheck="false"
+          style="width:300px;height:64px;border-radius:14px;border:2px solid var(--cd2);background:var(--cd);color:var(--tx);font:500 28px Elms,sans-serif;padding:0 18px;text-transform:uppercase">
+        <button class="btn on" data-do="plate">Kaydet</button>
+        <img src="${plateCanvas.toDataURL()}" alt="Plaka önizleme" style="height:56px;border-radius:6px">
+      </div>
+      <p id="plateErr" style="font-size:18px;color:var(--dn);min-height:24px;margin:8px 0 0"></p>
+      <p style="font-size:22px;color:var(--mu);margin:16px 0 14px">Sinyalde kör nokta kamerası</p>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">${[['always', 'Her zaman'], ['slow', '30 km/s altında'], ['off', 'Kapalı']].map(([k, l]) =>
+        `<button class="btn ${S.bsMode === k ? 'on' : ''}" data-bs="${k}">${l}</button>`).join('')}</div>`;
+    return `<p class="title">Araç</p><div class="controls"><div class="tabs">${tabs.map(([k, ic, l]) =>
+      `<button class="${k === tab ? 'on' : ''}" data-tab="${k}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div><div class="tabBody">${content}</div></div>`;
+  } },
+
+  music: { tall: false, render: () => `
+    <div class="music"><div class="cover"><i class="ti ti-music"></i></div>
+      <div class="track"><b>Sahil Yolu</b><span>Örnek Sanatçı · Spotify</span>
+        <div class="prog"><div></div></div><span style="font-size:18px">1:24 / 3:58</span>
+        <div class="player"><button><i class="ti ti-player-skip-back"></i></button><button data-do="play"><i class="ti ti-player-${S.playing ? 'pause' : 'play'}"></i></button><button><i class="ti ti-player-skip-forward"></i></button><button style="margin-left:auto;font-size:36px;color:var(--mu)"><i class="ti ti-heart"></i></button></div>
+      </div></div>` },
+
+  phone: { tall: false, render: () => `<p class="title">Telefon</p>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">${['Annem', 'İş', 'Ev', 'Ahmet', 'Servis', 'Ayşe'].map((n) =>
+      `<button class="btn" style="justify-content:flex-start"><i class="ti ti-user-circle"></i>${n}</button>`).join('')}</div>
+    <p style="color:var(--mu);font-size:20px;margin-top:24px">Bluetooth: bağlı telefon yok</p>` },
+
+  camera: { tall: true, cam: 'rear', render: () => `<p class="title">Geri görüş kamerası</p>
+    <div style="height:700px;border-radius:18px;background:#111;display:flex;align-items:center;justify-content:center;color:#666;font-size:24px;position:relative;overflow:hidden">
+      <svg viewBox="0 0 400 300" style="position:absolute;inset:0;width:100%;height:100%"><path d="M90 300 L170 120 M310 300 L230 120" stroke="#f5c542" stroke-width="4" fill="none"/><path d="M120 240 H280 M145 180 H255" stroke="#e5484d" stroke-width="3"/></svg>
+      Kamera görüntüsü (araçta BYD kamera servisinden gelecek)</div>` },
+
+  apps: { tall: true, render: () => `<p class="title">Uygulamalar</p><div class="grid apps">${APPS.map(([n, i, c]) =>
+      `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('')}</div>` },
+};
+// Installed apps (on the car: read from the package manager).
+const APPS = [
+  ['Spotify', 'music', '#1db954'], ['Haritalar', 'map-2', '#4285f4'], ['Waze', 'navigation', '#33ccff'], ['YouTube', 'brand-youtube', '#e5484d'],
+  ['Telefon', 'phone', '#30a46c'], ['Mesajlar', 'message', '#639922'], ['Radyo', 'radio', '#d85a30'], ['Podcast', 'microphone', '#7f77dd'],
+  ['Takvim', 'calendar', '#378add'], ['Hava durumu', 'cloud', '#1d9e75'], ['Tarayıcı', 'world', '#185fa5'], ['Galeri', 'photo', '#d4537e'],
+  ['Dosyalar', 'folder', '#ba7517'], ['Şarj', 'charging-pile', '#0f6e56'], ['Ayarlar', 'settings', '#5f6670'], ['BYD', 'car', '#3a3f47'],
+];
+
+// ---------- third column: app window on the right ----------
+// On the car the chosen app would be launched into this window (Android multi-window); here
+// it shows a placeholder for the app.
+// Resting widths. With the car column open: closed, a third (car, map and window in equal
+// thirds, see normalizeLayout) or all of the map's space. With the car column closed: closed,
+// narrow, half the screen, or full screen.
+const SIDE_W = 600;
+let sideW = 0, sideDrag = null;
+const sideRoom = () => 1920 - carW;
+const sideSnaps = () => (carW > 0 ? [0, THIRD, sideRoom()] : [0, SIDE_W, 960, 1920]);
+function setSideW(w, animate) {
+  sideW = Math.max(0, Math.min(w, sideRoom()));
+  stage.classList.toggle('dragging', !animate);
+  stage.style.setProperty('--sideW', sideW + 'px');
+  placeHandles();
+}
+// The side window's handle sits on its left edge, but never on top of the car column's handle.
+function placeHandles() {
+  $('sideHandle').style.left = Math.max(carW + 18, 1920 - sideW - 36) + 'px';
+}
+placeHandles();
+$('sideApps').innerHTML = APPS.map(([n, i, c], k) =>
+  `<button class="app" data-side-app="${k}"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('');
+function openSideApp(k) {
+  const [n, i, c] = APPS[k];
+  $('sidePanel').classList.add('appOpen');
+  $('sideTitle').textContent = n;
+  $('sideBack').style.display = '';
+  $('sideApp').innerHTML = `<div class="big" style="background:${c}"><i class="ti ti-${i}"></i></div><b style="color:var(--tx);font-size:26px">${n}</b>Araçta uygulama bu pencerede açılacak`;
+}
+function closeSideApp() {
+  $('sidePanel').classList.remove('appOpen');
+  $('sideTitle').textContent = 'Uygulamalar';
+  $('sideBack').style.display = 'none';
+}
+$('sideApps').onclick = (e) => { const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp); };
+$('sideBack').onclick = closeSideApp;
+$('sideHandle').onpointerdown = (e) => {
+  sideDrag = { x: e.clientX, w: sideW };
+  try { $('sideHandle').setPointerCapture(e.pointerId); } catch {}
+  stage.classList.add('dragging');
+};
+addEventListener('pointermove', (e) => {
+  if (!sideDrag) return;
+  const dx = (e.clientX - sideDrag.x) / stageScale;
+  setSideW(sideDrag.w - dx, false);
+});
+function endSideDrag(e) {
+  if (!sideDrag) return;
+  const dx = (e.clientX - sideDrag.x) / stageScale, from = sideDrag.w;
+  sideDrag = null;
+  const snaps = sideSnaps();
+  // A tap opens to the narrow width or closes; a drag snaps to the nearest width, and a quick
+  // flick moves one step in its direction.
+  if (Math.abs(dx) < 6) {
+    setSideW(from ? 0 : snaps[1], true);
+  } else {
+    let to = snaps.reduce((a, b) => (Math.abs(b - sideW) < Math.abs(a - sideW) ? b : a));
+    const i = snaps.indexOf(from);
+    if (i >= 0 && Math.abs(dx) > 150 && to === from) to = snaps[Math.max(0, Math.min(snaps.length - 1, i + (dx < 0 ? 1 : -1)))];
+    setSideW(to, true);
+  }
+  normalizeLayout();
+}
+addEventListener('pointerup', endSideDrag);
+addEventListener('pointercancel', endSideDrag);
+
+function refreshCard() { if (current) body.innerHTML = CARDS[current].render.call(CARDS[current]); }
+function openCard(name) {
+  if (current === name) return closeCard();
+  current = name;
+  const c = CARDS[name];
+  card.classList.toggle('tall', !!c.tall);
+  refreshCard();
+  card.classList.add('open');
+  document.querySelectorAll('[data-card]').forEach((b) => b.classList.toggle('on', b.dataset.card === name));
+  if (c.cam && S.gear === 'P') camTo(c.cam);
+}
+function closeCard() {
+  current = null; card.classList.remove('open', 'full');
+  document.querySelectorAll('[data-card]').forEach((b) => b.classList.remove('on'));
+  if (S.gear === 'P') camTo('default');
+}
+document.querySelectorAll('[data-card]').forEach((b) => b.onclick = () => openCard(b.dataset.card));
+$('cardClose').onclick = closeCard;
+
+// Like Tesla: drag the grip up to go full screen, down to shrink back, further down to close.
+// Double-tapping the grip toggles full screen.
+const FULL_H = 968;
+let drag = null;
+const cardH = () => card.getBoundingClientRect().height / stageScale;
+$('cardGrip').onpointerdown = (e) => {
+  drag = { y: e.clientY, h: cardH(), wasFull: card.classList.contains('full') };
+  try { $('cardGrip').setPointerCapture(e.pointerId); } catch {}
+  card.classList.add('sizing');
+};
+addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const dy = (e.clientY - drag.y) / stageScale;
+  card.style.height = Math.min(FULL_H, Math.max(160, drag.h - dy)) + 'px';
+});
+addEventListener('pointerup', endCardDrag);
+addEventListener('pointercancel', endCardDrag);
+function endCardDrag(e) {
+  if (!drag) return;
+  const dy = (e.clientY - drag.y) / stageScale, normalH = card.classList.contains('tall') ? 880 : 600;
+  card.classList.remove('sizing');
+  card.style.height = '';
+  if (Math.abs(dy) < 6) { drag = null; return; }
+  const h = drag.h - dy;
+  if (h > (normalH + FULL_H) / 2 || (dy < -80 && !drag.wasFull)) card.classList.add('full');
+  else if (drag.wasFull && h > normalH * 0.6) card.classList.remove('full');
+  else if (h < normalH * 0.6) closeCard();
+  else card.classList.remove('full');
+  drag = null;
+}
+$('cardGrip').ondblclick = () => card.classList.toggle('full');
+
+body.addEventListener('click', (e) => {
+  const t = e.target.closest('button'); if (!t) return;
+  const c = CARDS[current];
+  if (t.dataset.tab) {
+    c.tab = t.dataset.tab;
+    if (S.gear === 'P') camTo({ tyres: 'overhead', windows: 'left', doors: 'left', mirrors: 'left', charge: 'right', locks: 'actions', quick: 'actions' }[c.tab] || 'default');
+  }
+  if (t.dataset.flow) S.flow[t.dataset.flow] = !S.flow[t.dataset.flow];
+  if (t.dataset.theme) setTheme(t.dataset.theme);
+  if (t.dataset.paint) {
+    S.paintId = t.dataset.paint;
+    try { localStorage.setItem('paint', S.paintId); } catch {}
+    applyPaint();
+  }
+  if (t.dataset.bs) { S.bsMode = t.dataset.bs; updateBlindSpot(); }
+  if (t.dataset.light) S.lights = t.dataset.light;
+  if (t.dataset.fault) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
+  if (t.dataset.set) {
+    const k = t.dataset.set;
+    S.set[k] = t.dataset.val === 'toggle' ? !S.set[k] : t.dataset.val;
+    saveSettings();
+    if (k === 'mapArea') setProjection(S.set.mapArea);
+  }
+  if (t.dataset.door) {
+    const k = t.dataset.door;
+    S.doors[k] = !S.doors[k];
+    if (S.gear === 'P') camTo(k[1] === 'L' ? 'left' : 'right');
+  }
+  if (t.dataset.win) {
+    // Each tap steps a window 0 → 50 → 100 → 0 %; on the car this is the window HAL percentage.
+    const w = t.dataset.win;
+    if (w.startsWith('all-')) CORNERS.forEach((k) => { S.windows[k] = +w.slice(4); });
+    else S.windows[w] = (S.windows[w] + 50) % 150;
+    if (S.gear === 'P') camTo(w.startsWith('all') || w[1] === 'L' ? 'left' : 'right');
+  }
+  if (t.dataset.seat) {
+    // Each tap steps 1 → 2 → 3 → off. Heating and ventilation exclude each other.
+    const st = S.seats[t.dataset.seat], kind = t.dataset.kind, other = kind === 'heat' ? 'vent' : 'heat';
+    st[kind] = (st[kind] + 1) % 4;
+    if (st[kind]) st[other] = 0;
+    st.auto = false;
+    renderSeatDock();
+  }
+  const act = t.dataset.do;
+  if (act === 'tup') setTemp(S.temp + 0.5);
+  if (act === 'tdn') setTemp(S.temp - 0.5);
+  if (act === 'ac') S.ac = !S.ac;
+  if (act === 'lock') return setLock(!S.locked);
+  if (act === 'trunk') return setTrunk(!S.trunk);
+  if (act === 'charge') return setCharge(!S.charging);
+  if (act === 'play') S.playing = !S.playing;
+  if (act === 'plate') return savePlate();
+  if (act === 'hazard') S.hazard = !S.hazard;
+  if (act === 'fog') S.fog = !S.fog;
+  if (act === 'shade') { if (S.gear === 'P') camTo('roof'); return setShade(S.sunshade > 0 ? 0 : 100); }
+  if (act === 'high') S.highBeam = !S.highBeam;
+  if (act === 'resetSettings') { S.set = { ...SETTING_DEFAULTS }; saveSettings(); }
+  refreshCard();
+});
+// Turkish plate: province 01-81, then 1 letter + 4 digits, 2 letters + 3-4 digits,
+// or 3 letters + 2-3 digits. Returns the normalised "34 ABC 123" form or null.
+function parsePlate(raw) {
+  const v = raw.toLocaleUpperCase('tr').replace(/\s+/g, '');
+  const m = v.match(/^(0[1-9]|[1-7]\d|8[01])([A-Z]{1,3})(\d{2,4})$/);
+  if (!m) return null;
+  const [, il, harf, sayi] = m;
+  const ok = (harf.length === 1 && sayi.length === 4) || (harf.length === 2 && sayi.length >= 3) || (harf.length === 3 && sayi.length <= 3);
+  return ok ? `${il} ${harf} ${sayi}` : null;
+}
+function savePlate() {
+  const input = $('plateIn'), p = parsePlate(input.value);
+  if (!p) {
+    $('plateErr').textContent = 'Geçerli bir plaka yaz. Örnek: 34 ABC 123, 06 AB 1234 veya 35 A 1234';
+    input.style.borderColor = 'var(--dn)';
+    return;
+  }
+  S.plate = p;
+  try { localStorage.setItem('plate', p); } catch {}
+  drawPlate(p);
+  refreshCard();
+  if (S.gear === 'P') camTo('default');
+}
+body.addEventListener('keydown', (e) => { if (e.target.id === 'plateIn' && e.key === 'Enter') savePlate(); });
+body.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.id === 'plateIn') { $('plateErr').textContent = ''; el.style.borderColor = ''; }
+  if (el.dataset.fan !== undefined) { S.fan = +el.value; el.nextElementSibling.textContent = S.fan; }
+  if (el.dataset.setr) {
+    S.set[el.dataset.setr] = +el.value;
+    el.nextElementSibling.textContent = el.value + el.dataset.unit;
+    saveSettings();
+  }
+});
+
+// ---------- dock ----------
+function setTemp(v) { S.temp = Math.min(30, Math.max(16, v)); $('tVal').textContent = S.temp.toFixed(1) + '°'; seatAuto(); if (current === 'climate') refreshCard(); }
+$('tUp').onclick = () => setTemp(S.temp + 0.5);
+$('tDn').onclick = () => setTemp(S.temp - 0.5);
+
+// Seat climate. Tap a seat: heat 3 → 2 → 1 → off (as on Tesla). Hold it: a panel with heating,
+// ventilation and Auto. Auto (Tesla's Auto Seat Climate) picks heat or ventilation from how far
+// the outside temperature is from the cabin set point, and follows it as either changes. On the
+// car the outside and seat values come from the climate HAL; outside temperature is a demo value
+// here (tap "Dış" in the top right to step it).
+const SEAT_NAME = { driver: 'Sürücü koltuğu', pass: 'Yolcu koltuğu' };
+function autoLevel() {
+  const d = S.outside - S.temp; // below zero: colder outside than wanted
+  if (d <= -14) return { heat: 3, vent: 0 };
+  if (d <= -8) return { heat: 2, vent: 0 };
+  if (d <= -4) return { heat: 1, vent: 0 };
+  if (d >= 10) return { heat: 0, vent: 3 };
+  if (d >= 6) return { heat: 0, vent: 2 };
+  if (d >= 3) return { heat: 0, vent: 1 };
+  return { heat: 0, vent: 0 };
+}
+function seatAuto() {
+  for (const st of Object.values(S.seats)) if (st.auto) Object.assign(st, autoLevel());
+  renderSeatDock();
+}
+function renderSeatDock() {
+  document.querySelectorAll('[data-seatdk]').forEach((el) => {
+    const st = S.seats[el.dataset.seatdk], kind = st.heat ? 'heat' : st.vent ? 'vent' : '', n = st.heat || st.vent;
+    el.className = `dk seatDk ${kind}`;
+    el.innerHTML = `${st.auto ? '<em>A</em>' : ''}<i class="ti ti-armchair"></i><div class="lv">${[1, 2, 3].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
+  });
+  if (seatPopFor) renderSeatPop();
+}
+let seatPopFor = null;
+function renderSeatPop() {
+  const k = seatPopFor, st = S.seats[k];
+  const row = (kind, label) => `<div class="row ${kind}"><span>${label}</span>${[['0', 'Kapalı'], ['1', '1'], ['2', '2'], ['3', '3']].map(([v, l]) =>
+    `<button data-kind="${kind}" data-lv="${v}" class="${!st.auto && v !== '0' && st[kind] === +v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const a = autoLevel(), now = a.heat ? `ısıtma ${a.heat}` : a.vent ? `havalandırma ${a.vent}` : 'kapalı';
+  $('seatPop').innerHTML = `<h5>${SEAT_NAME[k]}<i class="ti ti-x" data-close style="cursor:pointer;color:var(--mu)"></i></h5>
+    ${row('heat', 'Isıtma')}${row('vent', 'Soğutma')}
+    <button class="auto ${st.auto ? 'on' : ''}" data-auto><i class="ti ti-wand"></i>Oto</button>
+    <p>Oto, dış sıcaklık (${S.outside}°) ile kabin ayarına (${S.temp.toFixed(1)}°) bakarak koltuğu kendisi ısıtır ya da soğutur. Şu an: ${now}.</p>`;
+}
+function openSeatPop(k, btn) {
+  seatPopFor = k;
+  renderSeatPop();
+  const r = btn.getBoundingClientRect(), s = stage.getBoundingClientRect();
+  $('seatPop').style.left = THREE.MathUtils.clamp((r.left - s.left) / stageScale + 42 - 215, 16, 1920 - 430 - 16) + 'px';
+  $('seatPop').classList.add('show');
+}
+function closeSeatPop() { seatPopFor = null; $('seatPop').classList.remove('show'); }
+$('seatPop').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-lv],[data-auto],[data-close]'); if (!t) return;
+  const st = S.seats[seatPopFor];
+  if (t.dataset.close !== undefined) return closeSeatPop();
+  if (t.dataset.auto !== undefined) { st.auto = !st.auto; if (!st.auto) Object.assign(st, { heat: 0, vent: 0 }); }
+  else {
+    const kind = t.dataset.kind, other = kind === 'heat' ? 'vent' : 'heat';
+    st[kind] = +t.dataset.lv; if (st[kind]) st[other] = 0;
+    st.auto = false;
+  }
+  seatAuto();
+  if (current === 'climate') refreshCard();
+});
+let seatHold = null, seatHeld = false;
+document.querySelectorAll('[data-seatdk]').forEach((el) => {
+  el.addEventListener('pointerdown', () => { seatHeld = false; seatHold = setTimeout(() => { seatHeld = true; openSeatPop(el.dataset.seatdk, el); }, 450); });
+  el.addEventListener('pointerup', () => clearTimeout(seatHold));
+  el.addEventListener('pointerleave', () => clearTimeout(seatHold));
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+  el.addEventListener('click', () => {
+    if (seatHeld) { seatHeld = false; return; }
+    const st = S.seats[el.dataset.seatdk];
+    st.heat = st.heat ? st.heat - 1 : st.vent || st.auto ? 0 : 3;
+    st.vent = 0; st.auto = false;
+    seatAuto();
+    if (current === 'climate') refreshCard();
+  });
+});
+// Close the panel on any tap outside it.
+document.addEventListener('pointerdown', (e) => {
+  if (seatPopFor && !e.target.closest('#seatPop,[data-seatdk]')) closeSeatPop();
+});
+$('outTemp').style.cursor = 'pointer';
+$('outTemp').onclick = () => {
+  const steps = [-2, 6, 12, 18, 26, 31, 36];
+  S.outside = steps[(steps.indexOf(S.outside) + 1) % steps.length];
+  $('outTemp').textContent = `Dış ${S.outside}°`;
+  seatAuto();
+};
+
+// Front demister: air to the windscreen at full fan with A/C on to dry it; turning it off puts
+// the previous air flow and fan back. Rear heater: the heated rear glass, which switches itself
+// off after 15 minutes as in the car.
+let preDefrost = null, rearTimer = 0;
+function renderDefrost() {
+  $('defFront').classList.toggle('lit', S.defrost);
+  $('defRear').classList.toggle('lit', S.rearDefrost);
+}
+$('defFront').onclick = () => {
+  S.defrost = !S.defrost;
+  if (S.defrost) { preDefrost = { flow: { ...S.flow }, fan: S.fan, ac: S.ac }; S.flow = { face: false, foot: false, defrost: true }; S.fan = 7; S.ac = true; }
+  else if (preDefrost) { S.flow = preDefrost.flow; S.fan = preDefrost.fan; S.ac = preDefrost.ac; }
+  renderDefrost();
+  if (current === 'climate') refreshCard();
+};
+$('defRear').onclick = () => {
+  S.rearDefrost = !S.rearDefrost;
+  clearTimeout(rearTimer);
+  if (S.rearDefrost) rearTimer = setTimeout(() => { S.rearDefrost = false; renderDefrost(); }, 15 * 60e3);
+  renderDefrost();
+};
+renderSeatDock();
+const volIcon = () => $('vIcon').innerHTML = `<i class="ti ti-volume${S.vol === 0 ? '-3' : S.vol < 10 ? '-2' : ''}"></i>`;
+$('vUp').onclick = () => { S.vol = Math.min(30, S.vol + 1); volIcon(); };
+$('vDn').onclick = () => { S.vol = Math.max(0, S.vol - 1); volIcon(); };
+$('vIcon').onclick = () => { S.vol = S.vol ? 0 : 12; volIcon(); };
+
+function setTheme(t) {
+  S.theme = t;
+  stage.classList.toggle('light', t === 'light');
+  groundMat.color.set(t === 'light' ? 0xd9dce1 : 0x1b1d21);
+  roadMat.color.set(t === 'light' ? 0xb9bdc4 : 0x1e2024);
+}
+</script>
+</body>
+</html>
