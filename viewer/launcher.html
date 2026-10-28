@@ -157,6 +157,29 @@ button { font-family:inherit; color:inherit; }
 .ttList .ttInfo span { display:block; font-size:16px; color:var(--mu); margin-top:4px; }
 
 /* settings rows */
+/* Pet mode (Tesla's Dog mode): a full-screen notice for passers-by with the cabin temperature */
+#petMode, #cleanMode { position:absolute; inset:0; z-index:60; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+#petMode.show, #cleanMode.show { display:flex; }
+#petMode { background:radial-gradient(circle at 50% 40%, #1d3a5f, #0b111a 70%); color:#fff; }
+#petMode .paw { width:140px; height:140px; border-radius:50%; background:rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center; font-size:84px; }
+#petMode b { font-size:200px; font-weight:200; line-height:1; margin-top:30px; }
+#petMode p { font-size:40px; max-width:1100px; margin:20px 0; line-height:1.3; }
+#petMode .petInfo { font-size:26px; color:rgba(255,255,255,.7); }
+#petExit, #cleanExit { position:absolute; bottom:40px; background:rgba(255,255,255,.1); color:rgba(255,255,255,.75); border:0; border-radius:30px; padding:16px 28px; font:400 20px Inter,sans-serif; cursor:pointer; display:flex; align-items:center; gap:12px; touch-action:none; }
+/* Screen cleaning: black, touches ignored; hold the button 2 s (the ring fills) to leave */
+#cleanMode { background:#000; color:#777; }
+#cleanMode p { font-size:34px; color:#aaa; margin:0 0 14px; }
+#cleanMode span { font-size:20px; max-width:760px; line-height:1.4; }
+#cleanExit svg, #petExit svg { width:34px; height:34px; transform:rotate(-90deg); }
+#cleanExit circle { fill:none; stroke:#fff; stroke-width:5; stroke-dasharray:183; stroke-dashoffset:183; }
+#cleanExit.hold circle { transition:stroke-dashoffset 2s linear; stroke-dashoffset:0; }
+#petExit.hold { background:rgba(255,255,255,.25); }
+/* Phone connected: offer Yunus's own full-screen CarPlay / Android Auto */
+#projPrompt { position:absolute; top:76px; left:50%; z-index:30; width:760px; margin-left:-380px; display:flex; align-items:center; gap:18px; padding:16px 18px;
+  border-radius:20px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45); opacity:0; transform:translateY(-12px); pointer-events:none; transition:opacity .25s, transform .25s; }
+#projPrompt.show { opacity:1; transform:none; pointer-events:auto; }
+#projPrompt > i { font-size:40px; } #projPrompt div { flex:1; } #projPrompt b { display:block; font-size:23px; font-weight:500; } #projPrompt span { font-size:17px; color:var(--mu); }
+#projPrompt .btn { font-size:19px; padding:14px 18px; background:var(--cd2); } #projPrompt .btn.primary { background:#3e6ae1; color:#fff; }
 /* Default launcher (Settings > System) */
 .homeBox { background:var(--cd); border-radius:18px; padding:20px 22px; margin-bottom:18px; }
 .homeBox .head { display:flex; align-items:center; gap:16px; }
@@ -208,13 +231,21 @@ button { font-family:inherit; color:inherit; }
 #beamInd svg path:first-child { fill:var(--cd2); }
 #indLow.on { stroke:#2fd06a; } #indLow.on path:first-child { fill:#2fd06a; }
 #indHigh.on { stroke:#3d8bff; } #indHigh.on path:first-child { fill:#3d8bff; }
-#bsCam { position:absolute; top:225px; left:24px; width:672px; height:380px; border-radius:18px; overflow:hidden; z-index:4; background:#000;
-  box-shadow:0 10px 30px rgba(0,0,0,.5); opacity:0; transform:scale(.96); transition:opacity .25s, transform .25s; pointer-events:none; }
+/* Rear camera while driving (as on Cybertruck): a wide, thin strip above the car shaped and
+   mirrored like the interior rear-view mirror. Placed each frame above the car (placeRearCam). */
+#rearCam { position:absolute; left:0; top:0; width:360px; height:90px; z-index:3; border-radius:46px / 40px; overflow:hidden; background:#000;
+  box-shadow:0 0 0 3px rgba(255,255,255,.08), 0 8px 22px rgba(0,0,0,.5); opacity:0; transition:opacity .3s; pointer-events:none; }
+#rearCam.show { opacity:1; }
+#rearCam canvas { width:100%; height:100%; display:block; transform:scaleX(-1); }
+/* Blind-spot camera: a small window beside the car on the signalled side (placed each frame
+   from the car's position on screen, see placeBsCam) */
+#bsCam { position:absolute; top:400px; left:24px; width:300px; height:178px; border-radius:14px; overflow:hidden; z-index:4; background:#000;
+  box-shadow:0 8px 24px rgba(0,0,0,.5); opacity:0; transform:scale(.94); transition:opacity .25s, transform .25s; pointer-events:none; }
 #bsCam.show { opacity:1; transform:none; }
 #bsCam canvas { width:100%; height:100%; display:block; }
-.bsLbl { position:absolute; top:16px; left:16px; display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.55); color:#fff; padding:8px 14px; border-radius:10px; font-size:20px; }
-.bsLbl i { color:#2fd06a; font-size:26px; animation:blink .7s steps(1) infinite; }
-#bsCam.right .bsLbl { left:auto; right:16px; }
+.bsLbl { position:absolute; top:8px; left:8px; display:flex; align-items:center; gap:5px; background:rgba(0,0,0,.55); color:#fff; padding:4px 8px; border-radius:7px; font-size:14px; }
+.bsLbl i { color:#2fd06a; font-size:17px; animation:blink .7s steps(1) infinite; }
+#bsCam.right .bsLbl { left:auto; right:8px; }
 
 /* seats */
 .seats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -424,7 +455,7 @@ button { font-family:inherit; color:inherit; }
     </div>
     <div id="telltales"></div>
     <div id="speedBox" style="opacity:0">
-      <div class="spdRow"><span id="speed">0</span><span class="spdUnit">km/h</span></div>
+      <div class="spdRow"><span id="speed">0</span><span class="spdUnit" id="spdUnit">km/h</span></div>
       <div id="powerKw">0 kW</div>
     </div>
     <div id="powerBar"><div class="regen"></div><div class="power"></div><div class="zero"></div></div>
@@ -432,6 +463,7 @@ button { font-family:inherit; color:inherit; }
     <div id="fpsMeter"></div>
     <div id="limitSign" class="hide"><span id="limitVal">50</span></div>
     <div id="car3d"></div>
+    <div id="rearCam"><canvas id="rearCanvas" width="720" height="180"></canvas></div>
     <div id="bsCam"><canvas id="bsCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="bsArrow"></i><span id="bsTxt">Sol kamera</span></div></div>
     <button class="hot" id="hTrunk" data-act="trunk"><b>Aç</b><span>Bagaj</span></button>
     <button class="hot" id="hShade" data-act="shade"><b>Aç</b><span>Tavan perdesi</span></button>
@@ -522,6 +554,13 @@ button { font-family:inherit; color:inherit; }
   <div id="warnBanner" role="alert"></div>
 
   <div id="seatPop" role="dialog"></div>
+  <div id="petMode"><div class="paw"><i class="ti ti-paw"></i></div><b id="petTemp">22°</b><p id="petMsg"></p>
+    <span class="petInfo"><i class="ti ti-snowflake"></i> Klima açık · <i class="ti ti-battery-2"></i> <span id="petBatt">78%</span></span>
+    <button id="petExit">Çıkmak için basılı tutun</button></div>
+  <div id="cleanMode"><p>Ekran temizleme modu</p><span>Dokunmatik ekran kilitli. Monitörler için yumuşak bir bez kullanın; temizleyici, ıslak mendil ya da kuru statik bez kullanmayın.</span>
+    <button id="cleanExit"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="29"/></svg>Çıkmak için basılı tutun</button></div>
+  <div id="projPrompt"><i class="ti ti-device-mobile"></i><div><b id="projTitle"></b><span>Ekrana tam oturan Yunus projeksiyonu</span></div>
+    <button class="btn" id="projLater">Şimdi değil</button><button class="btn primary" id="projOpen">Tam ekran aç</button></div>
   <div id="srcPop" role="dialog"></div>
   <div id="volPop"><i class="ti ti-volume"></i><div class="track"><div class="fill"></div><div class="knob"></div></div></div>
   <footer id="dock">
@@ -605,6 +644,7 @@ const SETTINGS = {
     ['tog', 'mirrorFold', 'Kilitlenince aynaları katla'],
     ['tog', 'mirrorTilt', 'Geri viteste sağ aynayı indir'],
     ['tog', 'mirrorHeat', 'Ayna ısıtma'],
+    ['tog', 'rearMirror', 'Sürüşte geri görüş şeridi (dikiz aynası gibi)'],
     ['tog', 'seatEasy', 'Kolay iniş-biniş (koltuk geri)'],
   ],
   sound: [
@@ -618,10 +658,13 @@ const SETTINGS = {
     ['tog', 'bt', 'Bluetooth'],
     ['tog', 'wifi', 'Wi-Fi'],
     ['tog', 'hotspot', 'Mobil erişim noktası'],
-    ['tog', 'carplay', 'Kablosuz CarPlay / Android Auto'],
+    ['seg', 'projector', 'Kablosuz CarPlay / Android Auto', [['byd', 'Aracın kendi'], ['yunus', 'Yunus']]],
+    ['tog', 'projAlways', 'Telefonu her zaman dinle'],
+    ['tog', 'projAuto', 'Bağlanınca sormadan tam ekran aç'],
   ],
   system: [
-    ['seg', 'units', 'Birimler', [['km', 'km, °C'], ['mi', 'mil, °F']]],
+    ['seg', 'speedUnit', 'Hız birimi', [['kmh', 'km/h'], ['mph', 'mph']]],
+    ['seg', 'pressUnit', 'Lastik basıncı', [['bar', 'bar'], ['psi', 'PSI'], ['kpa', 'kPa']]],
     ['seg', 'lang', 'Dil', [['tr', 'Türkçe'], ['en', 'English']]],
     ['tog', 'autoTime', 'Otomatik saat'],
     ['info', 'Yazılım', 'Yunus 0.1 · DiLink 3.0'],
@@ -634,12 +677,19 @@ const SETTING_DEFAULTS = {
   soc: 90, acCurrent: 16, sched: false, v2l: false,
   mirrorFold: true, mirrorTilt: true, mirrorHeat: false, seatEasy: false,
   mediaVol: 12, spdVol: 'low', avas: true, touchSound: true,
-  mapArea: 'map', bt: true, wifi: true, hotspot: false, carplay: true,
-  units: 'km', lang: 'tr', autoTime: true, perf: false, fps: false, isHome: false,
+  mapArea: 'map', bt: true, wifi: true, hotspot: false,
+  projector: 'yunus', projAlways: true, projAuto: false,
+  speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
+  rearMirror: true,
+  petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: false, fps: false, isHome: false,
 };
 S.set = { ...SETTING_DEFAULTS };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('settings') || '{}')); } catch {}
 function saveSettings() { try { localStorage.setItem('settings', JSON.stringify(S.set)); } catch {} }
+// Units (Settings > System). Tyre pressures are kept in bar, speed in km/h; the speed-limit sign
+// stays in km/h because that is what the road signs say.
+const pressUnit = () => ({ bar: 'bar', psi: 'PSI', kpa: 'kPa' })[S.set.pressUnit] || 'bar';
+const pressNum = (bar) => (S.set.pressUnit === 'psi' ? Math.round(bar * 14.5038) : S.set.pressUnit === 'kpa' ? Math.round(bar * 100) : bar.toFixed(1));
 // Default launcher, as in Kinex: shows whether this launcher is the car's home screen and
 // switches it. On the car "Varsayılan yap" asks Android for the home role (the system's own
 // "Ana ekran uygulaması" choice) and, where DiLink blocks that, sets it through the local ADB
@@ -659,12 +709,36 @@ function homeBlock() {
     <p>"BYD ana ekranını aç" varsayılanı değiştirmeden DiLink ana ekranını bir kez açar; Ana ekran tuşu yine buraya döner.</p>
   </div>`;
 }
+// Maintenance (Settings > System), as in Kinex: background service and permission health,
+// update check, log upload, restart. Statuses are demo values; on the car they come from the
+// HAL bridge, the ADB connection and Android's permission checks.
+const SERVICES = [
+  ['Araç servis köprüsü (HAL)', 'ok', 'Bağlı · 127.0.0.1:19322'],
+  ['ADB bağlantısı', 'ok', 'Etkin'],
+  ['Konum izni', 'ok', 'Her zaman'],
+  ['Medya bildirimleri erişimi', 'warn', 'Verilmedi · müzik kartı için gerekli'],
+  ['Telefon ve rehber izni', 'warn', 'Verilmedi · aramalar için gerekli'],
+];
+function maintBlock() {
+  const c = CARDS.controls;
+  const msg = (m) => (m ? `<p style="font-size:17px;color:var(--ok);margin:8px 4px 0">${m}</p>` : '');
+  return `<p style="font-size:22px;color:var(--mu);margin:30px 0 8px">Bakım</p>
+    <div class="svcList">${SERVICES.map(([n, st, d]) => `<div class="setRow"><span><i class="ti ti-${st === 'ok' ? 'circle-check' : 'alert-circle'}" style="color:${st === 'ok' ? 'var(--ok)' : '#ffb020'};margin-right:10px"></i>${n}</span><span style="font-size:17px;color:var(--mu)">${d}</span></div>`).join('')}</div>
+    ${renderSettings([['tog', 'adbRepair', 'ADB bağlantısını kendiliğinden onar (deneysel)'], ['tog', 'verboseLog', 'Ayrıntılı günlük kaydı']])}
+    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+      <button class="btn" data-do="repair"><i class="ti ti-tool"></i>İzinleri onar</button>
+      <button class="btn" data-do="checkUpdate"><i class="ti ti-refresh"></i>Güncellemeleri denetle</button>
+      <button class="btn" data-do="uploadLogs"><i class="ti ti-upload"></i>Günlükleri gönder</button>
+      <button class="btn" data-do="restart"><i class="ti ti-power"></i>Yunus'u yeniden başlat</button></div>
+    ${msg(c.repairMsg)}${msg(c.updMsg)}${msg(c.logMsg)}`;
+}
 function renderSettings(rows) {
   return rows.map(([type, key, label, a, b, unit]) => {
     if (type === 'seg') return `<div class="setRow"><span>${label}</span><div class="seg">${a.map(([v, l]) =>
       `<button class="${S.set[key] === v ? 'on' : ''}" data-set="${key}" data-val="${v}">${l}</button>`).join('')}</div></div>`;
     if (type === 'tog') return `<div class="setRow"><span>${label}</span><button class="tg ${S.set[key] ? 'on' : ''}" data-set="${key}" data-val="toggle" aria-label="${label}"><i></i></button></div>`;
     if (type === 'range') return `<div class="setRow"><span>${label}</span><div class="rng"><input type="range" min="${a}" max="${b}" value="${S.set[key]}" data-setr="${key}" data-unit="${unit}"><b>${S.set[key]}${unit}</b></div></div>`;
+    if (type === 'text') return `<div class="setRow" style="flex-direction:column;align-items:stretch;gap:10px"><span>${label}</span><textarea data-sett="${key}" rows="2" style="font:400 19px Inter,sans-serif;padding:12px 14px;border-radius:12px;border:2px solid var(--cd2);background:var(--cd);color:var(--tx);resize:none">${S.set[key]}</textarea></div>`;
     if (type === 'info') return `<div class="setRow"><span>${key}</span><span style="color:var(--mu)">${label}</span></div>`;
     return `<div class="setRow"><button class="btn" data-do="${label}">${key}</button></div>`;
   }).join('');
@@ -1356,7 +1430,8 @@ function stepDrive(dt, now) {
   }
 }
 function updateDriveHud() {
-  $('speed').textContent = Math.round(S.speed);
+  $('speed').textContent = Math.round(S.set.speedUnit === 'mph' ? S.speed * 0.621371 : S.speed);
+  $('spdUnit').textContent = S.set.speedUnit === 'mph' ? 'mph' : 'km/h';
   const kw = S.powerKw;
   $('powerBar').querySelector('.power').style.height = Math.min(240, Math.max(0, kw) / 150 * 240) + 'px';
   $('powerBar').querySelector('.regen').style.height = Math.min(100, Math.max(0, -kw) / 60 * 100) + 'px';
@@ -1468,7 +1543,7 @@ function updateCards() {
   const t = S.tyres, low = Object.values(t).some((v) => v < 2.2);
   $('tyreState').textContent = low ? 'Düşük basınç' : 'Normal';
   $('tyreState').style.color = low ? 'var(--dn)' : '';
-  const tyre = (v, pos) => `<div style="${pos}" class="${v < 2.2 ? 'low' : ''}">${v.toFixed(1)}<span>bar</span></div>`;
+  const tyre = (v, pos) => `<div style="${pos}" class="${v < 2.2 ? 'low' : ''}">${pressNum(v)}<span>${pressUnit()}</span></div>`;
   $('ccTyres').innerHTML = `<img src="img/overhead.png" alt="">` +
     tyre(t.FL, 'left:22%;top:28px') + tyre(t.FR, 'right:22%;top:28px') + tyre(t.RL, 'left:22%;bottom:22px') + tyre(t.RR, 'right:22%;bottom:22px');
   const tr = SIM.trip, mins = Math.floor((Date.now() - tr.start) / 60000);
@@ -1563,6 +1638,7 @@ renderer.setAnimationLoop(() => {
   }
   updateDriveHud();
   updateBlindSpotWarning(now);
+  updateRearCam(now);
   if (now > cardsAt) { updateCards(); cardsAt = now + 500; }
   gateAngle += ((S.trunk ? GATE.openAngle : 0) - gateAngle) * 0.06;
   gateTarget.rotation.x = gateAngle;
@@ -1816,6 +1892,7 @@ $('beamInd').onclick = (e) => { e.stopPropagation(); S.highBeam = !S.highBeam; r
 $('sigL').onclick = (e) => { e.stopPropagation(); setSignal('left'); };
 $('sigR').onclick = (e) => { e.stopPropagation(); setSignal('right'); };
 function blindSpotWanted() {
+  if (bsPreview) return true;
   if (!S.signal || S.gear !== 'D' || S.bsMode === 'off') return false;
   return S.bsMode === 'always' || S.speed < 30;
 }
@@ -1823,7 +1900,8 @@ function updateBlindSpot() {
   const cam = $('bsCam');
   if (blindSpotWanted()) {
     clearTimeout(bsHideTimer); bsHideTimer = null;
-    bsSide = S.signal;
+    bsSide = bsPreview ? bsAdjSide : S.signal;
+    applyBsAdj();
     cam.classList.toggle('right', bsSide === 'right');
     $('bsArrow').className = `ti ti-arrow-big-${bsSide}`;
     $('bsTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
@@ -1834,6 +1912,104 @@ function updateBlindSpot() {
     const delay = S.gear === 'D' ? 2000 : 0;
     bsHideTimer = setTimeout(() => { cam.classList.remove('show'); bsHideTimer = null; }, delay);
   }
+}
+// Rear camera strip: shown while driving (setting on), centred above the car, about as wide as
+// the car looks plus a margin. The picture is the rear camera mirrored left-right, as a mirror
+// shows it. Demo picture: the road falling away behind with a car following.
+const rearCtx = $('rearCanvas').getContext('2d');
+let rearT = 0, rearAt = 0;
+function updateRearCam(now) {
+  const el = $('rearCam'), on = S.set.rearMirror && S.gear === 'D' && !!carObj;
+  el.classList.toggle('show', on);
+  if (!on) return;
+  bsBox.setFromObject(carObj);
+  const w = box.clientWidth, h = box.clientHeight;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity;
+  for (let i = 0; i < 8; i++) {
+    bsCorner.set(i & 1 ? bsBox.max.x : bsBox.min.x, i & 2 ? bsBox.max.y : bsBox.min.y, i & 4 ? bsBox.max.z : bsBox.min.z).project(cam);
+    const sx = (bsCorner.x + 1) / 2 * w, sy = (1 - bsCorner.y) / 2 * h;
+    x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy);
+  }
+  const cw = THREE.MathUtils.clamp((x1 - x0) * 2.2, 260, Math.min(420, w - 40)), ch = cw / 4;
+  el.style.width = cw + 'px'; el.style.height = ch + 'px';
+  el.style.left = ((x0 + x1) / 2 - cw / 2) + 'px';
+  el.style.top = Math.max(90, y0 - ch - 26) + 'px';
+  if (now - rearAt < 33) return; // ~30 fps is plenty
+  rearAt = now;
+  rearT += 0.03 + S.speed * 0.0006;
+  const c = rearCtx, W = 720, H = 180, vx = W / 2, vy = H * 0.38;
+  const sky = c.createLinearGradient(0, 0, 0, vy);
+  sky.addColorStop(0, '#5f7287'); sky.addColorStop(1, '#a7b2bd');
+  c.fillStyle = sky; c.fillRect(0, 0, W, vy);
+  c.fillStyle = '#3c4148'; c.fillRect(0, vy, W, H);
+  c.fillStyle = '#4a4f57';
+  c.beginPath(); c.moveTo(vx - 6, vy); c.lineTo(vx + 6, vy); c.lineTo(W * 1.1, H); c.lineTo(-W * 0.1, H); c.closePath(); c.fill();
+  // Lane lines receding towards the horizon (dashes move away from the camera).
+  c.strokeStyle = '#e6e6e6';
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 5; i++) {
+      const a = 1 - ((i / 5 + rearT) % 1), b = Math.max(0, a - 0.09);
+      const p = (k) => [vx + side * (W * 0.33) * k * k, vy + (H - vy) * k * k];
+      c.lineWidth = 1 + 5 * a;
+      c.beginPath(); c.moveTo(...p(a)); c.lineTo(...p(b)); c.stroke();
+    }
+  }
+  // A car following at a varying distance.
+  const k = 0.35 + 0.25 * Math.sin(rearT * 0.7), cx = vx + 40 * k, cy = vy + (H - vy) * k * k + 6, s = 30 + 150 * k * k;
+  c.fillStyle = '#20242a'; c.fillRect(cx - s / 2, cy - s * 0.5, s, s * 0.5);
+  c.fillStyle = '#dfe3e8'; c.fillRect(cx - s * 0.4, cy - s * 0.42, s * 0.8, s * 0.16);
+  c.fillStyle = '#ffffff'; c.fillRect(cx - s * 0.46, cy - s * 0.16, s * 0.12, s * 0.06); c.fillRect(cx + s * 0.34, cy - s * 0.16, s * 0.12, s * 0.06);
+}
+// Per-side camera framing (Settings > Display, under the blind-spot camera): the side cameras of the 360 system look
+// down at the road, so the picture is cropped and moved to the rear, upper part of the frame to
+// look like the door mirror. Zoom, pan, rotation and left-right flip, kept per side; "Ayna gibi"
+// sets a mirror-like framing in one tap. Applied to the camera picture as a CSS transform.
+const BS_MIRROR = { zoom: 1.6, x: 18, y: 16, rot: 0, flip: false };
+const BS_RAW = { zoom: 1, x: 0, y: 0, rot: 0, flip: false };
+if (!S.set.bsAdj) S.set.bsAdj = { left: { ...BS_MIRROR }, right: { ...BS_MIRROR } };
+let bsAdjSide = 'right', bsPreview = false;
+function applyBsAdj() {
+  const a = S.set.bsAdj[bsSide] || BS_RAW, sx = bsSide === 'left' ? -a.x : a.x;
+  $('bsCanvas').style.transform = `scale(${a.flip ? -a.zoom : a.zoom}, ${a.zoom}) translate(${a.flip ? -sx : sx}%, ${a.y}%) rotate(${a.rot}deg)`;
+}
+function bsAdjustBlock() {
+  const a = S.set.bsAdj[bsAdjSide];
+  const row = (k, label, min, max, step, unit) => `<div class="setRow"><span>${label}</span><div class="rng"><input type="range" min="${min}" max="${max}" step="${step}" value="${a[k]}" data-bsadj="${k}" data-unit="${unit}"><b>${a[k]}${unit}</b></div></div>`;
+  return `<p style="font-size:22px;color:var(--mu);margin:28px 0 14px">Kamera açısı</p>
+    <div class="seg" style="margin-bottom:10px">${[['left', 'Sol kamera'], ['right', 'Sağ kamera']].map(([k, l]) => `<button class="${bsAdjSide === k ? 'on' : ''}" data-bsside="${k}">${l}</button>`).join('')}</div>
+    ${row('zoom', 'Yakınlaştır', 1, 3, 0.1, '×')}${row('x', 'Arkaya kaydır', -40, 40, 1, '%')}${row('y', 'Yukarı kaydır', -40, 40, 1, '%')}${row('rot', 'Döndür', -45, 45, 1, '°')}
+    <div class="setRow"><span>Ayna gibi çevir (sağ-sol)</span><button class="tg ${a.flip ? 'on' : ''}" data-bsflip aria-label="Ayna gibi çevir"><i></i></button></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-top:12px">
+      <button class="btn" data-bspreset="mirror"><i class="ti ti-car-side"></i>Dikiz aynası gibi</button>
+      <button class="btn" data-bspreset="raw"><i class="ti ti-camera"></i>Ham görüntü</button>
+      <button class="btn ${bsPreview ? 'on' : ''}" data-bspreview><i class="ti ti-eye"></i>Önizle</button></div>
+    <p style="font-size:17px;color:var(--mu);margin-top:12px">Önizlemedeki görüntü temsilidir; ince ayarı araçta gerçek kamera görüntüsüyle yapın.</p>`;
+}
+// Put the camera window next to the car on the signalled side, level with it: left signal to
+// the left of the car, right signal to the right, sized to the room there (at most 300 px).
+const bsBox = new THREE.Box3(), bsCorner = new THREE.Vector3();
+function placeBsCam() {
+  const el = $('bsCam');
+  if (!carObj || !el.classList.contains('show')) return;
+  const w = box.clientWidth, h = box.clientHeight;
+  if (bsPreview && S.gear === 'P') { // previewing the framing while parked: larger, top left
+    const pw = Math.min(420, w - 48);
+    Object.assign(el.style, { width: pw + 'px', height: pw * 400 / 672 + 'px', left: '24px', top: '90px' });
+    return;
+  }
+  bsBox.setFromObject(carObj);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    bsCorner.set(i & 1 ? bsBox.max.x : bsBox.min.x, i & 2 ? bsBox.max.y : bsBox.min.y, i & 4 ? bsBox.max.z : bsBox.min.z).project(cam);
+    const sx = (bsCorner.x + 1) / 2 * w, sy = (1 - bsCorner.y) / 2 * h;
+    x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+  }
+  const gap = 18, edge = 20, right = bsSide === 'right';
+  const room = right ? w - edge - (x1 + gap) : x0 - gap - edge;
+  const cw = THREE.MathUtils.clamp(room, 160, 300), ch = cw * 400 / 672;
+  el.style.width = cw + 'px'; el.style.height = ch + 'px';
+  el.style.left = (right ? Math.min(x1 + gap, w - edge - cw) : Math.max(edge, x0 - gap - cw)) + 'px';
+  el.style.top = THREE.MathUtils.clamp((y0 + y1) / 2 - ch / 2, 90, h - ch - 20) + 'px';
 }
 const bsCtx = $('bsCanvas').getContext('2d');
 let bsT = 0;
@@ -1869,6 +2045,7 @@ function drawBlindSpot() {
   c.strokeStyle = 'rgba(245,197,66,.8)'; c.lineWidth = 4;
   const gx = flip ? W * 0.3 : W * 0.7;
   c.beginPath(); c.moveTo(gx, H); c.lineTo(flip ? W * 0.45 : W * 0.55, H * 0.55); c.stroke();
+  placeBsCam();
   bsRaf = $('bsCam').classList.contains('show') ? requestAnimationFrame(drawBlindSpot) : null;
 }
 
@@ -1974,7 +2151,9 @@ const CARDS = {
       ['tyres', 'ti-circle-dot', 'Lastikler'], ['display', 'ti-device-desktop', 'Ekran'], ['sound', 'ti-volume', 'Ses'],
       ['conn', 'ti-wifi', 'Bağlantı'], ['warnings', 'ti-alert-triangle', 'Uyarılar'], ['system', 'ti-settings', 'Sistem']];
     let content = SETTINGS[tab] ? renderSettings(SETTINGS[tab]) : '';
-    if (tab === 'system') content = homeBlock() + content;
+    if (tab === 'system') content = homeBlock() + content + maintBlock();
+    if (tab === 'conn') content += `<button class="btn" data-do="phoneDemo" style="width:100%;margin-top:16px"><i class="ti ti-device-mobile"></i>Demo: telefon bağlandı</button>
+      <p style="font-size:17px;color:var(--mu);margin-top:12px">"Yunus" seçiliyken CarPlay ve Android Auto ekrana bozulmadan oturur; aracın kendi kablosuz ve kablolu (USB) CarPlay/Android Auto'su kapanır. "Aracın kendi"ne dönünce geri gelir.</p>`;
     if (tab === 'warnings') content = `<p style="font-size:18px;color:var(--mu);margin:0 0 6px">Gösterge panelindeki ışıklar (kullanım kılavuzu). Demo: arızaları buradan yakabilirsin; araçta sensörlerden gelecek.</p>${renderTelltaleList()}`;
     if (tab === 'quick') content = `<div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <button class="btn ${S.locked ? 'on' : ''}" data-do="lock"><i class="ti ti-lock${S.locked ? '' : '-open'}"></i>${S.locked ? 'Kilitli' : 'Kilit açık'}</button>
@@ -1982,7 +2161,9 @@ const CARDS = {
       <button class="btn ${S.charging ? 'on' : ''}" data-do="charge"><i class="ti ti-charging-pile"></i>Şarj portu</button>
       <button class="btn"><i class="ti ti-arrows-minimize"></i>Aynaları katla</button>
       <button class="btn"><i class="ti ti-sun-low"></i>Ön cam ısıtma</button>
-      <button class="btn"><i class="ti ti-steering-wheel"></i>Direksiyon</button></div>`;
+      <button class="btn"><i class="ti ti-steering-wheel"></i>Direksiyon</button>
+      <button class="btn" data-do="pet"><i class="ti ti-paw"></i>Evcil hayvan modu</button>
+      <button class="btn" data-do="clean"><i class="ti ti-spray"></i>Ekran temizleme</button></div>`;
     if (tab === 'lights') content = `<div class="grid" style="grid-template-columns:repeat(4,1fr)">
       ${[['off', 'Kapalı'], ['park', 'Park'], ['on', 'Açık'], ['auto', 'Otomatik']].map(([k, l]) =>
         `<button class="btn ${S.lights === k ? 'on' : ''}" data-light="${k}">${l}</button>`).join('')}</div>
@@ -2006,9 +2187,9 @@ const CARDS = {
         `<button class="btn ${S.windows[k] ? 'on' : ''}" data-win="${k}">${l} %${S.windows[k]}</button>`).join('')}
       <button class="btn ${S.sunshade ? 'on' : ''}" style="grid-column:1/3" data-do="shade"><i class="ti ti-sun"></i>Cam tavan perdesi %${S.sunshade}</button></div>
       <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
-    if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v < 2.2 ? 'low' : ''}">${v.toFixed(1)} bar<span>${v < 2.2 ? 'Düşük basınç' : '24°C'}</span></div>`;
+    if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v < 2.2 ? 'low' : ''}">${pressNum(v)} ${pressUnit()}<span>${v < 2.2 ? 'Düşük basınç' : '24°C'}</span></div>`;
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
-    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi']])}
+    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
       <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
       <div class="grid" style="grid-template-columns:repeat(2,1fr)">
       <button class="btn ${S.theme === 'dark' ? 'on' : ''}" data-theme="dark"><i class="ti ti-moon"></i>Koyu</button>
@@ -2030,7 +2211,8 @@ const CARDS = {
       <p id="plateErr" style="font-size:18px;color:var(--dn);min-height:24px;margin:8px 0 0"></p>
       <p style="font-size:22px;color:var(--mu);margin:16px 0 14px">Sinyalde kör nokta kamerası</p>
       <div class="grid" style="grid-template-columns:repeat(3,1fr)">${[['always', 'Her zaman'], ['slow', '30 km/s altında'], ['off', 'Kapalı']].map(([k, l]) =>
-        `<button class="btn ${S.bsMode === k ? 'on' : ''}" data-bs="${k}">${l}</button>`).join('')}</div>`;
+        `<button class="btn ${S.bsMode === k ? 'on' : ''}" data-bs="${k}">${l}</button>`).join('')}</div>
+      ${bsAdjustBlock()}`;
     return `<p class="title">Araç</p><div class="controls"><div class="tabs">${tabs.map(([k, ic, l]) =>
       `<button class="${k === tab ? 'on' : ''}" data-tab="${k}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div><div class="tabBody">${content}</div></div>`;
   } },
@@ -2196,6 +2378,14 @@ body.addEventListener('click', (e) => {
     applyPaint();
   }
   if (t.dataset.bs) { S.bsMode = t.dataset.bs; updateBlindSpot(); }
+  if (t.dataset.bsside) { bsAdjSide = t.dataset.bsside; if (bsPreview) updateBlindSpot(); }
+  if (t.dataset.bsflip !== undefined) { S.set.bsAdj[bsAdjSide].flip = !S.set.bsAdj[bsAdjSide].flip; saveSettings(); applyBsAdj(); }
+  if (t.dataset.bspreset) { S.set.bsAdj[bsAdjSide] = { ...(t.dataset.bspreset === 'mirror' ? BS_MIRROR : BS_RAW) }; saveSettings(); applyBsAdj(); }
+  if (t.dataset.bspreview !== undefined) {
+    bsPreview = !bsPreview;
+    if (bsPreview) { updateBlindSpot(); if (S.gear === 'P') camTo(bsAdjSide === 'left' ? 'left' : 'right'); }
+    else { $('bsCam').classList.remove('show'); updateBlindSpot(); }
+  }
   if (t.dataset.light) S.lights = t.dataset.light;
   if (t.dataset.fault) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
   if (t.dataset.set) {
@@ -2235,6 +2425,17 @@ body.addEventListener('click', (e) => {
   if (act === 'play') S.playing = !S.playing;
   if (act === 'plate') return savePlate();
   if (act === 'hazard') S.hazard = !S.hazard;
+  if (act === 'pet') return startPet();
+  if (act === 'clean') return startClean();
+  if (act === 'phoneDemo') return phoneConnected();
+  if (act === 'checkUpdate') { c.updMsg = 'Kontrol ediliyor…'; refreshCard(); setTimeout(() => { c.updMsg = 'Yunus 0.1 güncel.'; refreshCard(); }, 1200); return; }
+  if (act === 'uploadLogs') {
+    const alias = prompt('Gönderiminizi tanımak için bir takma ad yazın:');
+    if (alias) { c.logMsg = `Demo: "${alias}" adıyla günlükler gönderildi.`; refreshCard(); }
+    return;
+  }
+  if (act === 'repair') { c.repairMsg = 'İzinler ve ADB bağlantısı yeniden kuruldu (demo).'; refreshCard(); return; }
+  if (act === 'restart') { if (confirm('Yunus yeniden başlatılsın mı?')) location.reload(); return; }
   if (act === 'homeSet' || act === 'homeByd') { S.set.isHome = act === 'homeSet'; saveSettings(); }
   if (act === 'openByd') alert('Demo: araçta burada DiLink ana ekranı açılır.');
   if (act === 'faultsAll') {
@@ -2276,6 +2477,12 @@ body.addEventListener('input', (e) => {
   const el = e.target;
   if (el.id === 'plateIn') { $('plateErr').textContent = ''; el.style.borderColor = ''; }
   if (el.dataset.fan !== undefined) { S.fan = +el.value; el.nextElementSibling.textContent = S.fan; }
+  if (el.dataset.sett) { S.set[el.dataset.sett] = el.value; saveSettings(); }
+  if (el.dataset.bsadj) {
+    S.set.bsAdj[bsAdjSide][el.dataset.bsadj] = +el.value;
+    el.nextElementSibling.textContent = el.value + el.dataset.unit;
+    saveSettings(); applyBsAdj();
+  }
   if (el.dataset.setr) {
     S.set[el.dataset.setr] = +el.value;
     el.nextElementSibling.textContent = el.value + el.dataset.unit;
@@ -2456,6 +2663,67 @@ addEventListener('pointermove', (e) => { if (volDrag) volAt(e); });
 addEventListener('pointerup', () => { if (volDrag) { volDrag = false; setVol(S.vol); } });
 volIcon();
 
+// Hold-to-exit for the full-screen modes: keep pressing 2 s.
+function holdToExit(btn, done) {
+  let t = 0;
+  const start = (e) => { e.stopPropagation(); btn.classList.add('hold'); t = setTimeout(() => { btn.classList.remove('hold'); done(); }, 2000); };
+  const stop = () => { clearTimeout(t); btn.classList.remove('hold'); };
+  btn.addEventListener('pointerdown', start);
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, stop));
+}
+
+// Pet mode (as Tesla's Dog mode): only in Park; keeps the climate on at the set temperature and
+// shows a full-screen notice with the cabin temperature for people looking in.
+function startPet() {
+  if (S.gear !== 'P') return alert('Evcil hayvan modu yalnızca P konumunda açılır.');
+  S.ac = true;
+  $('petTemp').textContent = S.temp.toFixed(0) + '°';
+  $('petMsg').textContent = S.set.petMsg;
+  $('petBatt').textContent = '78%';
+  if (current) closeCard();
+  $('petMode').classList.add('show');
+}
+holdToExit($('petExit'), () => $('petMode').classList.remove('show'));
+
+// Screen cleaning: a black screen that ignores touches until the exit button is held.
+function startClean() {
+  if (current) closeCard();
+  $('cleanMode').classList.add('show');
+}
+holdToExit($('cleanExit'), () => $('cleanMode').classList.remove('show'));
+
+// Phone connected (demo trigger in Connectivity). With Yunus's own projection and "always
+// listen" on, it offers full-screen CarPlay (iPhone) or Android Auto, or opens it straight away
+// when "open without asking" is on. On the car this comes from the wireless projection receiver.
+let phoneKind = 'auto'; // the demo alternates, starting with an iPhone
+function phoneConnected() {
+  if (S.set.projector !== 'yunus' || !S.set.projAlways) return alert('Demo: aracın kendi CarPlay/Android Auto\'su devrede.');
+  phoneKind = phoneKind === 'carplay' ? 'auto' : 'carplay';
+  if (S.set.projAuto) return openProjection();
+  $('projTitle').textContent = phoneKind === 'carplay' ? 'iPhone bağlandı · CarPlay' : 'Telefon bağlandı · Android Auto';
+  $('projPrompt').classList.add('show');
+}
+function openProjection() {
+  $('projPrompt').classList.remove('show');
+  if (current) closeCard();
+  S.set.mapArea = phoneKind; saveSettings();
+  setProjection(phoneKind);
+  setCarW(0, true); // full screen
+}
+$('projOpen').onclick = openProjection;
+$('projLater').onclick = () => $('projPrompt').classList.remove('show');
+
+// Touch click (Settings > Sound > "Dokunma sesi"): a short soft tick on buttons and tiles.
+let clickCtx = null;
+document.addEventListener('pointerdown', (e) => {
+  if (!S.set.touchSound || !e.target.closest('button,.btn,.dk,[data-card]')) return;
+  try {
+    clickCtx = clickCtx || new AudioContext();
+    const o = clickCtx.createOscillator(), g = clickCtx.createGain(), t = clickCtx.currentTime;
+    o.frequency.value = 1800; g.gain.setValueAtTime(0.05 * (S.vol / 15 + 0.2), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    o.connect(g).connect(clickCtx.destination); o.start(t); o.stop(t + 0.035);
+  } catch {}
+}, true);
 function setTheme(t) {
   S.theme = t;
   stage.classList.toggle('light', t === 'light');
