@@ -473,7 +473,7 @@ button { font-family:inherit; color:inherit; }
         <svg id="indLow" viewBox="0 0 40 28" aria-label="Kısa far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6 3 10M14 12 3 16M14 18 3 22"/></svg>
         <svg id="indHigh" viewBox="0 0 40 28" aria-label="Uzun far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6H2M14 11H2M14 17H2M14 22H2"/></svg>
       </div>
-      <div class="batt"><span style="color:var(--mu)">312 km</span><div class="cell"><div style="width:78%"></div></div><span>78%</span></div>
+      <div class="batt"><span style="color:var(--mu)" id="rangeTxt">312 km</span><div class="cell"><div style="width:78%" id="socBar"></div></div><span id="socTxt">78%</span></div>
     </div>
     <div id="telltales"></div>
     <div id="speedBox" style="opacity:0">
@@ -1425,6 +1425,12 @@ const SIM = { target: 0, nextTarget: 0, nextLimit: 0, histAt: 0, hist: [], trip:
 const LIMITS = [30, 50, 50, 70, 82, 90, 110];
 const MAX_ACCEL = { eco: 2.5, normal: 4, sport: 6 }; // km/h per second
 function stepDrive(dt, now) {
+  if (S.live) { // the car reports speed and power; only the trip and the consumption trace are kept here
+    SIM.trip.km += S.speed * dt / 3600;
+    SIM.trip.kwh += S.powerKw * dt / 3600;
+    if (now > SIM.histAt) { SIM.hist.push(S.speed > 3 ? S.powerKw * 1000 / S.speed : null); if (SIM.hist.length > 90) SIM.hist.shift(); SIM.histAt = now + 500; }
+    return;
+  }
   if (S.gear !== 'D') { S.speed = 0; S.powerKw += (0 - S.powerKw) * 0.2; return; }
   if (now > SIM.nextLimit) {
     S.speedLimit = LIMITS[Math.floor(Math.random() * LIMITS.length)];
@@ -1744,19 +1750,24 @@ function darkMapLayers() {
 }
 
 // ---------- car interactions ----------
-function setLock(v) {
+// With live data (S.live) a tap asks the car (carCmd) and the screen follows what the car then
+// reports; fromCar marks updates that come from the car itself.
+function setLock(v, fromCar) {
+  if (S.live && !fromCar) return carCmd(v ? 'lock' : 'unlock');
   S.locked = v;
   $('lockBtn').innerHTML = `<i class="ti ti-lock${v ? '' : '-open'}"></i>`;
   $('lockBtn').classList.toggle('open', !v);
   refreshCard();
 }
-function setTrunk(v) {
+function setTrunk(v, fromCar) {
+  if (S.live && !fromCar) return carCmd(v ? 'trunkOpen' : 'trunkClose');
   S.trunk = v;
   $('hTrunk').innerHTML = v ? '<b style="color:var(--dn)">Kapat</b><span>Bagaj açık</span>' : '<b>Aç</b><span>Bagaj</span>';
   if (v) camTo('rear');
   refreshCard();
 }
-function setCharge(v) {
+function setCharge(v, fromCar) {
+  if (S.live && !fromCar) return carCmd(v ? 'chargePortOpen' : 'chargePortClose');
   S.charging = v;
   $('hCharge').style.color = v ? 'var(--ok)' : '';
   $('hCharge').querySelector('span').textContent = v ? 'Şarj ediliyor' : 'Şarj portu';
@@ -1872,6 +1883,7 @@ addEventListener('pointermove', (e) => {
 });
 window.addEventListener('pointerup', () => {
   if (!glassDrag) return;
+  if (S.live) glassDrag.kind === 'window' ? carCmd('window', { pos: glassDrag.k, open: S.windows[glassDrag.k] }) : carCmd('sunshade', { open: S.sunshade });
   glassDrag = null;
   controls.enabled = true;
   refreshCard();
@@ -1881,7 +1893,7 @@ window.addEventListener('pointerup', () => {
 function setGear(g) {
   S.gear = g;
   [...$('gears').children].forEach((s) => s.classList.toggle('on', s.textContent === g));
-  const driving = g === 'D';
+  const driving = g === 'D' || g === 'R';
   stage.classList.toggle('driving', driving);
   road.visible = driving; ground.visible = !driving;
   $('speedBox').style.opacity = driving ? 1 : 0;
@@ -1897,14 +1909,15 @@ function setGear(g) {
   if (driving) { closeCard(); map && map.easeTo({ zoom: 16, pitch: 55, duration: 1200 }); }
   else map && map.easeTo({ zoom: 14, pitch: 0, duration: 1200 });
 }
-$('gears').onclick = () => { setGear(S.gear === 'P' ? 'D' : 'P'); updateBlindSpot(); };
+$('gears').onclick = () => { if (S.live) return; setGear(S.gear === 'P' ? 'D' : 'P'); updateBlindSpot(); };
 
 // ---------- turn signals + blind-spot camera ----------
 // On the car: signal state from the light HAL, video from the BYD AVM (360) camera.
 // Here the camera feed is a drawn placeholder.
 let bsHideTimer = null, bsSide = 'left', bsRaf = null;
-function setSignal(side) {
-  S.signal = S.signal === side ? null : side;
+function setSignal(side, fromCar) {
+  if (S.live && !fromCar) return;
+  S.signal = fromCar ? side : S.signal === side ? null : side;
   $('sigL').classList.toggle('on', S.signal === 'left');
   $('sigR').classList.toggle('on', S.signal === 'right');
   updateBlindSpot();
@@ -2513,6 +2526,7 @@ body.addEventListener('click', (e) => {
     const w = t.dataset.win;
     if (w.startsWith('all-')) CORNERS.forEach((k) => { S.windows[k] = +w.slice(4); });
     else S.windows[w] = (S.windows[w] + 50) % 150;
+    if (S.live) (w.startsWith('all-') ? CORNERS : [w]).forEach((k) => carCmd('window', { pos: k, open: S.windows[k] }));
     if (S.gear === 'P') camTo(w.startsWith('all') || w[1] === 'L' ? 'left' : 'right');
   }
   if (t.dataset.seat) {
@@ -2526,7 +2540,7 @@ body.addEventListener('click', (e) => {
   const act = t.dataset.do;
   if (act === 'tup') setTemp(S.temp + 0.5);
   if (act === 'tdn') setTemp(S.temp - 0.5);
-  if (act === 'ac') S.ac = !S.ac;
+  if (act === 'ac') { if (S.live) return carCmd('acPower', { on: !S.ac }); S.ac = !S.ac; }
   if (act === 'lock') return setLock(!S.locked);
   if (act === 'trunk') return setTrunk(!S.trunk);
   if (act === 'charge') return setCharge(!S.charging);
@@ -2599,7 +2613,9 @@ body.addEventListener('input', (e) => {
 });
 
 // ---------- dock ----------
-function setTemp(v) { S.temp = Math.min(30, Math.max(16, v)); $('tVal').textContent = S.temp.toFixed(1) + '°'; seatAuto(); if (current === 'climate') refreshCard(); }
+function setTemp(v, fromCar) {
+  if (S.live && !fromCar) return carCmd('acTemp', { value: Math.min(30, Math.max(16, v)) });
+  S.temp = Math.min(30, Math.max(16, v)); $('tVal').textContent = S.temp.toFixed(1) + '°'; seatAuto(); if (current === 'climate') refreshCard(); }
 $('tUp').onclick = () => setTemp(S.temp + 0.5);
 $('tDn').onclick = () => setTemp(S.temp - 0.5);
 
@@ -2638,6 +2654,7 @@ function renderSeatDock() {
     el.className = `dk clim seatDk ${kind}`;
     el.innerHTML = `${st.auto ? '<em>A</em>' : ''}${seatSvg(kind)}<div class="lv">${[1, 2].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
   });
+  pushSeats();
   if (seatPopFor) renderSeatPop();
 }
 let seatPopFor = null;
@@ -2771,6 +2788,59 @@ addEventListener('pointermove', (e) => { if (volDrag) volAt(e); });
 addEventListener('pointerup', () => { if (volDrag) { volDrag = false; setVol(S.vol); } });
 volIcon();
 
+// ---------- live vehicle data (Android app + HAL bridge) ----------
+// In the app, MainActivity relays the bridge's state messages here as window.yunusCar({...}):
+// each message holds only the values that changed (see bridge/PROTOCOL.md). The first one
+// switches the page from its demo to live: the drive simulation stops, demo-only controls (gear
+// and signal taps) do nothing, and taps that act on the car become commands through
+// YunusNative.command(json); the screen then follows what the car reports back.
+S.live = false;
+const carCmd = (cmd, args = {}) => {
+  if (window.YunusNative) YunusNative.command(JSON.stringify({ cmd, ...args }));
+};
+function setBattery(soc, range) {
+  if (soc != null) { $('socTxt').textContent = Math.round(soc) + '%'; $('socBar').style.width = soc + '%'; }
+  if (range != null) $('rangeTxt').textContent = Math.round(range) + ' km';
+}
+const seatsSent = {};
+function pushSeats() { // a seat changed on screen: tell the car, unless the car is where this came from
+  if (!S.live) return;
+  for (const [k, st] of Object.entries(S.seats)) {
+    const v = `${st.heat}/${st.vent}`;
+    if (seatsSent[k] !== v) { seatsSent[k] = v; carCmd('seat', { seat: k, heat: st.heat, vent: st.vent }); }
+  }
+}
+let liveRefreshAt = 0;
+window.yunusCar = (m) => {
+  if (!S.live) { S.live = true; stage.classList.add('live'); }
+  if (m.speed != null) S.speed = m.speed;
+  if (m.powerKw != null) S.powerKw = m.powerKw;
+  if (m.gear && m.gear !== S.gear) { setGear(m.gear); updateBlindSpot(); }
+  if (m.locked != null && m.locked !== S.locked) setLock(m.locked, true);
+  if (m.doors) Object.assign(S.doors, m.doors);
+  if (m.trunk != null && m.trunk !== S.trunk) setTrunk(m.trunk, true);
+  if (m.windows) Object.assign(S.windows, m.windows);
+  if (m.chargePort != null && m.chargePort !== S.charging) setCharge(m.chargePort, true);
+  if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
+  if (m.tyres) Object.assign(S.tyres, m.tyres);
+  if ('signal' in m && m.signal !== S.signal) setSignal(m.signal, true);
+  if (m.hazard != null) S.hazard = m.hazard;
+  if (m.lights) S.lights = m.lights;
+  if (m.highBeam != null) S.highBeam = m.highBeam;
+  if (m.fog != null) S.fog = m.fog;
+  if (m.acOn != null) S.ac = m.acOn;
+  if (m.acTemp != null) setTemp(m.acTemp, true);
+  if (m.fan != null) S.fan = m.fan;
+  if (m.outside != null) { S.outside = Math.round(m.outside); $('outTemp').textContent = `Dış ${S.outside}°`; seatAuto(); }
+  if (m.seats) {
+    for (const [k, v] of Object.entries(m.seats)) { Object.assign(S.seats[k], v); seatsSent[k] = `${S.seats[k].heat}/${S.seats[k].vent}`; }
+    renderSeatDock();
+  }
+  if (m.faults) { Object.assign(S.faults, m.faults); updateTelltales(); }
+  const now = performance.now();
+  if (current && now > liveRefreshAt) { liveRefreshAt = now + 500; refreshCard(); }
+  wake(1500);
+};
 // Hold-to-exit for the full-screen modes: keep pressing 2 s.
 function holdToExit(btn, done) {
   let t = 0;
