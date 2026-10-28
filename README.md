@@ -1,6 +1,6 @@
-# teslauncher
+# Yunus
 
-BYD Dolphin (DiLink 3) için Tesla benzeri launcher. Şu an tasarım prototipi: tek sayfalık
+BYD Dolphin (DiLink 3) için Tesla benzeri launcher. Adı Dolphin'in Türkçesinden. Şu an tasarım prototipi: tek sayfalık
 HTML + Three.js arayüz (`viewer/launcher.html`). Android (Kotlin) sürümü sonra gelecek.
 
 > Kişisel kullanım içindir, depo gizli kalmalı. Araç modeli ve bazı görseller Kinex APK'sından

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dolphin Launcher</title>
+<title>Yunus</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" rel="stylesheet">
 <!-- Tesla's UI face (Universal Sans) is proprietary; Inter is the closest free match: neutral, geometric, light numerals.
@@ -624,7 +624,7 @@ const SETTINGS = {
     ['seg', 'units', 'Birimler', [['km', 'km, °C'], ['mi', 'mil, °F']]],
     ['seg', 'lang', 'Dil', [['tr', 'Türkçe'], ['en', 'English']]],
     ['tog', 'autoTime', 'Otomatik saat'],
-    ['info', 'Yazılım', 'Teslauncher 0.1 · DiLink 3.0'],
+    ['info', 'Yazılım', 'Yunus 0.1 · DiLink 3.0'],
     ['btn', 'Ayarları varsayılana döndür', 'resetSettings'],
   ],
 };
@@ -649,7 +649,7 @@ function homeBlock() {
   const yes = S.set.isHome;
   return `<div class="homeBox">
     <div class="head"><div class="ic"><i class="ti ti-home"></i></div>
-      <div><b>Ana ekran uygulaması</b><span>${yes ? 'Teslauncher açılışta ve Ana ekran tuşunda açılır' : 'Şu an: BYD DiLink ana ekranı'}</span></div>
+      <div><b>Ana ekran uygulaması</b><span>${yes ? 'Yunus açılışta ve Ana ekran tuşunda açılır' : 'Şu an: BYD DiLink ana ekranı'}</span></div>
       <span class="state ${yes ? 'yes' : 'no'}">${yes ? 'Varsayılan' : 'Varsayılan değil'}</span></div>
     <div class="acts">${yes
       ? `<button class="btn" data-do="homeByd"><i class="ti ti-arrow-back-up"></i>BYD ana ekranına dön</button>
