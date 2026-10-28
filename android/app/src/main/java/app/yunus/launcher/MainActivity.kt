@@ -67,7 +67,7 @@ class MainActivity : Activity() {
                     assets.shouldInterceptRequest(request.url)
             }
         }
-        halBridge = HalBridge(assets, filesDir, ::postToPage)
+        halBridge = HalBridge(this.assets, filesDir, ::postToPage)
         setContentView(web)
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)
@@ -296,7 +296,7 @@ private class DirectAdb(host: String, port: Int) : java.io.Closeable {
                 val stat = ByteArray(12); stream.readFully(stat)
                 if (littleInt(stat, 0) == 0) null else littleInt(stat, 4).toLong()
             }
-            "FAIL" -> { val size = stream.readIntLE(); val msg = ByteArray(size); stream.readFully(msg); null }
+            "FAIL" -> { val sizeBytes = ByteArray(4); stream.readFully(sizeBytes); val size = littleInt(sizeBytes, 0); require(size in 0..65536) { "ADB hata yanıtı çok büyük" }; val msg = ByteArray(size); stream.readFully(msg); null }
             else -> error("ADB STAT yanıtı: $id")
         }
     }
@@ -401,7 +401,7 @@ private class AdbAuth : java.io.Closeable {
         val words = 64
         val modulus = fixedLittleEndian(rsa.modulus, words)
         val rr = java.math.BigInteger.ONE.shiftLeft(words * 64).mod(rsa.modulus)
-        val n0inv = -rsa.modulus.intValue().inv()
+        val n0inv = -rsa.modulus.toInt().inv()
         val blob = java.io.ByteArrayOutputStream().also { b ->
             val out = DataOutputStream(b); out.writeIntLE(words); out.writeIntLE(n0inv); out.write(modulus); out.write(fixedLittleEndian(rr, words)); out.writeIntLE(rsa.publicExponent.toInt())
         }.toByteArray()
