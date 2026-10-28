@@ -6,17 +6,17 @@
 <title>Dolphin Launcher</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" rel="stylesheet">
+<!-- Tesla's UI face (Universal Sans) is proprietary; Inter is the closest free match: neutral, geometric, light numerals.
+     The Android build will bundle the font file so it works offline. -->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-@font-face { font-family: Elms; src: url(img/ElmsSans-Light.ttf); font-weight: 300; }
-@font-face { font-family: Elms; src: url(img/ElmsSans-Regular.ttf); font-weight: 400; }
-@font-face { font-family: Elms; src: url(img/ElmsSans-Medium.ttf); font-weight: 500; }
-@font-face { font-family: Elms; src: url(img/ElmsSans-Bold.ttf); font-weight: 700; }
 :root {
   --bg:#0b0c0e; --pn:#141619; --cd:#1d2024; --cd2:#272b31; --tx:#f2f3f5; --mu:#8a8f98; --ac:#3e6ae1; --dn:#e5484d; --ok:#30a46c;
 }
 .light { --bg:#e9ebee; --pn:#f6f7f9; --cd:#ffffff; --cd2:#e4e7eb; --tx:#16181b; --mu:#6b717b; }
 * { box-sizing:border-box; }
-html,body { margin:0; height:100%; background:#000; overflow:hidden; font-family:Elms,system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; background:#000; overflow:hidden; font-family:Inter,system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
 input { user-select:text; -webkit-user-select:text; }
 #stage { position:absolute; width:1920px; height:1080px; left:0; top:0; transform-origin:0 0; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
   /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
@@ -111,13 +111,13 @@ button { font-family:inherit; color:inherit; }
 .mm b { display:block; font-size:22px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mm .art.fallback, .cover.fallback { background:var(--cd2) !important; color:var(--mu); }
 /* Media source: the name in the card header opens the list of the car's sources */
-.srcBtn { display:flex; align-items:center; gap:6px; background:var(--cd2); border:0; border-radius:14px; padding:4px 10px 4px 8px; color:var(--tx); font:500 16px Elms,sans-serif; cursor:pointer; }
+.srcBtn { display:flex; align-items:center; gap:6px; background:var(--cd2); border:0; border-radius:14px; padding:4px 10px 4px 8px; color:var(--tx); font:500 16px Inter,sans-serif; cursor:pointer; }
 .srcBtn i { font-size:18px; }
 .srcBtn .ti-chevron-down { color:var(--mu); font-size:15px; }
 #srcPop { position:absolute; z-index:20; width:360px; padding:10px; border-radius:20px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
   opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; }
 #srcPop.show { opacity:1; transform:none; pointer-events:auto; }
-#srcPop button { width:100%; display:flex; align-items:center; gap:14px; padding:12px; border:0; border-radius:12px; background:none; color:var(--tx); font:400 21px Elms,sans-serif; cursor:pointer; text-align:left; }
+#srcPop button { width:100%; display:flex; align-items:center; gap:14px; padding:12px; border:0; border-radius:12px; background:none; color:var(--tx); font:400 21px Inter,sans-serif; cursor:pointer; text-align:left; }
 #srcPop button:hover { background:var(--cd2); }
 #srcPop button .ic { width:42px; height:42px; border-radius:10px; flex:none; display:flex; align-items:center; justify-content:center; font-size:24px; color:#fff; }
 #srcPop button span { flex:1; } #srcPop button small { display:block; font-size:15px; color:var(--mu); }
@@ -141,7 +141,7 @@ button { font-family:inherit; color:inherit; }
 #telltales { position:absolute; left:30px; top:78px; z-index:2; max-height:372px; display:flex; flex-flow:column wrap; align-content:flex-start; gap:8px 10px; transition:top .4s; }
 #stage.driving #telltales { top:300px; }
 #status .batt { margin-left:auto; }
-#telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Elms,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
+#telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Inter,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
 #telltales .more.red { color:#ff3b30; background:rgba(255,59,48,.14); }
 .tt { width:40px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; }
 .tt svg { width:36px; height:28px; }
@@ -157,6 +157,19 @@ button { font-family:inherit; color:inherit; }
 .ttList .ttInfo span { display:block; font-size:16px; color:var(--mu); margin-top:4px; }
 
 /* settings rows */
+/* Default launcher (Settings > System) */
+.homeBox { background:var(--cd); border-radius:18px; padding:20px 22px; margin-bottom:18px; }
+.homeBox .head { display:flex; align-items:center; gap:16px; }
+.homeBox .ic { width:56px; height:56px; border-radius:14px; flex:none; display:flex; align-items:center; justify-content:center; font-size:30px; color:#fff; background:linear-gradient(135deg,#3e6ae1,#7f77dd); }
+.homeBox .head b { display:block; font-size:23px; font-weight:500; }
+.homeBox .head span { font-size:18px; color:var(--mu); }
+.homeBox .state { margin-left:auto; padding:6px 12px; border-radius:12px; font-size:17px; white-space:nowrap; }
+.homeBox .state.yes { color:var(--ok); background:color-mix(in srgb, var(--ok) 15%, transparent); }
+.homeBox .state.no { color:#ffb020; background:rgba(255,176,32,.14); }
+.homeBox .acts { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
+.homeBox .acts .btn { background:var(--cd2); font-size:19px; padding:14px; }
+.homeBox .acts .btn.primary { background:#3e6ae1; color:#fff; }
+.homeBox p { margin:14px 0 0; font-size:16px; color:var(--mu); line-height:1.4; }
 .setRow { display:flex; justify-content:space-between; align-items:center; padding:14px 4px; border-bottom:1px solid var(--cd2); font-size:21px; gap:20px; }
 .seg { display:flex; background:var(--cd); border-radius:12px; padding:4px; gap:4px; flex:none; }
 .seg button { background:none; border:0; padding:10px 16px; border-radius:9px; font-size:18px; cursor:pointer; }
@@ -236,7 +249,7 @@ button { font-family:inherit; color:inherit; }
 #stage.projecting #search, #stage.projecting #navCard, #stage.projecting #recenter, #stage.projecting #mapStyleBtn { display:none; }
 .projBadge { position:absolute; left:0; right:0; bottom:110px; text-align:center; font-size:15px; color:#8a8f98; }
 /* CarPlay-like dashboard: status sidebar with app shortcuts, tiles on the right */
-.cp { font-family:-apple-system, 'SF Pro Display', Elms, sans-serif; color:#fff; }
+.cp { font-family:-apple-system, 'SF Pro Display', Inter, sans-serif; color:#fff; }
 .cpSide { width:130px; background:#1c1c1e; display:flex; flex-direction:column; align-items:center; gap:22px; padding:22px 0; }
 .cpTime { font-size:24px; font-weight:600; }
 .cpApp { width:76px; height:76px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; }
@@ -246,7 +259,7 @@ button { font-family:inherit; color:inherit; }
 .cpTile.big { grid-row:1 / 3; background:linear-gradient(160deg,#2c3e50,#1c2833); }
 .cpTile span { font-size:18px; color:#9a9aa0; } .cpTile b { font-size:32px; font-weight:600; } .cpTile em { font-style:normal; font-size:22px; color:#c7c7cc; }
 /* Android Auto-like: rail with apps and mic, navigation and media cards */
-.aa { font-family:Roboto, Elms, sans-serif; color:#e8eaed; background:#202124; }
+.aa { font-family:Roboto, Inter, sans-serif; color:#e8eaed; background:#202124; }
 .aaRail { width:120px; background:#000; display:flex; flex-direction:column; align-items:center; gap:18px; padding:22px 0; }
 .aaBtn { width:72px; height:72px; border-radius:50%; background:#303134; display:flex; align-items:center; justify-content:center; font-size:36px; }
 .aaMic { background:#8ab4f8; color:#202124; margin-top:auto; }
@@ -611,7 +624,7 @@ const SETTINGS = {
     ['seg', 'units', 'Birimler', [['km', 'km, °C'], ['mi', 'mil, °F']]],
     ['seg', 'lang', 'Dil', [['tr', 'Türkçe'], ['en', 'English']]],
     ['tog', 'autoTime', 'Otomatik saat'],
-    ['info', 'Yazılım', 'Dolphin Launcher 0.1 · DiLink 3.0'],
+    ['info', 'Yazılım', 'Teslauncher 0.1 · DiLink 3.0'],
     ['btn', 'Ayarları varsayılana döndür', 'resetSettings'],
   ],
 };
@@ -622,11 +635,30 @@ const SETTING_DEFAULTS = {
   mirrorFold: true, mirrorTilt: true, mirrorHeat: false, seatEasy: false,
   mediaVol: 12, spdVol: 'low', avas: true, touchSound: true,
   mapArea: 'map', bt: true, wifi: true, hotspot: false, carplay: true,
-  units: 'km', lang: 'tr', autoTime: true, perf: false, fps: false,
+  units: 'km', lang: 'tr', autoTime: true, perf: false, fps: false, isHome: false,
 };
 S.set = { ...SETTING_DEFAULTS };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('settings') || '{}')); } catch {}
 function saveSettings() { try { localStorage.setItem('settings', JSON.stringify(S.set)); } catch {} }
+// Default launcher, as in Kinex: shows whether this launcher is the car's home screen and
+// switches it. On the car "Varsayılan yap" asks Android for the home role (the system's own
+// "Ana ekran uygulaması" choice) and, where DiLink blocks that, sets it through the local ADB
+// bridge (`cmd package set-home-activity`); "BYD ana ekranına dön" puts DiLink's launcher back.
+// Demo: only the state below changes.
+function homeBlock() {
+  const yes = S.set.isHome;
+  return `<div class="homeBox">
+    <div class="head"><div class="ic"><i class="ti ti-home"></i></div>
+      <div><b>Ana ekran uygulaması</b><span>${yes ? 'Teslauncher açılışta ve Ana ekran tuşunda açılır' : 'Şu an: BYD DiLink ana ekranı'}</span></div>
+      <span class="state ${yes ? 'yes' : 'no'}">${yes ? 'Varsayılan' : 'Varsayılan değil'}</span></div>
+    <div class="acts">${yes
+      ? `<button class="btn" data-do="homeByd"><i class="ti ti-arrow-back-up"></i>BYD ana ekranına dön</button>
+         <button class="btn" data-do="openByd"><i class="ti ti-external-link"></i>BYD ana ekranını aç</button>`
+      : `<button class="btn primary" data-do="homeSet"><i class="ti ti-home-check"></i>Varsayılan yap</button>
+         <button class="btn" data-do="openByd"><i class="ti ti-external-link"></i>BYD ana ekranını aç</button>`}</div>
+    <p>"BYD ana ekranını aç" varsayılanı değiştirmeden DiLink ana ekranını bir kez açar; Ana ekran tuşu yine buraya döner.</p>
+  </div>`;
+}
 function renderSettings(rows) {
   return rows.map(([type, key, label, a, b, unit]) => {
     if (type === 'seg') return `<div class="setRow"><span>${label}</span><div class="seg">${a.map(([v, l]) =>
@@ -1451,7 +1483,7 @@ function drawEnergy() {
   c.clearRect(0, 0, W, H);
   c.strokeStyle = 'rgba(138,143,152,.35)'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(0, y(0)); c.lineTo(W, y(0)); c.stroke();
-  c.fillStyle = 'rgba(138,143,152,.8)'; c.font = '16px Elms, sans-serif'; c.fillText('0', 4, y(0) - 4);
+  c.fillStyle = 'rgba(138,143,152,.8)'; c.font = '16px Inter, sans-serif'; c.fillText('0', 4, y(0) - 4);
   c.fillText('400 Wh/km', 4, 16);
   const pts = SIM.hist, step = W / 90;
   c.lineWidth = 3;
@@ -1942,6 +1974,7 @@ const CARDS = {
       ['tyres', 'ti-circle-dot', 'Lastikler'], ['display', 'ti-device-desktop', 'Ekran'], ['sound', 'ti-volume', 'Ses'],
       ['conn', 'ti-wifi', 'Bağlantı'], ['warnings', 'ti-alert-triangle', 'Uyarılar'], ['system', 'ti-settings', 'Sistem']];
     let content = SETTINGS[tab] ? renderSettings(SETTINGS[tab]) : '';
+    if (tab === 'system') content = homeBlock() + content;
     if (tab === 'warnings') content = `<p style="font-size:18px;color:var(--mu);margin:0 0 6px">Gösterge panelindeki ışıklar (kullanım kılavuzu). Demo: arızaları buradan yakabilirsin; araçta sensörlerden gelecek.</p>${renderTelltaleList()}`;
     if (tab === 'quick') content = `<div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <button class="btn ${S.locked ? 'on' : ''}" data-do="lock"><i class="ti ti-lock${S.locked ? '' : '-open'}"></i>${S.locked ? 'Kilitli' : 'Kilit açık'}</button>
@@ -1990,7 +2023,7 @@ const CARDS = {
       <p style="font-size:22px;color:var(--mu);margin:28px 0 14px">Plaka</p>
       <div style="display:flex;gap:14px;align-items:center">
         <input id="plateIn" value="${S.plate}" maxlength="12" autocomplete="off" spellcheck="false"
-          style="width:300px;height:64px;border-radius:14px;border:2px solid var(--cd2);background:var(--cd);color:var(--tx);font:500 28px Elms,sans-serif;padding:0 18px;text-transform:uppercase">
+          style="width:300px;height:64px;border-radius:14px;border:2px solid var(--cd2);background:var(--cd);color:var(--tx);font:500 28px Inter,sans-serif;padding:0 18px;text-transform:uppercase">
         <button class="btn on" data-do="plate">Kaydet</button>
         <img src="${plateCanvas.toDataURL()}" alt="Plaka önizleme" style="height:56px;border-radius:6px">
       </div>
@@ -2202,6 +2235,8 @@ body.addEventListener('click', (e) => {
   if (act === 'play') S.playing = !S.playing;
   if (act === 'plate') return savePlate();
   if (act === 'hazard') S.hazard = !S.hazard;
+  if (act === 'homeSet' || act === 'homeByd') { S.set.isHome = act === 'homeSet'; saveSettings(); }
+  if (act === 'openByd') alert('Demo: araçta burada DiLink ana ekranı açılır.');
   if (act === 'faultsAll') {
     const manual = TELLTALES.filter((t) => !t.auto), on = !manual.every((t) => S.faults[t.id]);
     manual.forEach((t) => { S.faults[t.id] = on; });
