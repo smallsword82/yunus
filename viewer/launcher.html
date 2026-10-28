@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Yunus</title>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" rel="stylesheet">
-<!-- Tesla's UI face (Universal Sans) is proprietary; Inter is the closest free match: neutral, geometric, light numerals.
-     The Android build will bundle the font file so it works offline. -->
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- Libraries, icons and fonts are bundled in vendor/ so the app works offline in the car
+     (MapLibre 4.7.1, Tabler icons 3.19.0, three.js r160, Draco 1.5.6, Inter). Only map tiles need internet. -->
+<link href="vendor/maplibre/maplibre-gl.css" rel="stylesheet">
+<link href="vendor/tabler/tabler-icons.min.css" rel="stylesheet">
 <style>
+/* Tesla's UI face (Universal Sans) is proprietary; Inter is the closest free match: neutral, geometric, light numerals. */
+@font-face { font-family: Inter; src: url(vendor/inter/inter-latin-ext.woff2) format('woff2'); font-weight: 100 900;
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: Inter; src: url(vendor/inter/inter-latin.woff2) format('woff2'); font-weight: 100 900;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 :root {
   --bg:#0b0c0e; --pn:#141619; --cd:#1d2024; --cd2:#272b31; --tx:#f2f3f5; --mu:#8a8f98; --ac:#3e6ae1; --dn:#e5484d; --ok:#30a46c;
 }
@@ -374,6 +377,25 @@ button { font-family:inherit; color:inherit; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
 .dk:hover { background:var(--cd); }
 .dk.on { background:var(--cd); }
+/* Dock apps: hold one to edit (as Tesla): the icons wobble, drag to reorder, x removes, + adds. */
+#dockApps { display:flex; align-items:center; gap:14px; }
+#dockApps .dkApp { position:relative; touch-action:none; }
+#dock.editing #dockApps .dkApp { animation:wobble .28s ease-in-out infinite alternate; }
+#dock.editing #dockApps .dkApp:nth-child(even) { animation-delay:-.14s; }
+@keyframes wobble { from { transform:rotate(-2.5deg); } to { transform:rotate(2.5deg); } }
+#dockApps .dkApp.dragging { animation:none !important; transform:scale(1.12); z-index:5; opacity:.9; }
+#dockApps .del { position:absolute; top:-2px; left:-2px; width:28px; height:28px; border-radius:50%; background:#5f6670; color:#fff; font-size:18px;
+  display:none; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,.5); }
+#dock.editing #dockApps .del { display:flex; }
+#dockAdd, #dockDone { display:none; }
+#dock.editing #dockAdd, #dock.editing #dockDone { display:flex; }
+#dockDone { width:auto; padding:0 20px; font:500 20px Inter,sans-serif; background:var(--cd); }
+#dockPick { position:absolute; bottom:124px; left:50%; z-index:20; width:620px; margin-left:-310px; padding:18px; border-radius:22px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
+  display:none; grid-template-columns:repeat(5, 1fr); gap:16px 8px; }
+#dockPick.show { display:grid; }
+#dockPick button { background:none; border:0; color:var(--tx); font:400 15px Inter,sans-serif; display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer; }
+#dockPick button div { width:64px; height:64px; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:34px; color:#fff; }
+#dockPick p { grid-column:1/-1; margin:0; font-size:18px; color:var(--mu); }
 .dkApp div { width:72px; height:72px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; color:#fff; }
 .tempCtl { display:flex; align-items:center; gap:2px; }
 .tempCtl .dk { width:60px; font-size:36px; color:var(--mu); }
@@ -432,8 +454,8 @@ button { font-family:inherit; color:inherit; }
 </style>
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  "three": "./vendor/three/build/three.module.js",
+  "three/addons/": "./vendor/three/jsm/"
 } }
 </script>
 </head>
@@ -554,6 +576,7 @@ button { font-family:inherit; color:inherit; }
   <div id="warnBanner" role="alert"></div>
 
   <div id="seatPop" role="dialog"></div>
+  <div id="dockPick" role="dialog"></div>
   <div id="petMode"><div class="paw"><i class="ti ti-paw"></i></div><b id="petTemp">22°</b><p id="petMsg"></p>
     <span class="petInfo"><i class="ti ti-snowflake"></i> Klima açık · <i class="ti ti-battery-2"></i> <span id="petBatt">78%</span></span>
     <button id="petExit">Çıkmak için basılı tutun</button></div>
@@ -575,10 +598,9 @@ button { font-family:inherit; color:inherit; }
     <button class="dk clim" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
     <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
     <div class="sep"></div>
-    <button class="dk dkApp" data-card="phone" aria-label="Telefon"><div style="background:#30a46c"><i class="ti ti-phone"></i></div></button>
-    <button class="dk dkApp" data-card="music" aria-label="Müzik"><div style="background:#1db954"><i class="ti ti-music"></i></div></button>
-    <button class="dk dkApp" data-card="camera" aria-label="Kamera"><div style="background:#4a5059"><i class="ti ti-camera"></i></div></button>
-    <button class="dk dkApp" data-card="climate" aria-label="Klima"><div style="background:#2f7fd1"><i class="ti ti-air-conditioning"></i></div></button>
+    <div id="dockApps"></div>
+    <button class="dk dkApp" id="dockAdd" aria-label="Uygulama ekle"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-plus"></i></div></button>
+    <button class="dk" id="dockDone">Bitti</button>
     <button class="dk dkApp" data-card="apps" aria-label="Tüm uygulamalar"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-layout-grid"></i></div></button>
     <div class="sep"></div>
     <button class="dk clim seatDk" data-seatdk="pass" aria-label="Yolcu koltuğu (basılı tut: tüm seçenekler)"></button>
@@ -588,7 +610,7 @@ button { font-family:inherit; color:inherit; }
   </footer>
 </div>
 
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="vendor/maplibre/maplibre-gl.js"></script>
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -964,7 +986,7 @@ function camTo(name) {
 }
 renderer.domElement.addEventListener('dblclick', () => { if (S.gear === 'P') camTo('default'); });
 
-const draco = new DRACOLoader().setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+const draco = new DRACOLoader().setDecoderPath('vendor/draco/');
 const carLoader = new GLTFLoader().setDRACOLoader(draco);
 // Development: launcher.html?model=x.glb#debug loads another model and exposes the scene.
 const DEV = location.hash === '#debug';
@@ -2280,6 +2302,89 @@ function closeSideApp() {
   $('sideTitle').textContent = 'Uygulamalar';
   $('sideBack').style.display = 'none';
 }
+// ---------- editable dock apps ----------
+// What can sit in the dock: the built-in cards and every installed app (apps open in the side
+// window). The order is the driver's, kept in localStorage.
+const DOCK_CARDS = { phone: ['Telefon', 'phone', '#30a46c'], music: ['Müzik', 'music', '#1db954'], camera: ['Kamera', 'camera', '#4a5059'], climate: ['Klima', 'air-conditioning', '#2f7fd1'] };
+const DOCK_MAX = 8;
+const dockItem = (id) => (id.startsWith('card:') ? DOCK_CARDS[id.slice(5)] : APPS.find((a) => a[0] === id.slice(4)));
+let dockIds = ['card:phone', 'card:music', 'card:camera', 'card:climate'];
+try { const d = JSON.parse(localStorage.getItem('dock')); if (Array.isArray(d)) dockIds = d.filter(dockItem); } catch {}
+const saveDock = () => { try { localStorage.setItem('dock', JSON.stringify(dockIds)); } catch {} };
+function renderDock() {
+  $('dockApps').innerHTML = dockIds.map((id) => {
+    const [n, i, c] = dockItem(id);
+    return `<button class="dk dkApp" data-dock="${id}" ${id.startsWith('card:') ? `data-card="${id.slice(5)}"` : ''} aria-label="${n}"><div style="background:${c}"><i class="ti ti-${i}"></i></div><span class="del"><i class="ti ti-x"></i></span></button>`;
+  }).join('');
+  $('dockAdd').style.visibility = dockIds.length < DOCK_MAX ? '' : 'hidden';
+}
+const dockEditing = () => $('dock').classList.contains('editing');
+function setDockEditing(on) {
+  $('dock').classList.toggle('editing', on);
+  if (!on) $('dockPick').classList.remove('show');
+}
+function openDockItem(id) {
+  if (id.startsWith('card:')) return openCard(id.slice(5));
+  if (!sideW) setSideW(sideSnaps()[1], true);
+  openSideApp(APPS.findIndex((a) => a[0] === id.slice(4)));
+}
+// Hold 0.5 s to start editing; keep holding and move to drag that icon to a new place.
+let dockHold = 0, dockDrag = null, dockHeld = false;
+$('dockApps').addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('[data-dock]'); if (!b) return;
+  dockHeld = false;
+  try { b.setPointerCapture(e.pointerId); } catch {}
+  dockDrag = { b, x: e.clientX, moved: false };
+  if (dockEditing()) { b.classList.add('dragging'); return; }
+  dockHold = setTimeout(() => { dockHeld = true; setDockEditing(true); b.classList.add('dragging'); }, 500);
+});
+$('dockApps').addEventListener('pointermove', (e) => {
+  if (!dockDrag) return;
+  if (Math.abs(e.clientX - dockDrag.x) > 6) dockDrag.moved = true;
+  if (!dockEditing() || !dockDrag.b.classList.contains('dragging')) { if (dockDrag.moved) clearTimeout(dockHold); return; }
+  // Move the dragged icon in front of the first icon whose centre is to the right of the finger.
+  const others = [...$('dockApps').children].filter((x) => x !== dockDrag.b);
+  const next = others.find((x) => { const r = x.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; });
+  if (next !== dockDrag.b.nextElementSibling) $('dockApps').insertBefore(dockDrag.b, next || null);
+});
+function endDockDrag() {
+  clearTimeout(dockHold);
+  if (!dockDrag) return;
+  dockDrag.b.classList.remove('dragging');
+  dockIds = [...$('dockApps').children].map((x) => x.dataset.dock);
+  saveDock();
+  dockDrag = null;
+}
+$('dockApps').addEventListener('pointerup', endDockDrag);
+$('dockApps').addEventListener('pointercancel', endDockDrag);
+$('dockApps').addEventListener('contextmenu', (e) => e.preventDefault());
+$('dockApps').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-dock]'); if (!b) return;
+  if (dockHeld) { dockHeld = false; return; }
+  if (dockEditing()) {
+    if (e.target.closest('.del')) { dockIds = dockIds.filter((x) => x !== b.dataset.dock); saveDock(); renderDock(); }
+    return;
+  }
+  openDockItem(b.dataset.dock);
+});
+$('dockDone').onclick = () => setDockEditing(false);
+$('dockAdd').onclick = () => {
+  const free = [...Object.keys(DOCK_CARDS).map((k) => 'card:' + k), ...APPS.map((a) => 'app:' + a[0])]
+    .filter((id) => !dockIds.includes(id));
+  $('dockPick').innerHTML = `<p>Alt çubuğa ekle (${dockIds.length}/${DOCK_MAX})</p>` + (free.length ? free.map((id) => {
+    const [n, i, c] = dockItem(id);
+    return `<button data-add="${id}"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`;
+  }).join('') : '<p>Eklenecek uygulama kalmadı.</p>');
+  $('dockPick').classList.toggle('show');
+};
+$('dockPick').onclick = (e) => {
+  const b = e.target.closest('[data-add]'); if (!b || dockIds.length >= DOCK_MAX) return;
+  dockIds.push(b.dataset.add); saveDock(); renderDock();
+  $('dockPick').classList.remove('show');
+};
+// Tapping anywhere outside the dock ends editing.
+document.addEventListener('pointerdown', (e) => { if (dockEditing() && !e.target.closest('#dock,#dockPick')) setDockEditing(false); });
+renderDock();
 $('sideApps').onclick = (e) => { const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp); };
 $('sideBack').onclick = closeSideApp;
 $('sideHandle').onpointerdown = (e) => {
@@ -2314,6 +2419,9 @@ addEventListener('pointercancel', endSideDrag);
 
 function refreshCard() { if (current) body.innerHTML = CARDS[current].render.call(CARDS[current]); }
 function openCard(name) {
+  // From the full-screen car view, the car key brings the normal layout back so the vehicle
+  // settings open beside the car.
+  if (name === 'controls' && carW >= CAR_FULL && current !== name) setCarW(CAR_W, true);
   if (current === name) return closeCard();
   current = name;
   const c = CARDS[name];

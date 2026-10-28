@@ -22,3 +22,16 @@ Sonra tarayıcıda `http://localhost:8765/launcher.html` aç. Geliştirme için
   (`tools/split_parts.py` ile Blender'da üretildi); yoksa `dolphin.glb` yüklenir
 - `tools/` — Blender betikleri: `blender -b --factory-startup -P tools/split_parts.py -- viewer/dolphin.glb viewer/dolphin_parts.glb`
 - `KINEX_NOTLARI.md` — Kinex incelemesi (araç verisi HAL köprüsü, kamera, model notları)
+
+## Test APK (Android)
+
+`android/` is a small WebView app that packs `viewer/` as assets and shows it full screen, so the
+design can be tried on the car's screen (no vehicle data yet; everything is the demo state).
+
+```bash
+cd android
+./gradlew assembleDebug    # → app/build/outputs/apk/debug/yunus-0.1-test.apk (~10 MB)
+```
+
+Needs JDK 17 and the Android SDK (`android/local.properties`: `sdk.dir=...`). Install on the car
+from a USB stick with a file manager, or over ADB: `adb install -r yunus-0.1-test.apk`.

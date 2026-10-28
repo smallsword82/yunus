@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Map tiles and satellite imagery. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="Yunus"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.Yunus"
+        android:hardwareAccelerated="true">
+
+        <!-- Test build: a normal app with a launcher icon, not yet a home screen
+             (no HOME category), so the BYD home screen stays as it is. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
