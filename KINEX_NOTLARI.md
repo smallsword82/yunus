@@ -79,3 +79,25 @@ Cihaz sınıfları (`getInstance(context)` ile alınıyor) ve dinleyiciler:
   "HAL köprüsü" süreci + localhost TCP. Köprüyü kendimiz yazacağız; Kinex'in kodu kopyalanmayacak,
   yalnızca hangi BYD sınıflarının kullanıldığı biliniyor.
 - Bu sınıfların metot imzaları araç üzerinde (`adb shell` ile framework jar'larından) doğrulanmalı.
+
+## Remote Link (telefondan uzaktan kontrol)
+`libapp.so` içindeki metinlerden çıkarıldı (kod çözülmedi; akış metinlerden ve uç nokta adlarından okunuyor).
+- Ayrı bir telefon uygulaması var: **Kinex Remote**. Araçta Ayarlar'da "Enable Remote Link" açılıp
+  ekranda bir **QR kod** gösteriliyor; telefon kodu okuyunca eşleşiyor. Hesap gerekmiyor.
+  QR, `https://kinex.lexwah.com/remote/` adresine gidiyor (uygulama yoksa kurulum sayfası).
+- Arada Kinex'in **aktarma sunucusu (relay)** var: `https://kinexapi.lexwah.com`.
+  - Araç kendini `carToken` ile tanıtıyor (`Authorization: Bearer ...`), kimliği `kinex_remote_car_id`.
+  - Eşleştirme: `/pairings`, `/pairings/<id>` (`pairingId`, `sessionToken`, `pairedAt`).
+    Eşli telefonlar araçta `kinex_remote_phones_json` içinde tutuluyor.
+  - Araç sunucuyu sürekli yokluyor: `GET /commands/next` ("command loop"), gelen komutu HAL
+    köprüsüyle uyguluyor; durumu `/state` ile gönderiyor (telefondaki canlı durum ekranı).
+  - Kapatınca sunucudaki kayıt siliniyor, tüm telefonların erişimi bitiyor.
+- Görülen komut/durum adları: `power_on`, `power_off`, `lock`/`unlock`, `ac_off`,
+  `setAcTemperature`, `seat_heat_driver/passenger`, `seat_vent_driver/passenger`, `trunkOpen`,
+  cam adları (`rightFrontWindow` …).
+- Araç kapalıyken erişim için isteğe bağlı "head unit'i uyanık tut" seçeneği: 12V aküyü yavaşça
+  tüketiyor, akü zayıflarsa kendisi kapatıyor.
+- Uyarı metni: eşli telefonu açabilen herkes **aracı anahtarsız çalıştırıp sürebilir**; uygulamayı
+  Face ID / parmak izi / PIN ile korumak öneriliyor.
+- Varsayılan launcher için Kinex, sistemin ana ekran seçim penceresini açıyor
+  ("Open the system home app chooser to set Kinex or another launcher as the default.").
