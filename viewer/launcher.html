@@ -21,7 +21,7 @@
 * { box-sizing:border-box; }
 html,body { margin:0; height:100%; background:#000; overflow:hidden; font-family:Inter,system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
 input { user-select:text; -webkit-user-select:text; }
-#stage { position:absolute; width:1920px; height:1080px; left:0; top:0; transform-origin:0 0; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
+#stage { position:absolute; width:1920px; height:1200px; left:0; top:0; transform-origin:0 0; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
   /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
      stacks its app list into one tall column and would push the dock off screen) */
   grid-template-columns:var(--carW, 720px) 1fr var(--sideW, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
@@ -880,11 +880,11 @@ function renderTelltaleList() {
       : `<button class="tg ${S.faults[t.id] ? 'on' : ''}" data-fault="${t.id}" aria-label="${t.name}"><i></i></button>`}</div>`).join('')}</div>`;
 }
 
-// ---------- fit 1920x1080 stage to the window ----------
+// ---------- fit 1920x1200 stage to the window ----------
 let stageScale = 1;
 function fit() {
-  const k = stageScale = Math.min(innerWidth / 1920, innerHeight / 1080);
-  stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+  const k = stageScale = Math.min(innerWidth / 1920, innerHeight / 1200);
+  stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1200 * k) / 2}px) scale(${k})`;
 }
 addEventListener('resize', fit); fit();
 
@@ -1540,7 +1540,7 @@ function openSrcPop() {
   $('srcPop').innerHTML = SOURCES.map((x) => `<button data-src="${x.id}"><div class="ic" style="background:${x.color}"><i class="ti ti-${x.icon}"></i></div>
     <span>${x.name}<small>${x.title} · ${x.sub}</small></span>${x.id === S.src ? '<i class="ti ti-check"></i>' : ''}</button>`).join('');
   const r = $('srcBtn').getBoundingClientRect(), s = stage.getBoundingClientRect();
-  const left = (r.right - s.left) / stageScale - 360, bottom = 1080 - (r.top - s.top) / stageScale + 10;
+  const left = (r.right - s.left) / stageScale - 360, bottom = 1200 - (r.top - s.top) / stageScale + 10;
   Object.assign($('srcPop').style, { left: Math.max(16, left) + 'px', bottom: bottom + 'px' });
   $('srcPop').classList.add('show');
 }
