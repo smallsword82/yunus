@@ -1780,7 +1780,16 @@ const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(char
   chargeGear.add(ring);
   const glow = new THREE.PointLight(0x35e07a, 1.2, 1.4); glow.position.copy(port).add(new THREE.Vector3(-0.25, 0, 0));
   chargeGear.add(glow);
-  chargeGear.userData = { glowMat, glow };
+  // Energy flowing along the cable into the car: short glowing pulses that travel from the ground
+  // end to the flap (the path runs flap → ground, so they move from t=1 towards t=0).
+  const pulseMat = new THREE.MeshBasicMaterial({ color: 0x5dff9a, transparent: true, opacity: 0.95 });
+  const pulses = [];
+  for (let i = 0; i < 6; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 8), pulseMat);
+    m.scale.set(1, 1, 2.6); // stretched along the cable
+    chargeGear.add(m); pulses.push(m);
+  }
+  chargeGear.userData = { glowMat, glow, path, pulses };
 }
 // The glow breathes while charging (steady once full).
 function stepChargeGlow(now) {
@@ -1788,6 +1797,16 @@ function stepChargeGlow(now) {
   const k = S.chargeState === 2 ? 1 : 0.55 + 0.45 * Math.sin(now / 420);
   chargeGear.userData.glowMat.opacity = 0.35 + 0.6 * k;
   chargeGear.userData.glow.intensity = 0.4 + 1.2 * k;
+  // Pulses flow only while energy goes in (not when full or paused).
+  const { path, pulses } = chargeGear.userData, flowing = S.chargeState !== 2 && S.chargeState !== 13;
+  pulses.forEach((m, i) => {
+    m.visible = flowing;
+    if (!flowing) return;
+    const t = 1 - ((now / 2400 + i / pulses.length) % 1);
+    path.getPointAt(t, m.position);
+    m.lookAt(path.getPointAt(Math.max(0, t - 0.01)));
+    m.material.opacity = 0.95 * Math.min(1, t * 6, (1 - t) * 6); // fade in at the ground, out at the flap
+  });
 }
 function placeHotspots() {
   const w = box.clientWidth, h = box.clientHeight;
