@@ -101,6 +101,19 @@ class MainActivity : Activity() {
                     true
                 } catch (_: Throwable) { false }
 
+                // A system settings screen for the status bar's shortcuts (wifi, date); false if the
+                // head unit has no screen for it (the page then opens the car's own settings).
+                @JavascriptInterface
+                fun openSetting(which: String): Boolean = try {
+                    val action = when (which) {
+                        "wifi" -> android.provider.Settings.ACTION_WIFI_SETTINGS
+                        "date" -> android.provider.Settings.ACTION_DATE_SETTINGS
+                        else -> null
+                    }
+                    val intent = action?.let { android.content.Intent(it).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                    if (intent == null || intent.resolveActivity(packageManager) == null) false else { startActivity(intent); true }
+                } catch (_: Throwable) { false }
+
                 // Commands to the car need BYD's signature permissions, which this app cannot hold.
                 @JavascriptInterface
                 fun command(json: String) {}

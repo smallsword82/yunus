@@ -228,6 +228,7 @@ button { font-family:inherit; color:inherit; }
 #netStat > * + * { margin-left:12px; }
 #netStat .hide { display:none; }
 #netStat i { font-size:24px; }
+#topBar #clockTxt, #topBar #outTemp, #netStat i { cursor:pointer; padding:8px 4px; } /* shortcuts */
 #netStat .off { opacity:.4; } /* joined but no internet */
 #telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Inter,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
 #telltales .more.red { color:#ff3b30; background:rgba(255,59,48,.14); }
@@ -358,9 +359,9 @@ button { font-family:inherit; color:inherit; }
 #carPanel { overflow:clip; }
 #map { position:absolute; top:48px; right:0; bottom:0; left:0; background:#1a1c20; }
 #stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
-#mapStyleBtn { right:24px; top:72px; height:64px; padding:0 20px; display:flex; align-items:center; gap:10px; font-size:20px; border:0; cursor:pointer; }
-#mapStyleBtn i { font-size:28px; }
-#view3dBtn { right:24px; top:152px; height:64px; min-width:64px; padding:0 18px; border:0; cursor:pointer; font-size:20px; font-weight:600; }
+#mapStyleBtn { right:24px; top:72px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; font-size:30px; border:0; cursor:pointer; }
+#mapStyleBtn i { font-size:30px; }
+#view3dBtn { right:24px; top:152px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; font-size:30px; }
 #satCredit { position:absolute; left:12px; bottom:8px; font-size:13px; color:#fff; text-shadow:0 1px 2px #000; display:none; z-index:1; }
 #stage.sat-map #satCredit { display:block; }
 
@@ -653,7 +654,7 @@ button { font-family:inherit; color:inherit; }
       <div id="outTemp">18°C</div>
       <!-- An icon shows only when there is that link (the car's own status bar is hidden while
            Yunus runs full screen). -->
-      <div id="netStat"><i id="wifiInd" class="ti ti-wifi hide"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span></div>
+      <div id="netStat"><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span></div>
     </div>
     <div id="map"></div>
     <div class="floating" id="search"><i class="ti ti-search"></i>Nereye gidiyoruz?</div>
@@ -662,7 +663,7 @@ button { font-family:inherit; color:inherit; }
     <div class="floating" id="navBanner" style="display:none"></div>
     <button class="floating" id="recenter" aria-label="Konumuma dön"><i class="ti ti-current-location"></i></button>
     <button class="floating" id="mapStyleBtn" aria-label="Harita görünümü"></button>
-    <button class="floating" id="view3dBtn" aria-label="3B görünüm">3B</button>
+    <button class="floating" id="view3dBtn" aria-label="3B / 2B görünüm"><i class="ti ti-perspective"></i></button>
     <div id="satCredit">Uydu görüntüsü: Esri, Maxar, Earthstar Geographics</div>
     <!-- Phone projection takes the map's place; the car panel and dock stay. Placeholder screens:
          on the car this panel will show the Dolphin's own CarPlay / Android Auto output. -->
@@ -2429,7 +2430,8 @@ function buildMap() {
       setMapStyle(S.mapStyle);
       darkMapLayers();
     });
-    map.on('pitchend', () => { $('view3dBtn').textContent = map.getPitch() < 20 ? '3B' : '2B'; });
+    // A tilted plane (perspective) to go 3D, a flat square to lay it flat again.
+    map.on('pitchend', () => { $('view3dBtn').innerHTML = `<i class="ti ti-${map.getPitch() < 20 ? 'perspective' : 'square'}"></i>`; });
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
     meMarker = new maplibregl.Marker({ element: me }).setLngLat(myPos || CENTER).addTo(map);
@@ -2737,7 +2739,9 @@ function setMapStyle(style) {
   try { localStorage.setItem('mapStyle', style); } catch {}
   const sat = style === 'sat';
   stage.classList.toggle('sat-map', sat);
-  $('mapStyleBtn').innerHTML = `<i class="ti ti-${sat ? 'map-2' : 'world'}"></i><span>${sat ? 'Harita' : 'Uydu'}</span>`;
+  // Icon only, like Tesla's map buttons: the satellite to switch to it, the map to switch back.
+  $('mapStyleBtn').innerHTML = `<i class="ti ti-${sat ? 'map-2' : 'satellite'}"></i>`;
+  $('mapStyleBtn').setAttribute('aria-label', sat ? 'Harita görünümü' : 'Uydu görünümü');
   if (!map || !map.getLayer('sat')) return;
   for (const layer of map.getStyle().layers) {
     if (layer.type === 'symbol' || layer.id === 'route') continue;
@@ -3379,6 +3383,7 @@ document.addEventListener('pointerdown', (e) => {
 });
 $('outTemp').style.cursor = 'pointer';
 $('outTemp').onclick = () => {
+  if (window.YunusNative) return openCarApp(AC_SCREEN); // the status bar's shortcut to climate
   const steps = [-2, 6, 12, 18, 26, 31, 36];
   S.outside = steps[(steps.indexOf(S.outside) + 1) % steps.length];
   $('outTemp').textContent = `${S.outside}°C`;
@@ -3470,13 +3475,23 @@ volIcon();
 if (window.YunusNative && YunusNative.volumeRefresh) YunusNative.volumeRefresh(); // the system level
 if (window.YunusNative && YunusNative.statusRefresh) YunusNative.statusRefresh(); // Wi-Fi and mobile signal
 
-// ---------- top line: time, mobile and Wi-Fi (from the app's StatusBridge) ----------
+// ---------- status bar: time, mobile and Wi-Fi (from the app's StatusBridge) ----------
+// Each is also a shortcut, as in Tesla: Wi-Fi / cellular open the Wi-Fi settings, the time the
+// date and time settings, the temperature the car's climate screen. Without a system screen for
+// it the car's own settings open.
+function openSetting(which) {
+  if (!window.YunusNative) return;
+  if (!(YunusNative.openSetting && YunusNative.openSetting(which))) openCarApp(CAR_SETTINGS);
+}
+$('wifiInd').onclick = $('mobInd').onclick = () => openSetting('wifi');
+$('clockTxt').onclick = () => openSetting('date');
 function tickClock() { $('clockTxt').textContent = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); }
 tickClock(); setInterval(tickClock, 10000);
 // Levels 0–4, -1: none. Wi-Fi has four Tabler steps, mobile five bars.
 function renderNet(n) {
   const wifi = $('wifiInd'), mob = $('mobInd');
-  wifi.className = 'ti ' + (n.wifi < 0 ? 'hide' : ['ti-wifi-0', 'ti-wifi-0', 'ti-wifi-1', 'ti-wifi-2', 'ti-wifi'][n.wifi]) + (n.wifi >= 0 && !n.online ? ' off' : '');
+  // Always shown (crossed out when not joined), so its shortcut is there to join one.
+  wifi.className = 'ti ' + (n.wifi < 0 ? 'ti-wifi-off off' : ['ti-wifi-0', 'ti-wifi-0', 'ti-wifi-1', 'ti-wifi-2', 'ti-wifi'][n.wifi] + (n.online ? '' : ' off'));
   mob.classList.toggle('hide', n.mobile < 0);
   if (n.mobile >= 0) mob.firstElementChild.className = 'ti ti-antenna-bars-' + (n.mobile + 1);
   mob.classList.toggle('off', n.mobile >= 0 && !n.online && n.wifi < 0);
