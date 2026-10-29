@@ -160,9 +160,10 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun isNight(): Boolean = isNightMode()
 
-                // Spoken navigation prompts, in Turkish, through the system text-to-speech.
+                // Spoken navigation prompts, in Turkish, through the system text-to-speech, at the
+                // guidance voice's own level (0–1, set on Yunus's map).
                 @JavascriptInterface
-                fun say(text: String) = runOnUiThread { speak(text) }
+                fun say(text: String, volume: Double) = runOnUiThread { speak(text, volume.toFloat()) }
 
                 // Opens a link (a destination for a navigation app) in the first of [packages] that
                 // handles it, else in any app that does.
@@ -258,15 +259,23 @@ class MainActivity : Activity() {
     // Text-to-speech starts on the first prompt; a prompt asked for meanwhile is spoken once ready.
     private var tts: android.speech.tts.TextToSpeech? = null
     private var ttsReady = false
-    private var ttsPending: String? = null
-    private fun speak(text: String) {
-        if (ttsReady) { tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "yunus-nav"); return }
-        ttsPending = text
+    private var ttsPending: Pair<String, Float>? = null
+    private fun speak(text: String, volume: Float) {
+        if (ttsReady) {
+            val params = android.os.Bundle().apply { putFloat(android.speech.tts.TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
+            tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, params, "yunus-nav")
+            return
+        }
+        ttsPending = text to volume
         if (tts == null) tts = android.speech.tts.TextToSpeech(this) { status ->
             if (status == android.speech.tts.TextToSpeech.SUCCESS) {
                 tts?.language = java.util.Locale("tr", "TR")
+                // Navigation guidance, not media: the system lowers the music while it speaks.
+                tts?.setAudioAttributes(android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
                 ttsReady = true
-                ttsPending?.let { speak(it) }
+                ttsPending?.let { (t, v) -> speak(t, v) }
                 ttsPending = null
             }
         }

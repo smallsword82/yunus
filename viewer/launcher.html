@@ -361,6 +361,14 @@ button { font-family:inherit; color:inherit; }
 #stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
 #mapStyleBtn { right:24px; top:72px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; font-size:30px; border:0; cursor:pointer; }
 #mapStyleBtn i { font-size:30px; }
+#voiceBtn { right:24px; top:232px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; font-size:30px; }
+#voiceBtn.off { color:var(--mu); }
+#voicePop { right:100px; top:232px; width:400px; padding:18px 22px; display:none; z-index:4; color:var(--tx); }
+#voicePop.show { display:block; }
+#voicePop .row { display:flex; align-items:center; justify-content:space-between; font-size:22px; }
+#voicePop input[type=range] { width:100%; margin:18px 0 4px; height:36px; accent-color:var(--ac); }
+#voicePop small { color:var(--mu); font-size:17px; }
+#stage.projecting #voiceBtn { display:none; }
 #view3dBtn { right:24px; top:152px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; font-size:30px; }
 #satCredit { position:absolute; left:12px; bottom:8px; font-size:13px; color:#fff; text-shadow:0 1px 2px #000; display:none; z-index:1; }
 #stage.sat-map #satCredit { display:block; }
@@ -671,6 +679,8 @@ button { font-family:inherit; color:inherit; }
     <button class="floating" id="recenter" aria-label="Konumuma dön"><i class="ti ti-current-location"></i></button>
     <button class="floating" id="mapStyleBtn" aria-label="Harita görünümü"></button>
     <button class="floating" id="view3dBtn" aria-label="3B / 2B görünüm"><i class="ti ti-cube"></i></button>
+    <button class="floating" id="voiceBtn" aria-label="Yönlendirme sesi"><i class="ti ti-volume"></i></button>
+    <div class="floating" id="voicePop"></div>
     <div id="satCredit">Uydu görüntüsü: Esri, Maxar, Earthstar Geographics</div>
     <!-- Phone projection takes the map's place; the car panel and dock stay. Placeholder screens:
          on the car this panel will show the Dolphin's own CarPlay / Android Auto output. -->
@@ -2528,7 +2538,10 @@ if (navigator.geolocation) {
 // Place search (Photon, OpenStreetMap data) and turn-by-turn routes (OSRM), with the route options,
 // saved places and range check of Kinex's navigation; spoken through the car's text-to-speech
 // (YunusNative.say). Places, recents and options are kept in localStorage.
-const NAV = { dest: null, route: null, step: 1, active: false, offCount: 0, heading: null, farSaid: 0, nearSaid: 0, voice: true };
+const NAV = { dest: null, route: null, step: 1, active: false, offCount: 0, heading: null, farSaid: 0, nearSaid: 0, voice: true, voiceVol: 80 };
+// The guidance voice's own level (0–100, apart from the media volume) and mute, as in Tesla.
+try { Object.assign(NAV, JSON.parse(localStorage.getItem('navVoice')) || {}); } catch {}
+const saveVoice = () => { try { localStorage.setItem('navVoice', JSON.stringify({ voice: NAV.voice, voiceVol: NAV.voiceVol })); } catch {} };
 let navPlaces;
 try { navPlaces = JSON.parse(localStorage.getItem('navPlaces') || '{}'); } catch { navPlaces = {}; }
 navPlaces.recent = navPlaces.recent || [];
@@ -2544,7 +2557,7 @@ function distM(a, b) { // great-circle metres between [lng, lat] points
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dLng / 2) ** 2;
   return 2 * 6371000 * Math.asin(Math.sqrt(h));
 }
-const speak = (text) => { if (NAV.voice && window.YunusNative && YunusNative.say) YunusNative.say(text); };
+const speak = (text) => { if (NAV.voice && NAV.voiceVol > 0 && window.YunusNative && YunusNative.say) YunusNative.say(text, NAV.voiceVol / 100); };
 
 // Search panel: Home, Work, recent places, and results as you type (nearest area first).
 let navResults = [], navSaving = null;
@@ -2741,7 +2754,7 @@ function updateNav() {
 $('navBanner').addEventListener('click', (e) => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.dataset.stop !== undefined) stopNav();
-  else if (t.dataset.voice !== undefined) { NAV.voice = !NAV.voice; updateNav(); }
+  else if (t.dataset.voice !== undefined) { NAV.voice = !NAV.voice; saveVoice(); updateNav(); renderVoicePop(); }
   else if (t.dataset.overview !== undefined) fitRoute();
 });
 
@@ -2763,6 +2776,31 @@ function setMapStyle(style) {
   }
 }
 $('mapStyleBtn').onclick = () => setMapStyle(S.mapStyle === 'sat' ? 'street' : 'sat');
+// Guidance voice: the speaker opens its level (apart from the media volume) and mute.
+function renderVoicePop() {
+  const on = NAV.voice && NAV.voiceVol > 0;
+  $('voiceBtn').innerHTML = `<i class="ti ti-volume${on ? '' : '-off'}"></i>`;
+  $('voiceBtn').classList.toggle('off', !on);
+  $('voicePop').innerHTML = `<div class="row"><span>Yönlendirme sesi</span><span class="tg ${NAV.voice ? 'on' : ''}" data-voice-on role="switch" aria-checked="${NAV.voice}"><i></i></span></div>
+    <input type="range" id="voiceVol" min="0" max="100" step="5" value="${NAV.voiceVol}" ${NAV.voice ? '' : 'disabled'} aria-label="Yönlendirme ses düzeyi">
+    <small>%${NAV.voiceVol} · müzik sesinden ayrı; konuşurken müzik kısılır</small>`;
+}
+renderVoicePop();
+$('voiceBtn').onclick = (e) => { e.stopPropagation(); renderVoicePop(); $('voicePop').classList.toggle('show'); };
+$('voicePop').addEventListener('pointerdown', (e) => e.stopPropagation()); // not a map drag
+$('voicePop').onclick = (e) => {
+  if (!e.target.closest('[data-voice-on]')) return;
+  NAV.voice = !NAV.voice; saveVoice(); renderVoicePop(); if (NAV.active) updateNav();
+};
+$('voicePop').addEventListener('input', (e) => {
+  if (e.target.id !== 'voiceVol') return;
+  NAV.voiceVol = +e.target.value; saveVoice();
+  $('voicePop').querySelector('small').textContent = `%${NAV.voiceVol} · müzik sesinden ayrı; konuşurken müzik kısılır`;
+  $('voiceBtn').classList.toggle('off', NAV.voiceVol === 0);
+});
+// Letting go of the slider says a sample at the new level.
+$('voicePop').addEventListener('change', (e) => { if (e.target.id === 'voiceVol') speak('Yönlendirme sesi'); });
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#voicePop,#voiceBtn')) $('voicePop').classList.remove('show'); });
 // 3B: tilts the map and comes close enough for the buildings to rise; 2B lays it flat again.
 $('view3dBtn').onclick = () => {
   if (!map) return;
