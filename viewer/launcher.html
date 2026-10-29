@@ -504,6 +504,13 @@ button { font-family:inherit; color:inherit; }
 .tabs button.on { background:var(--cd); }
 .tabs i { font-size:28px; color:var(--mu); }
 .tabBody { overflow-y:auto; min-height:0; padding-right:8px; }
+/* A narrow card (the map window squeezed by the third window): the tabs become a row of icons on
+   top (the chosen one keeps its name) and the settings get the full width. */
+#card.narrow .controls { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); gap:14px; }
+#card.narrow .tabs { flex-direction:row; overflow-x:auto; overflow-y:hidden; }
+#card.narrow .tabs > * + * { margin-top:0; margin-left:6px; }
+#card.narrow .tabs button { padding:12px 16px; font-size:19px; white-space:nowrap; flex:none; }
+#card.narrow .tabs button:not(.on) span { display:none; }
 .paints { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
 .paint { display:flex; align-items:center; gap:14px; background:var(--cd); border:3px solid transparent; border-radius:14px; padding:10px 14px; font-size:20px; cursor:pointer; text-align:left; }
 .paint.on { border-color:var(--ac); }
@@ -1991,6 +1998,7 @@ function setCarW(w, animate) {
   if (sideW > 1920 - w) setSideW(1920 - w, animate);
   else placeHandles();
   syncEmbedSoon();
+  setTimeout(fitCard, 400); // after the columns' transition
 }
 // The embedded navigation app follows the map area: hidden while a divider is dragged (resizing
 // its display every frame would stutter), then fitted to the new area once the layout settles.
@@ -3091,7 +3099,7 @@ const CARDS = {
         `<button class="btn ${S.bsMode === k ? 'on' : ''}" data-bs="${k}">${l}</button>`).join('')}</div>
       ${bsAdjustBlock()}`;
     return `<p class="title">Yunus</p><div class="controls"><div class="tabs">${tabs.map(([k, ic, l]) =>
-      `<button class="${k === tab ? 'on' : ''}" data-tab="${k}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div><div class="tabBody">${content}</div></div>`;
+      `<button class="${k === tab ? 'on' : ''}" data-tab="${k}" aria-label="${l}"><i class="ti ${ic}"></i><span>${l}</span></button>`).join('')}</div><div class="tabBody">${content}</div></div>`;
   } },
 
   music: { tall: false, render: () => `
@@ -3161,6 +3169,7 @@ function setSideW(w, animate) {
   stage.style.setProperty('--sideW', sideW + 'px');
   placeHandles();
   syncEmbedSoon();
+  setTimeout(fitCard, 400);
 }
 // The side window's handle sits on its left edge, but never on top of the car column's handle.
 function placeHandles() {
@@ -3377,7 +3386,9 @@ function endSideDrag(e) {
 addEventListener('pointerup', endSideDrag);
 addEventListener('pointercancel', endSideDrag);
 
-function refreshCard() { if (current) body.innerHTML = CARDS[current].render.call(CARDS[current]); }
+function refreshCard() { if (current) { fitCard(); body.innerHTML = CARDS[current].render.call(CARDS[current]); } }
+// The card takes the map window's width; below 860 design px it switches to its narrow layout.
+function fitCard() { card.classList.toggle('narrow', card.getBoundingClientRect().width / stageScale < 860); }
 // On the device the dock's Phone, Camera, Climate and Music open the car's own apps: BYD's phone
 // (Bluetooth calls), its 360° camera, its climate screen, and the playing music app.
 const CAR_APPS = { phone: ['com.byd.bluetoothcall', 'com.google.android.dialer', 'com.android.dialer'],
