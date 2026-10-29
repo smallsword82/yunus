@@ -3114,7 +3114,8 @@ body.addEventListener('click', (e) => {
     else { $('bsCam').classList.remove('show'); updateBlindSpot(); }
   }
   if (t.dataset.light) S.lights = t.dataset.light;
-  if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); startMapArea(); }
+  // The card covers the map area: close it so the chosen map shows at once.
+  if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); startMapArea(); closeCard(); }
   if (t.dataset.fault) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
   if (t.dataset.set) {
     const k = t.dataset.set;
