@@ -495,6 +495,9 @@ button { font-family:inherit; color:inherit; }
 .dk.on { background:var(--cd); }
 /* Dock apps: hold one to edit (as Tesla): the icons wobble, drag to reorder, x removes, + adds. */
 #dockApps { display:flex; align-items:center; gap:14px; }
+#dockRecent { display:flex; align-items:center; gap:14px; margin-left:14px; }
+#dockRecent:empty { display:none; }
+#dock.editing #dockRecent { display:none; }
 #dockApps .dkApp { position:relative; touch-action:none; }
 #dock.editing #dockApps .dkApp { animation:wobble .28s ease-in-out infinite alternate; }
 #dock.editing #dockApps .dkApp:nth-child(even) { animation-delay:-.14s; }
@@ -752,6 +755,7 @@ button { font-family:inherit; color:inherit; }
     <button class="dk dkApp" id="dockAdd" aria-label="Uygulama ekle"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-plus"></i></div></button>
     <button class="dk" id="dockDone">Bitti</button>
     <button class="dk dkApp" data-card="apps" aria-label="Tüm uygulamalar"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-layout-grid"></i></div></button>
+    <div id="dockRecent"></div>
     <div class="sep"></div>
     <button class="dk clim seatDk" data-seatdk="pass" aria-label="Yolcu koltuğu (basılı tut: tüm seçenekler)"></button>
     <button class="dk" id="vDn" aria-label="Sesi kıs"><i class="ti ti-chevron-left" style="font-size:36px;color:var(--mu)"></i></button>
@@ -2985,6 +2989,7 @@ function embedSide() {
 function openSidePkg(pkg) {
   const a = (deviceApps() || []).find((x) => x.pkg === pkg);
   sidePkg = pkg;
+  useApp(pkg);
   $('sidePanel').classList.add('appOpen');
   $('sideTitle').textContent = a ? a.app : pkg;
   $('sideBack').style.display = '';
@@ -3026,13 +3031,38 @@ const dockItem = (id) => {
 const dockIcon = ([n, i, c, img]) => img ? `<div class="real"><img src="${img}" alt=""></div>` : `<div style="background:${c}"><i class="ti ti-${i}"></i></div>`;
 let dockIds = ['card:phone', 'card:music', 'card:camera', 'card:climate'];
 try { const d = JSON.parse(localStorage.getItem('dock')); if (Array.isArray(d)) dockIds = d.filter(dockItem); } catch {}
+// On the device the only fixed button is the phone; the music app and the others sit among the
+// recent apps with their own icons, and the driver can add apps with "+".
+const DEVICE_CARDS = ['phone'];
+if (DEVICE) dockIds = dockIds.filter((id) => !id.startsWith('card:') || DEVICE_CARDS.includes(id.slice(5)));
 const saveDock = () => { try { localStorage.setItem('dock', JSON.stringify(dockIds)); } catch {} };
+// Recently used apps, like Tesla's "Recent Apps": those opened through Yunus (apps card, dock,
+// third window) and the music app that last played, newest first. As in Tesla, the more apps the
+// driver puts in the dock, the fewer recent ones show (1–3); one already in the dock is skipped.
+let recentApps = [];
+try { recentApps = JSON.parse(localStorage.getItem('recentApps')) || []; } catch {}
+function useApp(pkg) {
+  if (!DEVICE || !pkg || recentApps[0] === pkg) return;
+  recentApps = [pkg, ...recentApps.filter((x) => x !== pkg)].slice(0, 8);
+  try { localStorage.setItem('recentApps', JSON.stringify(recentApps)); } catch {}
+  renderRecent();
+}
+function launchApp(pkg) { if (YunusNative.openApp(pkg)) useApp(pkg); }
+function renderRecent() {
+  if (!DEVICE) return;
+  const room = Math.max(1, Math.min(3, DOCK_MAX - dockIds.length));
+  const shown = recentApps.filter((p) => !dockIds.includes('pkg:' + p) && appInfo(p)).slice(0, room);
+  $('dockRecent').innerHTML = shown.map((p) => { const a = appInfo(p);
+    return `<button class="dk dkApp" data-recent="${p}" aria-label="${a.app}">${dockIcon([a.app, null, null, a.icon])}</button>`; }).join('');
+}
+$('dockRecent').onclick = (e) => { const b = e.target.closest('[data-recent]'); if (b) launchApp(b.dataset.recent); };
 function renderDock() {
   $('dockApps').innerHTML = dockIds.map((id) => {
     const it = dockItem(id);
     return `<button class="dk dkApp" data-dock="${id}" ${id.startsWith('card:') ? `data-card="${id.slice(5)}"` : ''} aria-label="${it[0]}">${dockIcon(it)}<span class="del"><i class="ti ti-x"></i></span></button>`;
   }).join('');
   $('dockAdd').style.visibility = dockIds.length < DOCK_MAX ? '' : 'hidden';
+  renderRecent();
 }
 const dockEditing = () => $('dock').classList.contains('editing');
 function setDockEditing(on) {
@@ -3041,7 +3071,7 @@ function setDockEditing(on) {
 }
 function openDockItem(id) {
   if (id.startsWith('card:')) return openCard(id.slice(5));
-  if (id.startsWith('pkg:')) return YunusNative.openApp(id.slice(4));
+  if (id.startsWith('pkg:')) return launchApp(id.slice(4));
   if (!sideW) setSideW(sideSnaps()[1], true);
   openSideApp(APPS.findIndex((a) => a[0] === id.slice(4)));
 }
@@ -3087,7 +3117,8 @@ $('dockApps').addEventListener('click', (e) => {
 $('dockDone').onclick = () => setDockEditing(false);
 $('dockAdd').onclick = () => {
   const apps = DEVICE ? (deviceApps() || []).map((a) => 'pkg:' + a.pkg) : APPS.map((a) => 'app:' + a[0]);
-  const free = [...Object.keys(DOCK_CARDS).map((k) => 'card:' + k), ...apps].filter((id) => !dockIds.includes(id));
+  const cards = Object.keys(DOCK_CARDS).filter((k) => !DEVICE || DEVICE_CARDS.includes(k)).map((k) => 'card:' + k);
+  const free = [...cards, ...apps].filter((id) => !dockIds.includes(id));
   $('dockPick').innerHTML = `<p>Alt çubuğa ekle (${dockIds.length}/${DOCK_MAX})</p>` + (free.length ? free.map((id) => {
     const it = dockItem(id);
     return `<button data-add="${id}">${dockIcon(it)}${it[0]}</button>`;
@@ -3227,7 +3258,7 @@ body.addEventListener('click', (e) => {
     else { $('bsCam').classList.remove('show'); updateBlindSpot(); }
   }
   if (t.dataset.light) S.lights = t.dataset.light;
-  if (t.dataset.app) { if (window.YunusNative) YunusNative.openApp(t.dataset.app); closeCard(); return; }
+  if (t.dataset.app) { if (window.YunusNative) launchApp(t.dataset.app); closeCard(); return; }
   // The card covers the map area: close it so the chosen map shows at once.
   if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); startMapArea(); closeCard(); }
   if (t.dataset.fault && !DEVICE) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
@@ -3678,7 +3709,7 @@ const CAR_HAL_MAP = {
 // so after a cold start the car would otherwise not say its battery, range or settings for a while.
 const CAR_HAL_KEEP = ['Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
   'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C'];
-let autoPlayDone = false;
+let autoPlayDone = false, playingPkg = null;
 window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
   // simulation active until a validated telemetry field reaches this API.
@@ -3690,6 +3721,9 @@ window.yunusCar = (m) => {
   }
   if (m.media) {
     liveMedia = { ...m.media, at: performance.now() };
+    // The music app joins the recent apps when it starts playing (not on every position update).
+    if (liveMedia.playing && liveMedia.pkg !== playingPkg) useApp(liveMedia.pkg);
+    playingPkg = liveMedia.playing ? liveMedia.pkg : null;
     // Setting "Araç çalışınca son müziği çal": once per start, the last app resumes if nothing plays.
     if (!autoPlayDone && liveMedia.access) {
       autoPlayDone = true;
