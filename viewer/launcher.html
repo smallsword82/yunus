@@ -2060,7 +2060,7 @@ function syncEmbedSoon() {
     if (sidePkg) embedSide();
     if (!mapEmbedded) return;
     const r = $('map').getBoundingClientRect();
-    if (r.width < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
+    if (r.width < 80 || r.height < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
     else startMapArea();
   }, 450);
 }
@@ -3240,7 +3240,9 @@ function fillSideApps() {
 }
 function embedSide() {
   const [x, y, w, h] = screenRect($('sideApp'));
-  if (w < 60) return YunusNative.embedVisible('side', false);
+  // Closed (no size along the long side) or too small: hide it. Upright a closed window still has
+  // its full width, so both sides count.
+  if (sideW < 80 || w < 60 || h < 60) return YunusNative.embedVisible('side', false);
   YunusNative.embedApp('side', sidePkg, x, y, w, h);
 }
 // An element's place on the screen in physical pixels, for the embedded apps' windows. The page is
