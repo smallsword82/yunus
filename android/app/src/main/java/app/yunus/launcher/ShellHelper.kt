@@ -71,7 +71,10 @@ object ShellHelper {
         synchronized(owned) {
             if (display in owned) return true
             val dump = ProcessBuilder("dumpsys", "display").start().inputStream.bufferedReader().readText()
-            val ok = Regex("""DisplayInfo\{"[^"]*, displayId $display", uniqueId "virtual:${Regex.escape(OWNER)},""").containsMatchIn(dump)
+            // Android 10: DisplayInfo{"name, displayId 7", uniqueId "virtual:<owner>,…
+            // Android 14: DisplayInfo{"name", displayId 7, …, uniqueId "virtual:<owner>,…
+            val ok = Regex("""DisplayInfo\{"[^"]*(?:", )?displayId $display[",][^
+]*?uniqueId "virtual:${Regex.escape(OWNER)},""").containsMatchIn(dump)
             if (ok) owned.add(display)
             return ok
         }
@@ -80,7 +83,14 @@ object ShellHelper {
 
 /** Builds touchscreen MotionEvents for a given display and injects them (shell-only APIs, via reflection). */
 private class TouchInjector {
-    private val inputManager = Class.forName("android.hardware.input.InputManager").getMethod("getInstance").invoke(null)
+    // Android 14 moved injection to InputManagerGlobal (InputManager.getInstance() there needs an
+    // app context, which app_process lacks); older versions, the car's Android 10 included, keep it
+    // on InputManager.
+    private val inputManager = try {
+        Class.forName("android.hardware.input.InputManagerGlobal").getMethod("getInstance").invoke(null)
+    } catch (_: ClassNotFoundException) {
+        Class.forName("android.hardware.input.InputManager").getMethod("getInstance").invoke(null)
+    }
     private val inject = inputManager.javaClass.getMethod("injectInputEvent", InputEvent::class.java, Int::class.javaPrimitiveType)
     private val setDisplayId = MotionEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
     private var downTime = 0L

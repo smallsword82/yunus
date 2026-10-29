@@ -315,7 +315,8 @@ private class AppEmbed(private val activity: Activity, private val root: android
         fun launchIfNew() {
             if (slot.component == component) return
             slot.component = component
-            shell.send("launch ${slot.displayId} $component")
+            // Not started after all: forget it, so choosing the app again retries the launch.
+            shell.send("launch ${slot.displayId} $component") { activity.runOnUiThread { if (slot.component == component) slot.component = null } }
         }
         fun attach(texture: android.graphics.SurfaceTexture) {
             texture.setDefaultBufferSize(w, h)
@@ -370,11 +371,12 @@ private class ShellLink(private val ctx: android.content.Context, private val st
     } + "-" + ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime
     private var socket: Socket? = null
 
-    fun send(line: String) = worker.execute {
+    /** Sends [line]; [failed] runs (on this link's thread) if the helper could not be reached. */
+    fun send(line: String, failed: () -> Unit = {}) = worker.execute {
         try { write(line) } catch (_: Throwable) {
             try { socket?.close() } catch (_: Throwable) { }
             socket = null
-            try { write(line) } catch (t: Throwable) { status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") }
+            try { write(line) } catch (t: Throwable) { failed(); status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") }
         }
     }
 
