@@ -46,6 +46,19 @@ fun navigationApps(ctx: Context): String {
     }.toString()
 }
 
+private val MEDIA_NAME = Regex("music|radio|mediacenter|media[.]player|video|audio|podcast|tunes|tube|player|spotify|youtube|deezer|fizy|tidal|soundcloud", RegexOption.IGNORE_CASE)
+private val NOT_MEDIA = Regex("call|phone|dial|camera|gallery|photo", RegexOption.IGNORE_CASE)
+
+/** A music or video app by its declared category or its package/name (SmartTube is org.smarttube.beta). */
+fun isMediaApp(ctx: Context, pkg: String): Boolean {
+    val info = try { ctx.packageManager.getApplicationInfo(pkg, 0) } catch (_: Exception) { return false }
+    if (info.category == android.content.pm.ApplicationInfo.CATEGORY_AUDIO || info.category == android.content.pm.ApplicationInfo.CATEGORY_VIDEO) return true
+    val name = "$pkg ${appLabel(ctx, pkg)}"
+    return MEDIA_NAME.containsMatchIn(name) && !NOT_MEDIA.containsMatchIn(name)
+}
+
+fun isBluetoothApp(pkg: String) = pkg == "com.android.bluetooth" || pkg == "com.google.android.bluetooth"
+
 /**
  * Music and video apps for the music card when nothing is open: apps that call themselves audio or
  * video apps (Spotify, YouTube Music, YouTube, …), the car's own media (com.byd.mediacenter: radio,
@@ -58,17 +71,10 @@ fun mediaApps(ctx: Context, seen: Set<String> = emptySet()): JSONArray {
         .addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0).map { it.activityInfo.packageName }.toSet()
     val browsers = pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService"), 0)
         .map { it.serviceInfo.packageName }.toSet()
-    val mediaName = Regex("music|radio|mediacenter|media[.]player|video|audio|podcast|tunes|tube|player|spotify|youtube|deezer|fizy|tidal|soundcloud", RegexOption.IGNORE_CASE)
-    val notMedia = Regex("call|phone|dial|camera|gallery|photo", RegexOption.IGNORE_CASE)
-    fun isMedia(pkg: String): Boolean {
-        val info = try { pm.getApplicationInfo(pkg, 0) } catch (_: Exception) { return false }
-        if (info.category == android.content.pm.ApplicationInfo.CATEGORY_AUDIO || info.category == android.content.pm.ApplicationInfo.CATEGORY_VIDEO) return true
-        // Its package or its name (SmartTube is org.smarttube.beta), or it has played media before.
-        val name = "$pkg ${appLabel(ctx, pkg)}"
-        return pkg in seen || mediaName.containsMatchIn(name) && !notMedia.containsMatchIn(name)
-    }
+    // Also any app that has played media here (seen), whatever its name.
+    fun isMedia(pkg: String) = pkg in seen || isMediaApp(ctx, pkg)
     // Bluetooth isn't launchable but plays the phone through its media service.
-    val bluetooth = browsers.filter { it == "com.android.bluetooth" || it == "com.google.android.bluetooth" }
+    val bluetooth = browsers.filter(::isBluetoothApp)
     val pkgs = (launchable.filter(::isMedia) + bluetooth).distinct().filter { it != ctx.packageName }
     return JSONArray().apply {
         pkgs.forEach { put(JSONObject().put("pkg", it).put("app", if (it in bluetooth) "Bluetooth" else appLabel(ctx, it)).put("icon", appIconData(ctx, it) ?: JSONObject.NULL)) }
@@ -124,15 +130,17 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     // The last app that had a session, kept across restarts: when every app is closed the card still
     // shows it, and play starts it again (as Kinex does).
     private val prefs = ctx.getSharedPreferences("media", Context.MODE_PRIVATE)
-    private var last: String? = prefs.getString("last", null)
-    // Every app that has had a media session here, so it stays in the card's app list.
-    private val seen = HashSet(prefs.getStringSet("seen", emptySet()).orEmpty())
+    // (A non-media app saved before the session filter, such as the Google app, is dropped.)
+    private var last: String? = prefs.getString("last", null)?.takeIf { isMediaApp(ctx, it) || isBluetoothApp(it) }
+    // Every app that has played media here, so it stays in the card's app list. ("seen2": the first
+    // list also took apps whose session never played, such as the Google app.)
+    private val seen = HashSet(prefs.getStringSet("seen2", emptySet()).orEmpty())
     private var apps: JSONArray? = null
     private var artData: String? = null
 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { list -> use(list.orEmpty()) }
     private val callback = object : MediaController.Callback() {
-        override fun onMetadataChanged(metadata: MediaMetadata?) = send()
+        override fun onMetadataChanged(metadata: MediaMetadata?) { pickCurrent(); send() }
         override fun onPlaybackStateChanged(state: PlaybackState?) { pickCurrent(); send() }
         override fun onSessionDestroyed() = refresh()
     }
@@ -152,16 +160,28 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         }
     }
 
+    private var all: List<MediaController> = emptyList()
     private fun use(list: List<MediaController>) {
-        sessions.forEach { it.unregisterCallback(callback) }
-        sessions = list
-        sessions.forEach { it.registerCallback(callback, main) }
+        all.forEach { it.unregisterCallback(callback) }
+        all = list
+        all.forEach { it.registerCallback(callback, main) }
         pickCurrent()
         send()
     }
 
+    // The card's sessions: music, video and Bluetooth apps, and any other that has really played
+    // something (a title, or playing). An app's idle session (the Google app opens one at start)
+    // is left out.
+    private fun shown() {
+        sessions = all.filter { c ->
+            isBluetoothApp(c.packageName) || c.packageName in seen || isMediaApp(ctx, c.packageName) ||
+                !c.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank() || c.playbackState?.state == PlaybackState.STATE_PLAYING
+        }
+    }
+
     // The session the user chose, else the one playing, else the most recent one.
     private fun pickCurrent() {
+        shown()
         current = sessions.firstOrNull { it.packageName == chosen }
             ?: sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
             ?: sessions.firstOrNull()
@@ -228,7 +248,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private fun send() {
         val c = current
         if (c != null && c.packageName != last) { last = c.packageName; prefs.edit().putString("last", last).apply() }
-        if (sessions.any { seen.add(it.packageName) }) { prefs.edit().putStringSet("seen", HashSet(seen)).apply(); apps = null }
+        if (sessions.filter { !isBluetoothApp(it.packageName) }.any { seen.add(it.packageName) }) { prefs.edit().putStringSet("seen2", HashSet(seen)).apply(); apps = null }
         val out = JSONObject().put("access", true)
         // Nothing open: the last app. Always: the installed music apps, to start one from.
         if (c == null) last?.let { out.put("last", JSONObject().put("pkg", it).put("app", label(it)).put("icon", icon(it) ?: JSONObject.NULL)) }
@@ -284,6 +304,6 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     fun close() {
         browser?.disconnect()
         try { manager.removeOnActiveSessionsChangedListener(sessionsChanged) } catch (_: Exception) { }
-        sessions.forEach { it.unregisterCallback(callback) }
+        all.forEach { it.unregisterCallback(callback) }
     }
 }
