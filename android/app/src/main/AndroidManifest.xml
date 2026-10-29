@@ -30,6 +30,15 @@
     <uses-permission android:name="android.permission.BYDAUTO_TIME_COMMON" />
     <uses-permission android:name="android.permission.BYDAUTO_TYRE_COMMON" />
 
+    <!-- Android 11+ hides other apps unless declared: Yunus opens and embeds launchable apps
+         (Google Maps, YouTube, …). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:label="Yunus"
         android:icon="@mipmap/ic_launcher"
@@ -48,5 +57,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Lets Yunus read the media sessions for the music card (now playing and its controls);
+             no notifications are read. Enabled once by the owner in notification access. -->
+        <service
+            android:name=".MediaListener"
+            android:label="Yunus müzik kartı"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

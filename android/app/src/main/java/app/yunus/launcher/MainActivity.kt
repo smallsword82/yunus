@@ -52,6 +52,7 @@ class MainActivity : Activity() {
     private var carHal: CarHal? = null
     private lateinit var shell: ShellLink
     private lateinit var embed: AppEmbed
+    private lateinit var media: MediaBridge
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,6 +116,28 @@ class MainActivity : Activity() {
                 // Hides a slot while a Yunus card covers its area, and shows it again after.
                 @JavascriptInterface
                 fun embedVisible(slot: String, visible: Boolean) = runOnUiThread { embed.setVisible(slot, visible) }
+
+                // Music card: the page asks for now playing once it is ready ({media:{…}} follows
+                // on every change); play/pause/toggle/next/prev; pick a session; open its app;
+                // open the notification-access setting the media sessions need.
+                @JavascriptInterface
+                fun mediaRefresh() = runOnUiThread { media.refresh() }
+
+                @JavascriptInterface
+                fun media(cmd: String) = runOnUiThread { media.command(cmd) }
+
+                @JavascriptInterface
+                fun mediaChoose(pkg: String) = runOnUiThread { media.choose(pkg) }
+
+                @JavascriptInterface
+                fun mediaOpen() = runOnUiThread {
+                    media.currentPackage()?.let { pkg -> packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) } }
+                }
+
+                @JavascriptInterface
+                fun mediaAccess() = runOnUiThread {
+                    startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }
             }, "YunusNative")
             webChromeClient = object : WebChromeClient() { // alert/confirm/prompt dialogs
                 // The page is our own asset, so its location requests are allowed without a prompt
@@ -131,6 +154,7 @@ class MainActivity : Activity() {
         val root = android.widget.FrameLayout(this).apply { addView(web) }
         shell = ShellLink(this) { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }
         embed = AppEmbed(this, root, shell)
+        media = MediaBridge(this, ::postToPage)
         setContentView(root)
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)
@@ -179,9 +203,10 @@ class MainActivity : Activity() {
         web.saveState(outState)
     }
 
-    override fun onResume() { super.onResume(); web.onResume() }
+    // Back from the notification-access setting, the music card may now read the media sessions.
+    override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
     override fun onPause() { web.onPause(); super.onPause() }
-    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); web.destroy(); super.onDestroy() }
 
     private fun postToPage(message: String) {
         runOnUiThread {
@@ -208,7 +233,8 @@ private class AppEmbed(private val activity: Activity, private val root: android
 
     /** Shows [packages]' first installed app in slot [name] at x,y size w×h (screen pixels). */
     fun show(name: String, packages: List<String>, x: Int, y: Int, w: Int, h: Int, onReady: (Int) -> Unit) {
-        val launch = packages.firstNotNullOfOrNull { activity.packageManager.getLaunchIntentForPackage(it)?.component } ?: return
+        // -1: none of the apps is installed, so the page keeps its own content there.
+        val launch = packages.firstNotNullOfOrNull { activity.packageManager.getLaunchIntentForPackage(it)?.component } ?: return onReady(-1)
         val slot = slots.getOrPut(name) {
             Slot(android.view.TextureView(activity)).also { s ->
                 root.addView(s.view)

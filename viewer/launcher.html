@@ -599,7 +599,7 @@ button { font-family:inherit; color:inherit; }
           <div class="mm"><div class="art" id="mmArt"></div>
             <div style="flex:1;min-width:0"><b id="mmTitle" style="cursor:pointer">Sahil Yolu</b><span id="mmSub">Örnek Sanatçı</span>
               <div class="bar"><div id="mmProg"></div></div>
-              <div class="ctl"><button><i class="ti ti-player-skip-back"></i></button><button id="mmPlay"><i class="ti ti-player-play"></i></button><button><i class="ti ti-player-skip-forward"></i></button></div>
+              <div class="ctl"><button id="mmPrev"><i class="ti ti-player-skip-back"></i></button><button id="mmPlay"><i class="ti ti-player-play"></i></button><button id="mmNext"><i class="ti ti-player-skip-forward"></i></button></div>
             </div></div></div>
         <div class="cc"><h4>Enerji <b id="enNow">0 kW · — Wh/km</b></h4>
           <canvas id="enChart" width="620" height="130" style="width:100%;height:96px"></canvas>
@@ -1686,7 +1686,17 @@ function mediaArt(cls) {
   return x.art ? `<div class="${cls}" style="background:${x.art}"><i class="ti ti-music"></i></div>`
     : `<div class="${cls} fallback"><i class="ti ti-${x.icon}"></i></div>`;
 }
+// On the car (and any Android) the card shows the real now playing from the apps' media sessions,
+// sent by the app as {media:{…}} (see MediaBridge); the SOURCES above are the desktop demo.
+let liveMedia = null;
+const appLook = (pkg = '') => /spotify/.test(pkg) ? { icon: 'brand-spotify', color: '#1db954' }
+  : /youtube\.music/.test(pkg) ? { icon: 'brand-youtube', color: '#e5484d' }
+  : /youtube/.test(pkg) ? { icon: 'brand-youtube', color: '#ff0033' }
+  : /byd\.media|radio/.test(pkg) ? { icon: 'radio', color: '#e0832f' }
+  : { icon: 'music', color: '#5f6670' };
+const livePos = () => Math.min(liveMedia.dur || Infinity, liveMedia.pos + (liveMedia.playing ? performance.now() - liveMedia.at : 0));
 function renderMedia() {
+  if (liveMedia) return renderLiveMedia();
   const x = srcNow();
   $('srcBtn').innerHTML = `<i class="ti ti-${x.icon}" style="color:${x.color}"></i>${x.name}<i class="ti ti-chevron-down"></i>`;
   $('mmArt').outerHTML = mediaArt('art').replace('<div class="art', '<div id="mmArt" class="art');
@@ -1694,7 +1704,27 @@ function renderMedia() {
   $('mmSub').textContent = x.sub;
   $('mmProg').parentElement.style.visibility = x.live ? 'hidden' : '';
 }
+function renderLiveMedia() {
+  const m = liveMedia, look = appLook(m.pkg);
+  const label = !m.access ? 'İzin gerekli' : m.pkg ? m.app : 'Medya';
+  $('srcBtn').innerHTML = `<i class="ti ti-${m.access ? look.icon : 'lock'}" style="color:${m.access ? look.color : 'var(--mu)'}"></i>${label}<i class="ti ti-chevron-down"></i>`;
+  $('mmArt').outerHTML = m.art
+    ? `<div id="mmArt" class="art" style="background:url('${m.art}') center/cover"></div>`
+    : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`;
+  $('mmTitle').textContent = !m.access ? 'Müzik kartı için bildirim erişimi ver' : m.pkg ? (m.title || m.app) : 'Çalan bir şey yok';
+  $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (m.artist || m.album || '') : '';
+  $('mmPlay').innerHTML = `<i class="ti ti-player-${m.playing ? 'pause' : 'play'}"></i>`;
+  $('mmProg').parentElement.style.visibility = m.dur > 0 ? '' : 'hidden'; // radio has no length
+  if (m.dur > 0) $('mmProg').style.width = (livePos() / m.dur * 100) + '%';
+}
 function openSrcPop() {
+  if (liveMedia && liveMedia.access) {
+    // The apps with a media session; picking one makes the card follow and control it.
+    const list = liveMedia.sessions || [];
+    $('srcPop').innerHTML = list.length ? list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${look.color}"><i class="ti ti-${look.icon}"></i></div>
+      <span>${x.app}<small>${x.title || ''}${x.playing ? ' · çalıyor' : ''}</small></span>${x.pkg === liveMedia.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`; }).join('')
+      : '<button disabled><span>Açık medya uygulaması yok<small>Spotify, YouTube Music ya da radyoyu başlat</small></span></button>';
+  } else
   $('srcPop').innerHTML = SOURCES.map((x) => `<button data-src="${x.id}"><div class="ic" style="background:${x.color}"><i class="ti ti-${x.icon}"></i></div>
     <span>${x.name}<small>${x.title} · ${x.sub}</small></span>${x.id === S.src ? '<i class="ti ti-check"></i>' : ''}</button>`).join('');
   const r = $('srcBtn').getBoundingClientRect(), s = stage.getBoundingClientRect();
@@ -1705,6 +1735,8 @@ function openSrcPop() {
 $('srcBtn').addEventListener('pointerdown', (e) => e.stopPropagation()); // not a card swipe
 $('srcBtn').onclick = (e) => { e.stopPropagation(); $('srcPop').classList.contains('show') ? $('srcPop').classList.remove('show') : openSrcPop(); };
 $('srcPop').onclick = (e) => {
+  const p = e.target.closest('[data-pkg]');
+  if (p) { YunusNative.mediaChoose(p.dataset.pkg); $('srcPop').classList.remove('show'); return; }
   const b = e.target.closest('[data-src]'); if (!b) return;
   S.src = b.dataset.src;
   try { localStorage.setItem('src', S.src); } catch {}
@@ -1714,12 +1746,26 @@ $('srcPop').onclick = (e) => {
 };
 document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#srcPop,#srcBtn')) $('srcPop').classList.remove('show'); });
 renderMedia();
-$('mmTitle').onclick = () => openCard('music');
-$('mmPlay').onclick = () => { S.playing = !S.playing; $('mmPlay').innerHTML = `<i class="ti ti-player-${S.playing ? 'pause' : 'play'}"></i>`; };
+// Live: the title opens the playing app (or, without access, the access setting); the buttons
+// control the session. Demo: as before.
+$('mmTitle').onclick = () => {
+  if (!liveMedia) return openCard('music');
+  if (!liveMedia.access) YunusNative.mediaAccess(); else YunusNative.mediaOpen();
+};
+$('mmPlay').onclick = () => {
+  if (liveMedia) return liveMedia.access ? YunusNative.media('toggle') : YunusNative.mediaAccess();
+  S.playing = !S.playing; $('mmPlay').innerHTML = `<i class="ti ti-player-${S.playing ? 'pause' : 'play'}"></i>`;
+};
+$('mmPrev').onclick = () => liveMedia && liveMedia.access && YunusNative.media('prev');
+$('mmNext').onclick = () => liveMedia && liveMedia.access && YunusNative.media('next');
+if (window.YunusNative && YunusNative.mediaRefresh) YunusNative.mediaRefresh(); // first now playing
 let mmPos = 84;
 function updateCards() {
-  if (S.playing) mmPos = (mmPos + 0.5) % 238;
-  $('mmProg').style.width = (mmPos / 238 * 100) + '%';
+  if (liveMedia) { if (liveMedia.dur > 0) $('mmProg').style.width = (livePos() / liveMedia.dur * 100) + '%'; }
+  else {
+    if (S.playing) mmPos = (mmPos + 0.5) % 238;
+    $('mmProg').style.width = (mmPos / 238 * 100) + '%';
+  }
   // Energy: instant power and consumption, plus the recent consumption trace.
   const whkm = S.speed > 3 ? Math.round(S.powerKw * 1000 / S.speed) : null;
   $('enNow').textContent = `${Math.round(S.powerKw)} kW · ${whkm === null ? '—' : whkm} Wh/km`;
@@ -3123,7 +3169,12 @@ window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
   // simulation active until a validated telemetry field reaches this API.
   if (m.bridge) { window.YunusBridgeStatus = m.bridge; return; }
-  if (m.embed) { (window.YunusEmbed = window.YunusEmbed || {})[m.embed.slot] = m.embed.display; return; }
+  if (m.embed) {
+    (window.YunusEmbed = window.YunusEmbed || {})[m.embed.slot] = m.embed.display;
+    if (m.embed.slot === 'map' && m.embed.display < 0) mapEmbedFailed(); // Maps not installed
+    return;
+  }
+  if (m.media) { liveMedia = { ...m.media, at: performance.now() }; renderMedia(); return; }
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
     if (/yok|durdu/.test(m.embedStatus)) mapEmbedFailed(); // the shell helper could not run
