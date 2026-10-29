@@ -20,7 +20,8 @@ Araç verisi canlı okunuyor, Google Maps harita alanının içinde çalışıyo
 | Kilit, kör nokta | ❌ okunamıyor (BYD imzalı cihazlar) |
 | Google Maps harita alanında | ✅ otomatik açılıyor, dokunma/kaydırma çalışıyor |
 | Ayarlar | ✅ araba butonu → aracın ayarları; basılı tut → Yunus ayarları |
-| Müzik kartı (medya oturumları) | ✅ emülatörde YouTube Music + YouTube ile doğrulandı; araçta radyo ile denenecek |
+| Müzik kartı (medya oturumları) | ✅ emülatörde YouTube Music + YouTube ile doğrulandı (kapak, ikon, sarma, kaynak seçici); araçta radyo/Bluetooth/Spotify denenecek |
+| Ses (dock) | ✅ sistem medya sesine bağlı, parmakla kaydırma — emülatörde doğrulandı, araçta denenecek |
 
 ## Bilinmesi gerekenler
 
@@ -60,7 +61,13 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
    geliyor mu — kod hazır, araçta görülmedi.
 3. **Sürüş kaydı:** hız (motor devrinden hesap, göstergeyle kalibre), pil %, tüketim, ICC, hız
    tabelası, vites değişimi.
-4. İsteğe bağlı: küçük gömülü pencerelerde düşük dpi (içerik sığsın).
+4. **Klimayı Yunus'tan kontrol (fikir, denenmedi):** BYD klima uygulamasını
+   (`com.byd.airconditioning/.mainactivity.FullScreenMainActivity`) 1920×1080'lik **görünmez** bir
+   Yunus sanal ekranında aç ve ShellHelper'ın dokunma enjeksiyonuyla oradaki düğmelere bas
+   (OFF ≈ 415,267; sıcaklık sütunları solda/sağda; fan çubuğu ≈ 720–1200,905 — araç ekran
+   görüntüsünden). Yardımcının kapsamı içinde kalır (sadece Yunus'un ekranı). Kırılgan olabilir.
+5. **Bluetooth müzik:** araçta telefon bağlıyken müzik kartında görünmeli (medya oturumu).
+6. İsteğe bağlı: küçük gömülü pencerelerde düşük dpi (içerik sığsın).
 
 ## Çalışma ortamı
 
