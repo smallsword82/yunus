@@ -760,7 +760,7 @@ button { font-family:inherit; color:inherit; }
 
   <!-- Third column: an app window kept off-screen until pulled out from the right edge -->
   <section id="sidePanel">
-    <div class="sideHead"><button id="sideBack" aria-label="Geri" style="display:none"><i class="ti ti-arrow-left"></i></button><span id="sideTitle">Uygulamalar</span></div>
+    <div class="sideHead"><button id="sideBack" aria-label="Geri" style="display:none"><i class="ti ti-arrow-left"></i></button><span id="sideTitle">Uygulamalar</span><button id="sideClose" aria-label="Uygulamayı kapat" style="display:none;margin-left:auto"><i class="ti ti-x"></i></button></div>
     <div id="sideApps"></div>
     <div id="sideApp"></div>
   </section>
@@ -3189,6 +3189,7 @@ function openSidePkg(pkg) {
   $('sidePanel').classList.add('appOpen');
   $('sideTitle').textContent = a ? a.app : pkg;
   $('sideBack').style.display = '';
+  $('sideClose').style.display = '';
   $('sideApp').innerHTML = '';
   requestAnimationFrame(embedSide);
 }
@@ -3206,6 +3207,7 @@ function closeSideApp() {
   $('sidePanel').classList.remove('appOpen');
   $('sideTitle').textContent = 'Uygulamalar';
   $('sideBack').style.display = 'none';
+  $('sideClose').style.display = 'none';
 }
 // ---------- editable dock apps ----------
 // What can sit in the dock: the built-in cards and every installed app (apps open in the side
@@ -3334,6 +3336,11 @@ $('sideApps').onclick = (e) => {
   const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp);
 };
 $('sideBack').onclick = closeSideApp;
+// The X closes the app itself (the back arrow only returns to the list and leaves it running).
+$('sideClose').onclick = () => {
+  if (sidePkg) { YunusNative.embedClose('side'); sidePkg = null; }
+  closeSideApp();
+};
 $('sideHandle').onpointerdown = (e) => {
   sideDrag = { x: e.clientX, w: sideW };
   try { $('sideHandle').setPointerCapture(e.pointerId); } catch {}

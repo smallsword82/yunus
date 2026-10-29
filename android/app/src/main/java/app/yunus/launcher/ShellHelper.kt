@@ -18,6 +18,7 @@ import java.net.Socket
  * listens on 127.0.0.1 only and serves a connection only after it sends the token Yunus passed
  * on the command line. One request per line:
  *   launch <display> <package>/<activity>              start that activity on the display
+ *   close <display>                                     close the apps running on the display
  *   t <display> <action> <id> <x> <y> [<id> <x> <y> …]   inject a touch event into the display
  */
 object ShellHelper {
@@ -51,6 +52,7 @@ object ShellHelper {
                 when (fields[0]) {
                     "t" -> injector.touch(display, fields.drop(2))
                     "launch" -> launch(display, fields.getOrNull(2) ?: continue)
+                    "close" -> close(display)
                 }
             } catch (t: Throwable) { System.err.println("$line: $t") } // goes to the helper's log file
         }
@@ -64,6 +66,13 @@ object ShellHelper {
         ProcessBuilder("am", "force-stop", component.substringBefore('/')).inheritIO().start().waitFor()
         ProcessBuilder("am", "start", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
         keepOnDisplay(display, component.substringBefore('/'))
+    }
+
+    // The window's close button: every task on that display (only Yunus's own) is removed, as
+    // swiping an app away in recents does; the next launch starts the app afresh.
+    private fun close(display: Int) {
+        synchronized(watching) { watching.remove(display) }
+        for ((task, onDisplay, _) in Tasks.roots()) if (onDisplay == display) Tasks.remove(task)
     }
 
     // Some apps start over in a new task right after launch (Chrome's restart, splash screens,
@@ -171,6 +180,8 @@ private object Tasks {
             Triple(field(info, "stackId") as Int, field(info, "displayId") as Int, (names + listOfNotNull(pkgOf(field(info, "topActivity")))).toSet())
         }
     }
+
+    fun remove(id: Int) { atm.javaClass.getMethod("removeTask", Int::class.javaPrimitiveType).invoke(atm, id) }
 
     fun move(id: Int, display: Int) {
         val m = atm.javaClass.methods.firstOrNull { it.name == "moveRootTaskToDisplay" }

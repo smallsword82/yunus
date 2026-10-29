@@ -132,6 +132,10 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun embedVisible(slot: String, visible: Boolean) = runOnUiThread { embed.setVisible(slot, visible) }
 
+                // Closes the app running in a slot (the third window's close button).
+                @JavascriptInterface
+                fun embedClose(slot: String) = runOnUiThread { embed.closeApp(slot) }
+
                 // Music card: the page asks for now playing once it is ready ({media:{…}} follows
                 // on every change); play/pause/toggle/next/prev; pick a session; open its app;
                 // open the notification-access setting the media sessions need.
@@ -385,6 +389,15 @@ private class AppEmbed(private val activity: Activity, private val root: android
             // Keep the texture (and so the display's surface) across a pause.
             override fun onSurfaceTextureDestroyed(t: android.graphics.SurfaceTexture) = false
         }
+    }
+
+    /** Closes the app in slot [name]: its tasks on the display go, the view hides, and the next
+     *  show() launches it afresh. */
+    fun closeApp(name: String) {
+        val slot = slots[name] ?: return
+        if (slot.displayId > 0) shell.send("close ${slot.displayId}")
+        slot.component = null
+        slot.view.visibility = android.view.View.GONE
     }
 
     fun setVisible(name: String, visible: Boolean) {
