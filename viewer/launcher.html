@@ -123,13 +123,18 @@ input { user-select:text; -webkit-user-select:text; }
 /* Portrait (the Dolphin's screen turned upright, 1080×1920): the windows stack, car on top, then
    the map, the third window and the dock. The same sizes (--carW, --sideW) become heights and the
    handles lie across; the dock takes two rows (climate, then apps and volume). */
-#stage.portrait { width:1080px; height:1920px; grid-template-columns:1fr; grid-template-rows:var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 224px;
+#stage.portrait { width:1080px; height:1920px; grid-template-columns:1fr; grid-template-rows:48px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 224px;
   transition:grid-template-rows .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait.dragging { transition:none; }
-#stage.portrait #carPanel { grid-row:1; grid-column:1; }
-#stage.portrait #mapWrap { grid-row:2; grid-column:1; min-height:0; }
-#stage.portrait #sidePanel { grid-row:3; grid-column:1; border-left:0; border-top:1px solid var(--cd); }
-#stage.portrait #dock { grid-row:4; grid-column:1; flex-wrap:wrap; align-content:center; padding:6px 20px; }
+/* The status bar (time, temperature, Wi-Fi, cellular) runs across the top of the screen upright;
+   in landscape it sits over the map, as in Tesla. fit() moves the element between the two. */
+#stage.portrait #topBar { grid-row:1; grid-column:1; position:relative; border-bottom:1px solid var(--cd); }
+#stage.portrait #carPanel { grid-row:2; grid-column:1; }
+#stage.portrait #mapWrap { grid-row:3; grid-column:1; min-height:0; }
+#stage.portrait #map { top:0; }
+#stage.portrait #mapWrap > .floating { margin-top:-48px; } /* the map's controls had room for the bar */
+#stage.portrait #sidePanel { grid-row:4; grid-column:1; border-left:0; border-top:1px solid var(--cd); }
+#stage.portrait #dock { grid-row:5; grid-column:1; flex-wrap:wrap; align-content:center; padding:6px 20px; }
 #stage.portrait #dock .sepBreak { flex-basis:100%; height:0; margin:4px 0; border:0; }
 /* Upright: climate and seats on the top row (passenger seat included), then the car button, the
    apps and the volume on the bottom row. */
@@ -140,7 +145,7 @@ input { user-select:text; -webkit-user-select:text; }
    car button a right margin as wide as the volume keys, so the apps sit at the centre). */
 #stage.portrait #dock > .sep:not(.sepBreak) { display:none; }
 #stage.portrait #dock > #dockApps, #stage.portrait #dock > #vDn { margin-left:auto; } /* over the 8 px key gap */
-#stage.portrait #divider { left:0; right:0; width:auto; height:36px; bottom:auto; top:calc(var(--carW, 720px) - 18px); cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
+#stage.portrait #divider { left:0; right:0; width:auto; height:36px; bottom:auto; top:calc(var(--carW, 720px) + 30px); cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait #sideHandle { left:0 !important; right:0; width:auto; height:36px; bottom:auto; cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait.dragging #divider, #stage.portrait.dragging #sideHandle { transition:none; }
 #stage.portrait #divider div, #stage.portrait #sideHandle div { width:110px; height:8px; }
@@ -1157,6 +1162,9 @@ function fit() {
   if (portrait !== PORTRAIT) {
     PORTRAIT = portrait;
     stage.classList.toggle('portrait', portrait);
+    // The status bar: across the top upright, over the map in landscape.
+    const bar = document.getElementById('topBar'), wrap = document.getElementById('mapWrap');
+    if (portrait) stage.insertBefore(bar, stage.firstChild); else wrap.insertBefore(bar, wrap.firstChild);
     try { relayout(); } catch {} // not yet on the first fit: the layout code is set up later
   }
   // Revealed only once the correct scale is applied, so the stage never flashes at the wrong
@@ -2038,7 +2046,7 @@ let lastFrame = performance.now(), cardsAt = 0;
 // The sizes run along the screen's long side: widths in landscape, heights in portrait (where the
 // dock's two rows take 224 px of the 1920).
 const CAR_W = 720;
-const LEN = () => (PORTRAIT ? 1920 - 224 : 1920);
+const LEN = () => (PORTRAIT ? 1920 - 224 - 48 : 1920); // upright: less the dock's two rows and the status bar
 const THIRDS = () => (PORTRAIT ? Math.round(LEN() / 3) : 640);
 const axisPos = (e) => (PORTRAIT ? e.clientY : e.clientX);
 let carW = CAR_W, colDrag = null;
@@ -3255,7 +3263,7 @@ function setSideW(w, animate) {
 }
 // The side window's handle sits on its left edge, but never on top of the car column's handle.
 function placeHandles() {
-  const at = Math.max(carW + 18, LEN() - sideW - 36) + 'px';
+  const at = Math.max(carW + 18, LEN() - sideW - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
   $('sideHandle').style.left = PORTRAIT ? '' : at;
   $('sideHandle').style.top = PORTRAIT ? at : '';
 }
