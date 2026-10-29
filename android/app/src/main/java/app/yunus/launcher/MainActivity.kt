@@ -74,11 +74,30 @@ class MainActivity : Activity() {
             // native 1920x1080 with devicePixelRatio 1 — no stage scaling, nothing to composite down.
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
+            settings.setGeolocationEnabled(true) // the map follows the car's GPS
             addJavascriptInterface(object {
                 @JavascriptInterface
                 fun status(): String = halBridge.statusJson()
             }, "YunusBridge")
-            webChromeClient = WebChromeClient() // alert/confirm/prompt dialogs
+            addJavascriptInterface(object {
+                // Opens one of the car's own screens, given as "package/.Activity".
+                @JavascriptInterface
+                fun open(component: String): Boolean = try {
+                    val name = android.content.ComponentName.unflattenFromString(component) ?: return false
+                    startActivity(android.content.Intent().setComponent(name).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    true
+                } catch (_: Throwable) { false }
+
+                // Commands to the car need BYD's signature permissions, which this app cannot hold.
+                @JavascriptInterface
+                fun command(json: String) {}
+            }, "YunusNative")
+            webChromeClient = object : WebChromeClient() { // alert/confirm/prompt dialogs
+                // The page is our own asset, so its location requests are allowed without a prompt
+                // (the app-level location permission is asked once at start).
+                override fun onGeolocationPermissionsShowPrompt(origin: String, callback: android.webkit.GeolocationPermissions.Callback) =
+                    callback.invoke(origin, true, false)
+            }
             webViewClient = object : WebViewClientCompat() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     assetLoader.shouldInterceptRequest(request.url)
@@ -101,7 +120,7 @@ class MainActivity : Activity() {
 
     private fun requestCarPermissions() {
         try {
-            val want = CAR_COMMON_PERMS.filter {
+            val want = (CAR_COMMON_PERMS + android.Manifest.permission.ACCESS_FINE_LOCATION).filter {
                 checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
             }
             if (want.isNotEmpty()) requestPermissions(want.toTypedArray(), 1)

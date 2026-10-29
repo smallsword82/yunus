@@ -34,6 +34,9 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 <link href="vendor/maplibre/maplibre-gl.css" rel="stylesheet">
 <link href="vendor/tabler/tabler-icons.min.css" rel="stylesheet">
 <style>
+/* No tap highlight or focus ring on touch: the WebView drew an orange frame round pressed buttons. */
+* { -webkit-tap-highlight-color: transparent; }
+:focus { outline: none; }
 /* The car's WebView is Chromium 74, which ignores `gap` on flex containers (flexbox gap needs
    Chrome 84), so item spacing collapsed and text/icons looked cramped. Re-create each flex
    container's gap with sibling margins. Kept at the top of the sheet on purpose, so the real
@@ -77,7 +80,7 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 .tyres > * + * { margin-left:60px; }
 .player > * + * { margin-left:40px; }
 .app > * + * { margin-top:10px; }
-#dock > * + * { margin-left:14px; }
+#dock > * + * { margin-left:12px; }
 #dockApps > * + * { margin-left:14px; }
 #dockPick button > * + * { margin-top:8px; }
 .tempCtl > * + * { margin-left:2px; }
@@ -450,7 +453,7 @@ button { font-family:inherit; color:inherit; }
 .app div { width:84px; height:84px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:44px; color:#fff; }
 
 /* dock */
-#dock { grid-column:1 / 4; display:flex; align-items:center; padding:0 28px; gap:14px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
+#dock { grid-column:1 / 4; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
 .dk:hover { background:var(--cd); }
 .dk.on { background:var(--cd); }
@@ -475,8 +478,10 @@ button { font-family:inherit; color:inherit; }
 #dockPick p { grid-column:1/-1; margin:0; font-size:18px; color:var(--mu); }
 .dkApp div { width:72px; height:72px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; color:#fff; }
 .tempCtl { display:flex; align-items:center; gap:2px; }
-.tempCtl .dk { width:60px; font-size:36px; color:var(--mu); }
+.tempCtl .dk { width:48px; font-size:36px; color:var(--mu); }
 .tempCtl b { font-size:40px; font-weight:400; min-width:110px; text-align:center; cursor:pointer; }
+#fanCtl b { min-width:76px; display:flex; align-items:center; justify-content:center; }
+#fanCtl b i { font-size:30px; margin-left:4px; color:var(--mu); }
 .sep { flex:1; }
 /* Seat climate and defrost in the dock (Tesla: tap a seat to step the heat, hold for the full set) */
 /* Climate keys (seats, demisters, air direction): raised tiles with a soft top highlight; a key
@@ -684,9 +689,15 @@ button { font-family:inherit; color:inherit; }
       <b id="tVal" data-card="climate">22.0°</b>
       <button class="dk" id="tUp" aria-label="Sıcaklığı artır"><i class="ti ti-chevron-right"></i></button>
     </div>
+    <div class="tempCtl" id="fanCtl">
+      <button class="dk" id="fDn" aria-label="Fanı azalt"><i class="ti ti-chevron-left"></i></button>
+      <b id="fVal" data-card="climate">0<i class="ti ti-propeller"></i></b>
+      <button class="dk" id="fUp" aria-label="Fanı artır"><i class="ti ti-chevron-right"></i></button>
+    </div>
     <button class="dk clim seatDk" data-seatdk="driver" aria-label="Sürücü koltuğu (basılı tut: tüm seçenekler)"></button>
     <button class="dk clim" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5C8 5.5 16 5.5 21.5 8.5L19 19H5z"/><path d="M8.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M12 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M15.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4"/></svg></button>
     <button class="dk clim" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
+    <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="14" r="7.5"/><circle cx="10.5" cy="14" r="2"/><path d="M3 13h5.5M12.5 13H18M10.5 16v5.5"/><path d="M17 2.5c-.8 1 .8 2 0 3s.8 2 0 3M20.5 2.5c-.8 1 .8 2 0 3s.8 2 0 3"/></svg></button>
     <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
     <div class="sep"></div>
     <div id="dockApps"></div>
@@ -2277,14 +2288,34 @@ function buildMap() {
     });
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
-    new maplibregl.Marker({ element: me }).setLngLat(CENTER).addTo(map);
+    meMarker = new maplibregl.Marker({ element: me }).setLngLat(myPos || CENTER).addTo(map);
+    if (myPos) map.jumpTo({ center: myPos });
     const dest = document.createElement('div');
     dest.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
-    new maplibregl.Marker({ element: dest }).setLngLat(ROUTE[ROUTE.length - 1]).addTo(map);
+    destMarker = new maplibregl.Marker({ element: dest }).setLngLat(ROUTE[ROUTE.length - 1]).addTo(map);
+    if (myPos) { dropDemoRoute(); map.once('load', dropDemoRoute); }
   } catch (e) { console.warn('map failed', e); }
 }
 setTimeout(startMap, 8000);
-$('recenter').onclick = () => map && map.easeTo({ center: CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
+$('recenter').onclick = () => map && map.easeTo({ center: myPos || CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
+// The car's GPS (through the WebView's geolocation): the position marker follows it and the map
+// moves to the first fix. Without a fix (desktop preview) the demo position stays.
+let myPos = null, meMarker = null, destMarker = null;
+// The Kadıköy route is demo content; with a real position it would only mislead.
+function dropDemoRoute() {
+  $('navCard').style.display = 'none';
+  if (destMarker) { destMarker.remove(); destMarker = null; }
+  if (map && map.getLayer('route')) map.setLayoutProperty('route', 'visibility', 'none');
+}
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition((p) => {
+    const first = !myPos;
+    myPos = [p.coords.longitude, p.coords.latitude];
+    if (meMarker) meMarker.setLngLat(myPos);
+    if (first && map) map.jumpTo({ center: myPos });
+    if (first) dropDemoRoute();
+  }, (e) => console.warn('location', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
+}
 
 // Street map or satellite. Satellite hides the street style's fills and lines (keeping its
 // labels and the route) and turns off the dark-mode invert filter, which would ruin the photo.
@@ -2786,11 +2817,42 @@ body.addEventListener('input', (e) => {
 });
 
 // ---------- dock ----------
+// On the car the climate is shown from the car's own values; Yunus cannot command it (that needs
+// BYD's signature), so a tap on the car opens its climate screen instead.
+const AC_SCREEN = 'com.byd.airconditioning/.mainactivity.FullScreenMainActivity';
+function renderTemp() { // with the climate off the set temperature stays, dimmed (as on Tesla)
+  $('tVal').textContent = S.temp.toFixed(1) + '°';
+  $('tVal').style.opacity = S.ac === false ? 0.35 : '';
+}
 function setTemp(v, fromCar) {
-  if (S.live && !fromCar) return carCmd('acTemp', { value: Math.min(30, Math.max(16, v)) });
-  S.temp = Math.min(30, Math.max(16, v)); $('tVal').textContent = S.temp.toFixed(1) + '°'; seatAuto(); if (current === 'climate') refreshCard(); }
+  if (S.live && !fromCar) return openCarApp(AC_SCREEN);
+  S.temp = Math.min(30, Math.max(16, v)); renderTemp(); seatAuto(); if (current === 'climate') refreshCard(); }
 $('tUp').onclick = () => setTemp(S.temp + 0.5);
 $('tDn').onclick = () => setTemp(S.temp - 0.5);
+// Hold the temperature to switch the climate off and on, as on Tesla. A hold does not also open
+// the climate card that a tap opens.
+let tHold = 0, tHeld = false;
+$('tVal').addEventListener('pointerdown', () => {
+  tHeld = false;
+  tHold = setTimeout(() => {
+    tHeld = true;
+    if (S.live) return openCarApp(AC_SCREEN);
+    S.ac = S.ac === false; renderTemp(); if (current === 'climate') refreshCard();
+  }, 600);
+});
+['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $('tVal').addEventListener(ev, () => clearTimeout(tHold)));
+$('tVal').addEventListener('click', (e) => { if (tHeld) { tHeld = false; e.stopPropagation(); } }, true);
+// Fan speed 0-7, 0 is off (as the car's own bar).
+function setFan(v, fromCar) {
+  if (S.live && !fromCar) return openCarApp(AC_SCREEN);
+  S.fan = Math.min(7, Math.max(0, v));
+  $('fVal').innerHTML = `${S.fan}<i class="ti ti-propeller"></i>`;
+  $('fVal').style.opacity = S.fan === 0 ? 0.35 : ''; // off, dimmed like the temperature
+  if (current === 'climate') refreshCard();
+}
+$('fUp').onclick = () => setFan(S.fan + 1);
+$('fDn').onclick = () => setFan(S.fan - 1);
+setFan(S.fan, true); // initial value
 
 // Seat climate, two levels each (the Dolphin's seats have two). Tap a seat: heat 2 → 1 → off. Hold it: a panel with heating,
 // ventilation and Auto. Auto (Tesla's Auto Seat Climate) picks heat or ventilation from how far
@@ -2896,6 +2958,7 @@ let preDefrost = null, rearTimer = 0;
 function renderDefrost() {
   $('defFront').classList.toggle('lit', S.defrost);
   $('defRear').classList.toggle('lit', S.rearDefrost);
+  $('wheelHeat').classList.toggle('lit', !!S.wheelHeat);
   renderAirFlow();
 }
 // Air direction: a seated figure with an arrow to the face, the feet and the windscreen; the
@@ -2923,6 +2986,13 @@ $('defFront').onclick = () => {
   else if (preDefrost) { S.flow = preDefrost.flow; S.fan = preDefrost.fan; S.ac = preDefrost.ac; }
   renderDefrost();
   if (current === 'climate') refreshCard();
+};
+// Heated steering wheel. On the car Yunus can read it but not switch it (that needs BYD's own
+// signature), so a tap opens the car's climate screen where it is switched.
+$('wheelHeat').onclick = () => {
+  if (S.live) return openCarApp('com.byd.airconditioning/.mainactivity.FullScreenMainActivity');
+  S.wheelHeat = !S.wheelHeat;
+  renderDefrost();
 };
 $('defRear').onclick = () => {
   S.rearDefrost = !S.rearDefrost;
@@ -2971,6 +3041,8 @@ S.live = false;
 const carCmd = (cmd, args = {}) => {
   if (window.YunusNative) YunusNative.command(JSON.stringify({ cmd, ...args }));
 };
+// Opens one of the car's own screens ("package/.Activity").
+const openCarApp = (component) => window.YunusNative && YunusNative.open(component);
 function setBattery(soc, range) {
   if (soc != null) { $('socTxt').textContent = Math.round(soc) + '%'; $('socBar').style.width = soc + '%'; }
   if (range != null) $('rangeTxt').textContent = Math.round(range) + ' km';
@@ -2984,19 +3056,40 @@ function pushSeats() { // a seat changed on screen: tell the car, unless the car
   }
 }
 let liveRefreshAt = 0;
-// CarHal event (device + type) -> telemetry message for window.yunusCar.
+// CarHal event (device + type) -> telemetry message for window.yunusCar. Ids and values come from
+// the car's own framework (BYDAutoFeatureIds, CAN-FD build; value constants of each device class),
+// see bridge/bydauto_feature_ids.json; names are given next to each.
 const CAR_HAL_MAP = {
+  // INSTRUMENT_DD_*_DOOR_STATE (DOOR_STATE_OPEN 1). The body device that owns the door switches
+  // needs a BYD-signed permission; the cluster's door-ajar mirror does not.
   'Instrument 0x26100014': (v) => ({ doors: { FL: v === 1 } }),
-  'Instrument 0x26100016': (v) => ({ doors: { FR: v === 1 } }),
-  'Instrument 0x26100018': (v) => ({ doors: { RL: v === 1 } }),
+  'Instrument 0x26100015': (v) => ({ doors: { FR: v === 1 } }),
+  'Instrument 0x26100016': (v) => ({ doors: { RL: v === 1 } }),
   'Instrument 0x26100017': (v) => ({ doors: { RR: v === 1 } }),
-  'Instrument 0x26100015': (v) => ({ trunk: v === 1 }),
-  // Headlight switch position: 1 off, 2 parking lights, 3 auto, 4 low beam.
+  'Instrument 0x26100018': (v) => ({ trunk: v === 1 }), // LUGGAGE_DOOR_STATE
+  // LIGHT_KNOB_CURRENT_GEAR: 1 off, 2 parking lights, 3 auto, 4 low beam.
   'Light 0x13300023': (v) => ({ lights: ['off', 'park', 'auto', 'on'][v - 1] }),
-  'Light 0x38A0000C': (v) => ({ highBeam: v === 1 }),
-  // Turn signal state: 1 off, 2 left, 4 right, 6 hazard.
-  'Light 0x38A0002C': (v) => ({ signal: v === 2 ? 'left' : v === 4 ? 'right' : null, hazard: v === 6 }),
+  'Light 0x38A0000C': (v) => ({ highBeam: v === 1 }), // LIGHT_HIGH_BEAM_LIGHT
+  // LIGHT_TURN_SIGNAL_LIGHT: 1 off, 2/3 left, 4/5 right, 6-9 hazard and emergency flashing.
+  'Light 0x38A0002C': (v) => ({ signal: v === 2 || v === 3 ? 'left' : v === 4 || v === 5 ? 'right' : null, hazard: v >= 6 }),
+  // GEARBOX_AUTOMATIC_GEAR (GEARBOX_AUTO_MODE_*): 1 P, 2 R, 3 N, 4 D, 6 S.
+  'Gearbox 0x34200020': (v) => (({ 1: 'P', 2: 'R', 3: 'N', 4: 'D', 6: 'D' })[v] ? { gear: ({ 1: 'P', 2: 'R', 3: 'N', 4: 'D', 6: 'D' })[v] } : {}),
+  'Statistic 0x4A50203E': (v) => ({ range: v }), // STATISTIC_ELEC_DRIVING_RANGE, km
+  'Statistic 0x4A505038': (v) => ({ soc: v }), // STATISTIC_ELEC_PERCENTAGE
+  'Statistic 0x44400030': (v) => ({ soc: v }), // STATISTIC_SOC_BATTERY_PERCENTAGE
+  'Instrument 0x4A503040': (v) => ({ outside: v }), // INSTRUMENT_DD_OUT_TEMP, °C
+  'Setting 0x4290000E': (v) => (v ? { wheelHeat: v === 2 } : {}), // SET_STEERING_WHEEL_HEAT_STATE: 1 off, 2 on
+  'Setting 0x34100022': (v) => ({ regen: v === 3 ? 'high' : 'std' }), // SET_DR_ENERGY_FB: 2 standard, 3 high
+  'Setting 0x24C00010': (v) => ({ steer: v === 2 ? 'sport' : 'comfort' }), // steering assist: 1 comfort, 2 sport
+  'Setting 0x4FA0000B': (v) => ({ seats: { driver: { heat: Math.max(0, v - 1), vent: 0, auto: false } } }), // driver seat heat: 1 off, 2/3 levels
+  'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
+  'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
+  'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
 };
+// Values that change slowly are kept across restarts: most events only arrive when they change,
+// so after a cold start the car would otherwise not say its battery, range or settings for a while.
+const CAR_HAL_KEEP = ['Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
+  'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C'];
 window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
   // simulation active until a validated telemetry field reaches this API.
@@ -3009,15 +3102,18 @@ window.yunusCar = (m) => {
     const data = (window.YunusCarData = window.YunusCarData || {});
     data[m.carHal.dev + ' ' + m.carHal.type] = m.carHal;
     if (window.__dbg) console.log('carHal', m.carHal);
-    // The body device (real door switches) needs a BYD-signed permission, but the instrument
-    // cluster mirrors each door-ajar warning and is readable (1 open, 0 closed). Ids verified on
-    // the car by opening each door and the tailgate in turn.
-    const map = CAR_HAL_MAP[m.carHal.dev + ' ' + m.carHal.type];
-    if (map && m.carHal.int != null) window.yunusCar(map(m.carHal.int));
+    const key = m.carHal.dev + ' ' + m.carHal.type, map = CAR_HAL_MAP[key];
+    if (map && m.carHal.int != null) {
+      window.yunusCar(map(m.carHal.int));
+      if (CAR_HAL_KEEP.includes(key)) {
+        try { const kept = JSON.parse(localStorage.getItem('carHalKept') || '{}'); kept[key] = m.carHal.int; localStorage.setItem('carHalKept', JSON.stringify(kept)); } catch {}
+      }
+    }
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
-    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults'];
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
+    'wheelHeat', 'regen', 'steer'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
@@ -3035,19 +3131,27 @@ window.yunusCar = (m) => {
   if (m.lights) S.lights = m.lights;
   if (m.highBeam != null) S.highBeam = m.highBeam;
   if (m.fog != null) S.fog = m.fog;
-  if (m.acOn != null) S.ac = m.acOn;
+  if (m.acOn != null) { S.ac = m.acOn; renderTemp(); }
   if (m.acTemp != null) setTemp(m.acTemp, true);
-  if (m.fan != null) S.fan = m.fan;
+  if (m.fan != null) setFan(m.fan, true);
   if (m.outside != null) { S.outside = Math.round(m.outside); $('outTemp').textContent = `Dış ${S.outside}°`; seatAuto(); }
   if (m.seats) {
     for (const [k, v] of Object.entries(m.seats)) { Object.assign(S.seats[k], v); seatsSent[k] = `${S.seats[k].heat}/${S.seats[k].vent}`; }
     renderSeatDock();
   }
   if (m.faults) { Object.assign(S.faults, m.faults); updateTelltales(); }
+  if (m.wheelHeat != null) { S.wheelHeat = m.wheelHeat; renderDefrost(); }
+  if (m.regen) S.set.regen = m.regen;
+  if (m.steer) S.set.steer = m.steer;
   const now = performance.now();
   if (current && now > liveRefreshAt) { liveRefreshAt = now + 500; refreshCard(); }
   wake(1500);
 };
+// Replay the slow values kept from the last run (see CAR_HAL_KEEP); fresh events replace them.
+try {
+  const kept = JSON.parse(localStorage.getItem('carHalKept') || '{}');
+  for (const [key, int] of Object.entries(kept)) { const [dev, type] = key.split(' '); window.yunusCar({ carHal: { dev, type, int } }); }
+} catch {}
 // Hold-to-exit for the full-screen modes: keep pressing 2 s.
 function holdToExit(btn, done) {
   let t = 0;

@@ -3,6 +3,9 @@
 
     <!-- Map tiles and satellite imagery. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The map follows the car's GPS. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- BYDAuto HAL _COMMON permissions (protectionLevel=dangerous, source package "android",
          so grantable to any app once the user approves — the same set BYD Road Computer and the
