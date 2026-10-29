@@ -354,6 +354,7 @@ button { font-family:inherit; color:inherit; }
 #stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
 #mapStyleBtn { right:24px; top:24px; height:64px; padding:0 20px; display:flex; align-items:center; gap:10px; font-size:20px; border:0; cursor:pointer; }
 #mapStyleBtn i { font-size:28px; }
+#view3dBtn { right:24px; top:104px; height:64px; min-width:64px; padding:0 18px; border:0; cursor:pointer; font-size:20px; font-weight:600; }
 #satCredit { position:absolute; left:12px; bottom:8px; font-size:13px; color:#fff; text-shadow:0 1px 2px #000; display:none; z-index:1; }
 #stage.sat-map #satCredit { display:block; }
 
@@ -362,7 +363,7 @@ button { font-family:inherit; color:inherit; }
 #proj.hidden { display:none; }
 .projScreen { position:absolute; top:0; right:0; bottom:104px; left:0; display:none; }
 #proj.carplay #projCarplay, #proj.auto #projAuto { display:flex; }
-#stage.projecting #search, #stage.projecting #navCard, #stage.projecting #recenter, #stage.projecting #mapStyleBtn { display:none; }
+#stage.projecting #search, #stage.projecting #navCard, #stage.projecting #recenter, #stage.projecting #mapStyleBtn, #stage.projecting #view3dBtn { display:none; }
 .projBadge { position:absolute; left:0; right:0; bottom:110px; text-align:center; font-size:15px; color:#8a8f98; }
 /* CarPlay-like dashboard: status sidebar with app shortcuts, tiles on the right */
 .cp { font-family:-apple-system, 'SF Pro Display', Inter, sans-serif; color:#fff; }
@@ -648,6 +649,7 @@ button { font-family:inherit; color:inherit; }
     <div class="floating" id="navBanner" style="display:none"></div>
     <button class="floating" id="recenter" aria-label="Konumuma dön"><i class="ti ti-current-location"></i></button>
     <button class="floating" id="mapStyleBtn" aria-label="Harita görünümü"></button>
+    <button class="floating" id="view3dBtn" aria-label="3B görünüm">3B</button>
     <div id="satCredit">Uydu görüntüsü: Esri, Maxar, Earthstar Geographics</div>
     <!-- Phone projection takes the map's place; the car panel and dock stay. Placeholder screens:
          on the car this panel will show the Dolphin's own CarPlay / Android Auto output. -->
@@ -2407,6 +2409,7 @@ function buildMap() {
       setMapStyle(S.mapStyle);
       darkMapLayers();
     });
+    map.on('pitchend', () => { $('view3dBtn').textContent = map.getPitch() < 20 ? '3B' : '2B'; });
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
     meMarker = new maplibregl.Marker({ element: me }).setLngLat(myPos || CENTER).addTo(map);
@@ -2722,6 +2725,12 @@ function setMapStyle(style) {
   }
 }
 $('mapStyleBtn').onclick = () => setMapStyle(S.mapStyle === 'sat' ? 'street' : 'sat');
+// 3B: tilts the map and comes close enough for the buildings to rise; 2B lays it flat again.
+$('view3dBtn').onclick = () => {
+  if (!map) return;
+  const flat = map.getPitch() < 20;
+  map.easeTo(flat ? { pitch: 60, zoom: Math.max(map.getZoom(), 16.5), duration: 900 } : { pitch: 0, bearing: 0, duration: 900 });
+};
 setMapStyle(S.mapStyle);
 
 // ---------- phone projection: map, CarPlay or Android Auto in the map area ----------
