@@ -482,7 +482,8 @@ button { font-family:inherit; color:inherit; }
 .apps { grid-template-columns:repeat(8,1fr); gap:30px 10px; }
 .app { display:flex; flex-direction:column; align-items:center; gap:10px; font-size:18px; background:none; border:0; cursor:pointer; }
 .app div { width:84px; height:84px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:44px; color:#fff; }
-.app div.real { background:none; color:var(--mu); }
+.app div.real, .dkApp div.real, #dockPick div.real { background:none; color:var(--mu); }
+.dkApp div.real img, #dockPick div.real img { width:100%; height:100%; border-radius:inherit; }
 .app div.real img { width:84px; height:84px; border-radius:20px; }
 .app span { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } /* long app names */
 
@@ -666,7 +667,7 @@ button { font-family:inherit; color:inherit; }
     <div class="floating" id="navBanner" style="display:none"></div>
     <button class="floating" id="recenter" aria-label="Konumuma dön"><i class="ti ti-current-location"></i></button>
     <button class="floating" id="mapStyleBtn" aria-label="Harita görünümü"></button>
-    <button class="floating" id="view3dBtn" aria-label="3B / 2B görünüm"><i class="ti ti-perspective"></i></button>
+    <button class="floating" id="view3dBtn" aria-label="3B / 2B görünüm"><i class="ti ti-cube"></i></button>
     <div id="satCredit">Uydu görüntüsü: Esri, Maxar, Earthstar Geographics</div>
     <!-- Phone projection takes the map's place; the car panel and dock stay. Placeholder screens:
          on the car this panel will show the Dolphin's own CarPlay / Android Auto output. -->
@@ -1189,6 +1190,9 @@ const draco = new DRACOLoader().setDecoderPath('vendor/draco/');
 const carLoader = new GLTFLoader().setDRACOLoader(draco);
 // Development: launcher.html?model=x.glb#debug loads another model and exposes the scene.
 const DEV = location.hash === '#debug';
+// On the head unit (or the emulator) the app is there: real data and the car's own screens only,
+// none of the desktop preview's demo content or demo taps.
+const DEVICE = !!window.YunusNative;
 carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
 function onCarLoaded(gltf) {
   performance.mark('car-loaded');
@@ -1916,10 +1920,12 @@ function setCarW(w, animate) {
 // its display every frame would stutter), then fitted to the new area once the layout settles.
 let embedSyncAt = 0;
 function syncEmbedSoon() {
-  try { if (!mapEmbedded) return; } catch { return; } // layout restored at start, before the map is set up
+  try { if (!mapEmbedded && !sidePkg) return; } catch { return; } // layout restored at start, before the map is set up
   clearTimeout(embedSyncAt);
   embedSyncAt = setTimeout(() => {
     if (colDrag) return syncEmbedSoon(); // still dragging
+    if (sidePkg) embedSide();
+    if (!mapEmbedded) return;
     const r = $('map').getBoundingClientRect();
     if (r.width < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
     else startMapArea();
@@ -1930,6 +1936,7 @@ $('divider').onpointerdown = (e) => {
   try { $('divider').setPointerCapture(e.pointerId); } catch {}
   stage.classList.add('dragging');
   if (mapEmbedded) YunusNative.embedVisible('map', false);
+  if (sidePkg) YunusNative.embedVisible('side', false);
 };
 addEventListener('pointermove', (e) => {
   if (!colDrag) return;
@@ -2217,7 +2224,7 @@ function setGear(g) {
   if (driving) { closeCard(); map && map.easeTo({ zoom: 16, pitch: 55, duration: 1200 }); }
   else map && map.easeTo({ zoom: 14, pitch: 0, duration: 1200 });
 }
-$('gears').onclick = () => { if (S.live) return; setGear(S.gear === 'P' ? 'D' : 'P'); updateBlindSpot(); };
+$('gears').onclick = () => { if (S.live || DEVICE) return; setGear(S.gear === 'P' ? 'D' : 'P'); updateBlindSpot(); };
 
 // ---------- turn signals + blind-spot camera ----------
 // On the car: signal state from the light HAL, video from the BYD AVM (360) camera.
@@ -2231,9 +2238,9 @@ function setSignal(side, fromCar) {
   updateBlindSpot();
 }
 // Demo: tap the beam tell-tales to flick the high beam. On the car this comes from the light HAL.
-$('beamInd').onclick = (e) => { e.stopPropagation(); S.highBeam = !S.highBeam; refreshCard(); };
-$('sigL').onclick = (e) => { e.stopPropagation(); setSignal('left'); };
-$('sigR').onclick = (e) => { e.stopPropagation(); setSignal('right'); };
+$('beamInd').onclick = (e) => { e.stopPropagation(); if (DEVICE) return; S.highBeam = !S.highBeam; refreshCard(); };
+$('sigL').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('left'); };
+$('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'); };
 function blindSpotWanted() {
   if (bsPreview) return true;
   if (!S.signal || S.gear !== 'D' || S.bsMode === 'off') return false;
@@ -2433,8 +2440,8 @@ function buildMap() {
       setMapStyle(S.mapStyle);
       darkMapLayers();
     });
-    // A tilted plane (perspective) to go 3D, a flat square to lay it flat again.
-    map.on('pitchend', () => { $('view3dBtn').innerHTML = `<i class="ti ti-${map.getPitch() < 20 ? 'perspective' : 'square'}"></i>`; });
+    // A cube to go 3D, a flat map to lay it flat again.
+    map.on('pitchend', () => { $('view3dBtn').innerHTML = `<i class="ti ti-${map.getPitch() < 20 ? 'cube' : 'map'}"></i>`; });
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
     meMarker = new maplibregl.Marker({ element: me }).setLngLat(myPos || CENTER).addTo(map);
@@ -2442,7 +2449,7 @@ function buildMap() {
     const dest = document.createElement('div');
     dest.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
     destMarker = new maplibregl.Marker({ element: dest }).setLngLat(ROUTE[ROUTE.length - 1]).addTo(map);
-    if (myPos) { dropDemoRoute(); map.once('load', dropDemoRoute); }
+    if (myPos || DEVICE) { dropDemoRoute(); map.once('load', dropDemoRoute); }
   } catch (e) { console.warn('map failed', e); }
 }
 setTimeout(() => { if (!mapEmbedded) startMap(); }, 8000);
@@ -2771,7 +2778,11 @@ function setProjection(mode) {
   const t = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   $('cpTime').textContent = t; $('aaTime').textContent = t;
 }
+// The CarPlay / Android Auto stand-ins in the map area are the preview's; the car's own apps
+// open from the settings instead.
+if (DEVICE) S.set.mapArea = 'map';
 setProjection(S.set.mapArea);
+if (DEVICE) $('navCard').style.display = 'none';
 
 // ---------- cards ----------
 let current = null;
@@ -2815,9 +2826,10 @@ const CARDS = {
       ['warnings', 'ti-alert-triangle', 'Uyarı lambaları'], ['system', 'ti-settings', 'Sistem']];
     let content = SETTINGS[tab] ? renderSettings(SETTINGS[tab]) : '';
     if (tab === 'system') content = homeBlock() + content + maintBlock();
-    if (tab === 'conn') content = navAppBlock() + content + `<button class="btn" data-do="phoneDemo" style="width:100%;margin-top:16px"><i class="ti ti-device-mobile"></i>Demo: telefon bağlandı</button>
+    if (tab === 'conn' && DEVICE) content = navAppBlock() + projBlock();
+    else if (tab === 'conn') content = navAppBlock() + content + `<button class="btn" data-do="phoneDemo" style="width:100%;margin-top:16px"><i class="ti ti-device-mobile"></i>Demo: telefon bağlandı</button>
       <p style="font-size:17px;color:var(--mu);margin-top:12px">"Yunus" seçiliyken CarPlay ve Android Auto ekrana bozulmadan oturur; aracın kendi kablosuz ve kablolu (USB) CarPlay/Android Auto'su kapanır. "Aracın kendi"ne dönünce geri gelir.</p>`;
-    if (tab === 'warnings') content = `<p style="font-size:18px;color:var(--mu);margin:0 0 6px">Gösterge panelindeki ışıklar (kullanım kılavuzu). Demo: arızaları buradan yakabilirsin; araçta sensörlerden gelecek.</p>${renderTelltaleList()}`;
+    if (tab === 'warnings') content = `<p style="font-size:18px;color:var(--mu);margin:0 0 6px">Gösterge panelindeki ışıklar (kullanım kılavuzu). ${DEVICE ? 'Yananlar araçtan gelir.' : 'Demo: arızaları buradan yakabilirsin; araçta sensörlerden gelecek.'}</p>${renderTelltaleList()}`;
     if (tab === 'quick') content = `<div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <button class="btn ${S.locked ? 'on' : ''}" data-do="lock"><i class="ti ti-lock${S.locked ? '' : '-open'}"></i>${S.locked ? 'Kilitli' : 'Kilit açık'}</button>
       <button class="btn ${S.trunk ? 'on' : ''}" data-do="trunk"><i class="ti ti-car"></i>Bagaj</button>
@@ -2906,6 +2918,14 @@ const CARDS = {
       : APPS.map(([n, i, c]) => `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('')}</div>`;
   } },
 };
+// The car's own CarPlay and Android Auto apps, when installed, for the settings' phone section.
+function projBlock() {
+  const apps = deviceApps() || [];
+  const have = [['com.byd.carplay', 'CarPlay', 'brand-apple'], ['com.byd.androidauto', 'Android Auto', 'brand-android']]
+    .filter(([p]) => apps.some((a) => a.pkg === p));
+  return have.length ? `<p style="font-size:22px;color:var(--mu);margin:24px 0 10px">Telefon</p><div class="grid" style="grid-template-columns:repeat(2,1fr)">${have
+    .map(([p, n, i]) => `<button class="btn" data-app="${p}"><i class="ti ti-${i}"></i>${n}</button>`).join('')}</div>` : '';
+}
 // The device's launchable apps from the app (by name, with their own icons), read when the card
 // opens and kept for half a minute; APPS below is the desktop preview's stand-in.
 let appsCache = null, appsAt = 0;
@@ -2936,6 +2956,7 @@ const sideRoom = () => 1920 - carW;
 const sideSnaps = () => (carW > 0 ? [0, THIRD, sideRoom()] : [0, SIDE_W, 960, 1920]);
 function setSideW(w, animate) {
   sideW = Math.max(0, Math.min(w, sideRoom()));
+  if (sideW > 0) fillSideApps();
   stage.classList.toggle('dragging', !animate);
   stage.style.setProperty('--sideW', sideW + 'px');
   placeHandles();
@@ -2946,7 +2967,31 @@ function placeHandles() {
   $('sideHandle').style.left = Math.max(carW + 18, 1920 - sideW - 36) + 'px';
 }
 placeHandles();
-$('sideApps').innerHTML = APPS.map(([n, i, c], k) =>
+// On the device the third window lists the real apps (filled the first time it opens: reading the
+// icons takes a moment) and runs the chosen one inside the window, like Google Maps in the map
+// area (AppEmbed slot "side"). The preview keeps its stand-ins.
+let sidePkg = null, sideFilled = false;
+function fillSideApps() {
+  if (!DEVICE || sideFilled) return;
+  sideFilled = true;
+  $('sideApps').innerHTML = (deviceApps() || []).map((a) =>
+    `<button class="app" data-side-pkg="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('');
+}
+function embedSide() {
+  const r = $('sideApp').getBoundingClientRect();
+  if (r.width < 80) return YunusNative.embedVisible('side', false);
+  YunusNative.embedApp('side', sidePkg, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
+}
+function openSidePkg(pkg) {
+  const a = (deviceApps() || []).find((x) => x.pkg === pkg);
+  sidePkg = pkg;
+  $('sidePanel').classList.add('appOpen');
+  $('sideTitle').textContent = a ? a.app : pkg;
+  $('sideBack').style.display = '';
+  $('sideApp').innerHTML = '';
+  requestAnimationFrame(embedSide);
+}
+if (!DEVICE) $('sideApps').innerHTML = APPS.map(([n, i, c], k) =>
   `<button class="app" data-side-app="${k}"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('');
 function openSideApp(k) {
   const [n, i, c] = APPS[k];
@@ -2956,6 +3001,7 @@ function openSideApp(k) {
   $('sideApp').innerHTML = `<div class="big" style="background:${c}"><i class="ti ti-${i}"></i></div><b style="color:var(--tx);font-size:26px">${n}</b>Araçta uygulama bu pencerede açılacak`;
 }
 function closeSideApp() {
+  if (sidePkg) { sidePkg = null; YunusNative.embedVisible('side', false); }
   $('sidePanel').classList.remove('appOpen');
   $('sideTitle').textContent = 'Uygulamalar';
   $('sideBack').style.display = 'none';
@@ -2965,14 +3011,26 @@ function closeSideApp() {
 // window). The order is the driver's, kept in localStorage.
 const DOCK_CARDS = { phone: ['Telefon', 'phone', '#30a46c'], music: ['Müzik', 'music', '#1db954'], camera: ['Kamera', 'camera', '#4a5059'], climate: ['Klima', 'air-conditioning', '#2f7fd1'] };
 const DOCK_MAX = 8;
-const dockItem = (id) => (id.startsWith('card:') ? DOCK_CARDS[id.slice(5)] : APPS.find((a) => a[0] === id.slice(4)));
+// On the device the dock holds real apps ("pkg:<package>", name and icon from the app; an app
+// since removed drops out); the preview keeps its stand-in list ("app:<name>").
+const pkgInfo = {};
+function appInfo(pkg) {
+  if (!(pkg in pkgInfo)) { try { pkgInfo[pkg] = JSON.parse(YunusNative.appInfo(pkg)); } catch { pkgInfo[pkg] = null; } }
+  return pkgInfo[pkg];
+}
+const dockItem = (id) => {
+  if (id.startsWith('card:')) return DOCK_CARDS[id.slice(5)];
+  if (id.startsWith('pkg:')) { const a = DEVICE && appInfo(id.slice(4)); return a ? [a.app, null, null, a.icon] : undefined; }
+  return DEVICE ? undefined : APPS.find((a) => a[0] === id.slice(4));
+};
+const dockIcon = ([n, i, c, img]) => img ? `<div class="real"><img src="${img}" alt=""></div>` : `<div style="background:${c}"><i class="ti ti-${i}"></i></div>`;
 let dockIds = ['card:phone', 'card:music', 'card:camera', 'card:climate'];
 try { const d = JSON.parse(localStorage.getItem('dock')); if (Array.isArray(d)) dockIds = d.filter(dockItem); } catch {}
 const saveDock = () => { try { localStorage.setItem('dock', JSON.stringify(dockIds)); } catch {} };
 function renderDock() {
   $('dockApps').innerHTML = dockIds.map((id) => {
-    const [n, i, c] = dockItem(id);
-    return `<button class="dk dkApp" data-dock="${id}" ${id.startsWith('card:') ? `data-card="${id.slice(5)}"` : ''} aria-label="${n}"><div style="background:${c}"><i class="ti ti-${i}"></i></div><span class="del"><i class="ti ti-x"></i></span></button>`;
+    const it = dockItem(id);
+    return `<button class="dk dkApp" data-dock="${id}" ${id.startsWith('card:') ? `data-card="${id.slice(5)}"` : ''} aria-label="${it[0]}">${dockIcon(it)}<span class="del"><i class="ti ti-x"></i></span></button>`;
   }).join('');
   $('dockAdd').style.visibility = dockIds.length < DOCK_MAX ? '' : 'hidden';
 }
@@ -2983,6 +3041,7 @@ function setDockEditing(on) {
 }
 function openDockItem(id) {
   if (id.startsWith('card:')) return openCard(id.slice(5));
+  if (id.startsWith('pkg:')) return YunusNative.openApp(id.slice(4));
   if (!sideW) setSideW(sideSnaps()[1], true);
   openSideApp(APPS.findIndex((a) => a[0] === id.slice(4)));
 }
@@ -3027,11 +3086,11 @@ $('dockApps').addEventListener('click', (e) => {
 });
 $('dockDone').onclick = () => setDockEditing(false);
 $('dockAdd').onclick = () => {
-  const free = [...Object.keys(DOCK_CARDS).map((k) => 'card:' + k), ...APPS.map((a) => 'app:' + a[0])]
-    .filter((id) => !dockIds.includes(id));
+  const apps = DEVICE ? (deviceApps() || []).map((a) => 'pkg:' + a.pkg) : APPS.map((a) => 'app:' + a[0]);
+  const free = [...Object.keys(DOCK_CARDS).map((k) => 'card:' + k), ...apps].filter((id) => !dockIds.includes(id));
   $('dockPick').innerHTML = `<p>Alt çubuğa ekle (${dockIds.length}/${DOCK_MAX})</p>` + (free.length ? free.map((id) => {
-    const [n, i, c] = dockItem(id);
-    return `<button data-add="${id}"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`;
+    const it = dockItem(id);
+    return `<button data-add="${id}">${dockIcon(it)}${it[0]}</button>`;
   }).join('') : '<p>Eklenecek uygulama kalmadı.</p>');
   $('dockPick').classList.toggle('show');
 };
@@ -3043,7 +3102,10 @@ $('dockPick').onclick = (e) => {
 // Tapping anywhere outside the dock ends editing.
 document.addEventListener('pointerdown', (e) => { if (dockEditing() && !e.target.closest('#dock,#dockPick')) setDockEditing(false); });
 renderDock();
-$('sideApps').onclick = (e) => { const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp); };
+$('sideApps').onclick = (e) => {
+  const p = e.target.closest('[data-side-pkg]'); if (p) return openSidePkg(p.dataset.sidePkg);
+  const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp);
+};
 $('sideBack').onclick = closeSideApp;
 $('sideHandle').onpointerdown = (e) => {
   sideDrag = { x: e.clientX, w: sideW };
@@ -3076,7 +3138,17 @@ addEventListener('pointerup', endSideDrag);
 addEventListener('pointercancel', endSideDrag);
 
 function refreshCard() { if (current) body.innerHTML = CARDS[current].render.call(CARDS[current]); }
+// On the device the dock's Phone, Camera, Climate and Music open the car's own apps: BYD's phone
+// (Bluetooth calls), its 360° camera, its climate screen, and the playing music app.
+const CAR_APPS = { phone: ['com.byd.bluetoothcall', 'com.google.android.dialer', 'com.android.dialer'],
+  camera: ['com.byd.avc', 'com.byd.auto_camera', 'com.byd.camera', 'com.android.camera2'] };
+function openCarCard(name) {
+  if (name === 'climate') return openCarApp(AC_SCREEN);
+  if (name === 'music') { YunusNative.mediaOpen(); return true; }
+  return (CAR_APPS[name] || []).some((p) => YunusNative.openApp(p));
+}
 function openCard(name) {
+  if (DEVICE && ['phone', 'camera', 'climate', 'music'].includes(name) && openCarCard(name)) return;
   // From the full-screen car view, the car key brings the normal layout back so the vehicle
   // settings open beside the car.
   if (name === 'controls' && carW >= CAR_FULL && current !== name) setCarW(CAR_W, true);
@@ -3158,7 +3230,7 @@ body.addEventListener('click', (e) => {
   if (t.dataset.app) { if (window.YunusNative) YunusNative.openApp(t.dataset.app); closeCard(); return; }
   // The card covers the map area: close it so the chosen map shows at once.
   if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); startMapArea(); closeCard(); }
-  if (t.dataset.fault) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
+  if (t.dataset.fault && !DEVICE) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
   if (t.dataset.set) {
     const k = t.dataset.set;
     S.set[k] = t.dataset.val === 'toggle' ? !S.set[k] : t.dataset.val;

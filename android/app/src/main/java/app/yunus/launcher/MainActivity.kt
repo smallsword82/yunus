@@ -176,6 +176,11 @@ class MainActivity : Activity() {
                     if (target.resolveActivity(packageManager) == null) false else { startActivity(target); true }
                 } catch (_: Throwable) { false }
 
+                // One app's {app,icon} (a dock icon), or null if it is not installed.
+                @JavascriptInterface
+                fun appInfo(pkg: String): String? = if (packageManager.getLaunchIntentForPackage(pkg) == null) null
+                    else org.json.JSONObject().put("app", appLabel(this@MainActivity, pkg)).put("icon", appIconData(this@MainActivity, pkg) ?: org.json.JSONObject.NULL).toString()
+
                 // Every launchable app [{pkg,app,icon}] for the apps card.
                 @JavascriptInterface
                 fun apps(): String = launcherApps(this@MainActivity)
