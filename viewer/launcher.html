@@ -1887,6 +1887,7 @@ function setTrunk(v, fromCar) {
   S.trunk = v;
   $('hTrunk').innerHTML = v ? '<b style="color:var(--dn)">Kapat</b><span>Bagaj açık</span>' : '<b>Aç</b><span>Bagaj</span>';
   if (v) camTo('rear');
+  else if (S.gear === 'P') camTo('default'); // back to the usual view once the tailgate closes
   refreshCard();
 }
 function setCharge(v, fromCar) {
@@ -2941,6 +2942,11 @@ const CAR_HAL_MAP = {
   'Instrument 0x26100018': (v) => ({ doors: { RL: v === 1 } }),
   'Instrument 0x26100017': (v) => ({ doors: { RR: v === 1 } }),
   'Instrument 0x26100015': (v) => ({ trunk: v === 1 }),
+  // Headlight switch position: 1 off, 2 parking lights, 3 auto, 4 low beam.
+  'Light 0x13300023': (v) => ({ lights: ['off', 'park', 'auto', 'on'][v - 1] }),
+  'Light 0x38A0000C': (v) => ({ highBeam: v === 1 }),
+  // Turn signal state: 1 off, 2 left, 4 right, 6 hazard.
+  'Light 0x38A0002C': (v) => ({ signal: v === 2 ? 'left' : v === 4 ? 'right' : null, hazard: v === 6 }),
 };
 window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
