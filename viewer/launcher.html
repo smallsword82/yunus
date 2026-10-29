@@ -1763,11 +1763,12 @@ const HOT = { hTrunk: new THREE.Vector3(0, 1.25, -2.45), hCharge: new THREE.Vect
 const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(chargeGear);
 {
   const port = HOT.hCharge;
-  // From the flap out and down to the ground, then along it towards the front.
+  // From the flap straight out from the side (clear of the front wheel), down to the ground well
+  // outside the car, then along the ground back towards the rear, inside the view.
   const path = new THREE.CatmullRomCurve3([
-    port.clone().add(new THREE.Vector3(-0.08, -0.02, 0)), new THREE.Vector3(port.x - 0.35, port.y - 0.08, port.z + 0.05),
-    new THREE.Vector3(port.x - 0.7, 0.45, port.z + 0.2), new THREE.Vector3(port.x - 0.85, 0.03, port.z + 0.5),
-    new THREE.Vector3(port.x - 1.0, 0.03, port.z + 1.6)]);
+    port.clone().add(new THREE.Vector3(-0.08, -0.02, 0)), new THREE.Vector3(port.x - 0.4, port.y - 0.04, port.z - 0.03),
+    new THREE.Vector3(port.x - 0.7, 0.55, port.z - 0.1), new THREE.Vector3(port.x - 0.82, 0.035, port.z - 0.3),
+    new THREE.Vector3(port.x - 0.95, 0.035, port.z - 1.0), new THREE.Vector3(port.x - 1.1, 0.035, port.z - 1.9)]);
   const cableMat = new THREE.MeshStandardMaterial({ color: 0x25282d, roughness: 0.6 });
   chargeGear.add(new THREE.Mesh(new THREE.TubeGeometry(path, 60, 0.032, 10, false), cableMat));
   // The plug body at the flap, pointing out of the car (−x is the car's right).
