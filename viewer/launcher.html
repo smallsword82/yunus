@@ -800,7 +800,7 @@ const SETTING_DEFAULTS = {
   soc: 90, acCurrent: 16, sched: false, v2l: false,
   mirrorFold: true, mirrorTilt: true, mirrorHeat: false, seatEasy: false,
   mediaVol: 12, spdVol: 'low', avas: true, touchSound: true,
-  mapArea: 'map', bt: true, wifi: true, hotspot: false,
+  mapArea: 'map', navApp: '', bt: true, wifi: true, hotspot: false,
   projector: 'yunus', projAlways: true, projAuto: false,
   speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
   rearMirror: true,
@@ -1857,11 +1857,26 @@ function setCarW(w, animate) {
   // The side window can't be wider than what the car column leaves.
   if (sideW > 1920 - w) setSideW(1920 - w, animate);
   else placeHandles();
+  syncEmbedSoon();
+}
+// The embedded navigation app follows the map area: hidden while a divider is dragged (resizing
+// its display every frame would stutter), then fitted to the new area once the layout settles.
+let embedSyncAt = 0;
+function syncEmbedSoon() {
+  try { if (!mapEmbedded) return; } catch { return; } // layout restored at start, before the map is set up
+  clearTimeout(embedSyncAt);
+  embedSyncAt = setTimeout(() => {
+    if (colDrag) return syncEmbedSoon(); // still dragging
+    const r = $('map').getBoundingClientRect();
+    if (r.width < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
+    else startMapArea();
+  }, 450);
 }
 $('divider').onpointerdown = (e) => {
   colDrag = { x: e.clientX, w: carW, side: sideW };
   try { $('divider').setPointerCapture(e.pointerId); } catch {}
   stage.classList.add('dragging');
+  if (mapEmbedded) YunusNative.embedVisible('map', false);
 };
 addEventListener('pointermove', (e) => {
   if (!colDrag) return;
@@ -2381,7 +2396,7 @@ function startMapArea() {
   if (!(window.YunusNative && YunusNative.embedApp)) return startMap();
   const r = $('map').getBoundingClientRect();
   mapEmbedded = true;
-  YunusNative.embedApp('map', MAPS_APPS.join(','), Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
+  YunusNative.embedApp('map', navPackages().join(','), Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
 }
 function mapEmbedFailed() {
   if (!mapEmbedded) return;
@@ -2392,7 +2407,27 @@ function mapEmbedFailed() {
 // Navigation is Google Maps: the head unit has no split screen and one app cannot be shown inside
 // another, so a tap on the map or the search box hands over to Maps full screen.
 const MAPS_APPS = ['com.google.android.apps.maps', 'app.revanced.android.apps.maps'];
-const openMaps = () => !!window.YunusNative && MAPS_APPS.some((p) => YunusNative.openApp(p));
+// The navigation app chosen in Yunus's settings (Harita ve telefon) first, then Google Maps.
+const navPackages = () => (S.set.navApp ? [S.set.navApp] : []).concat(MAPS_APPS);
+const openMaps = () => !!window.YunusNative && navPackages().some((p) => YunusNative.openApp(p));
+// The installed navigation apps with their icons, read from the app when the tab is shown.
+let navAppsCache = null, navAppsAt = 0;
+function navAppBlock() {
+  if (!(window.YunusNative && YunusNative.navApps)) {
+    return '<p style="font-size:17px;color:var(--mu);margin:0 0 22px">Araçta kurulu navigasyon uygulamaları (Google Maps, Yandex, Waze…) burada listelenir; seçilen, harita alanında açılır.</p>';
+  }
+  if (!navAppsCache || performance.now() - navAppsAt > 30000) {
+    try { navAppsCache = JSON.parse(YunusNative.navApps()); } catch { navAppsCache = []; }
+    navAppsAt = performance.now();
+  }
+  const apps = navAppsCache;
+  const chosen = navPackages().find((p) => apps.some((a) => a.pkg === p)) || (apps[0] || {}).pkg;
+  return `<p style="font-size:22px;color:var(--mu);margin:0 0 10px">Harita alanındaki navigasyon</p>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">${apps.map((a) =>
+      `<button class="btn ${a.pkg === chosen ? 'on' : ''}" data-nav="${a.pkg}">${a.icon
+        ? `<img src="${a.icon}" alt="" style="width:34px;height:34px;border-radius:8px">` : '<i class="ti ti-map"></i>'}${a.app}</button>`).join('')
+      || '<p style="font-size:17px;color:var(--mu)">Kurulu navigasyon uygulaması bulunamadı.</p>'}</div>`;
+}
 $('search').onclick = openMaps;
 $('recenter').onclick = () => map && map.easeTo({ center: myPos || CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
 // The car's GPS (through the WebView's geolocation): the position marker follows it and the map
@@ -2487,7 +2522,7 @@ const CARDS = {
       ['warnings', 'ti-alert-triangle', 'Uyarı lambaları'], ['system', 'ti-settings', 'Sistem']];
     let content = SETTINGS[tab] ? renderSettings(SETTINGS[tab]) : '';
     if (tab === 'system') content = homeBlock() + content + maintBlock();
-    if (tab === 'conn') content += `<button class="btn" data-do="phoneDemo" style="width:100%;margin-top:16px"><i class="ti ti-device-mobile"></i>Demo: telefon bağlandı</button>
+    if (tab === 'conn') content = navAppBlock() + content + `<button class="btn" data-do="phoneDemo" style="width:100%;margin-top:16px"><i class="ti ti-device-mobile"></i>Demo: telefon bağlandı</button>
       <p style="font-size:17px;color:var(--mu);margin-top:12px">"Yunus" seçiliyken CarPlay ve Android Auto ekrana bozulmadan oturur; aracın kendi kablosuz ve kablolu (USB) CarPlay/Android Auto'su kapanır. "Aracın kendi"ne dönünce geri gelir.</p>`;
     if (tab === 'warnings') content = `<p style="font-size:18px;color:var(--mu);margin:0 0 6px">Gösterge panelindeki ışıklar (kullanım kılavuzu). Demo: arızaları buradan yakabilirsin; araçta sensörlerden gelecek.</p>${renderTelltaleList()}`;
     if (tab === 'quick') content = `<div class="grid" style="grid-template-columns:repeat(3,1fr)">
@@ -2595,6 +2630,7 @@ function setSideW(w, animate) {
   stage.classList.toggle('dragging', !animate);
   stage.style.setProperty('--sideW', sideW + 'px');
   placeHandles();
+  syncEmbedSoon();
 }
 // The side window's handle sits on its left edge, but never on top of the car column's handle.
 function placeHandles() {
@@ -2810,6 +2846,7 @@ body.addEventListener('click', (e) => {
     else { $('bsCam').classList.remove('show'); updateBlindSpot(); }
   }
   if (t.dataset.light) S.lights = t.dataset.light;
+  if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); if (mapEmbedded) startMapArea(); }
   if (t.dataset.fault) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
   if (t.dataset.set) {
     const k = t.dataset.set;

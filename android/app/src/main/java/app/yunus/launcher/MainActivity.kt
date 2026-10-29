@@ -133,6 +133,10 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaSeek(ms: Double) = runOnUiThread { media.seek(ms.toLong()) }
 
+                // Installed navigation apps [{pkg,app,icon}] for the map-area choice.
+                @JavascriptInterface
+                fun navApps(): String = navigationApps(this@MainActivity)
+
                 // Dock volume: the page asks for the level once ({volume:{cur,max}} then follows
                 // every change) and sets it from its keys and slider.
                 @JavascriptInterface
@@ -240,6 +244,7 @@ class MainActivity : Activity() {
 private class AppEmbed(private val activity: Activity, private val root: android.widget.FrameLayout, private val shell: ShellLink) {
     private class Slot(val view: android.view.TextureView) {
         var display: android.hardware.display.VirtualDisplay? = null
+        var component: String? = null // the app shown, so a different one can replace it
         val displayId get() = display?.display?.displayId ?: -1
     }
     private val slots = HashMap<String, Slot>()
@@ -257,17 +262,23 @@ private class AppEmbed(private val activity: Activity, private val root: android
         slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
         slot.view.visibility = android.view.View.VISIBLE
         val dpi = activity.resources.displayMetrics.densityDpi
+        val component = launch.flattenToShortString()
+        // The helper stops the app's task elsewhere first; otherwise that task would just come to
+        // the front on the main screen. A different app chosen for the slot is started on top.
+        fun launchIfNew() {
+            if (slot.component == component) return
+            slot.component = component
+            shell.send("launch ${slot.displayId} $component")
+        }
         fun attach(texture: android.graphics.SurfaceTexture) {
             texture.setDefaultBufferSize(w, h)
             val existing = slot.display
-            if (existing != null) { existing.resize(w, h, dpi); onReady(slot.displayId); return }
+            if (existing != null) { existing.resize(w, h, dpi); launchIfNew(); onReady(slot.displayId); return }
             val dm = activity.getSystemService(android.hardware.display.DisplayManager::class.java)
             // OWN_CONTENT_ONLY | DESTROY_CONTENT_ON_REMOVAL (hidden flag 1 << 8), as Kinex uses.
             val flags = android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or (1 shl 8)
             slot.display = dm.createVirtualDisplay("yunus-$name", w, h, dpi, android.view.Surface(texture), flags)
-            // The helper stops the app's task elsewhere first; otherwise that task would just come
-            // to the front on the main screen.
-            shell.send("launch ${slot.displayId} ${launch.flattenToShortString()}")
+            launchIfNew()
             onReady(slot.displayId)
         }
         val texture = slot.view.surfaceTexture

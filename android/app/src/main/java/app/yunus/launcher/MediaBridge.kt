@@ -16,6 +16,36 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
+/** An app's launcher icon as a small PNG data URL for the page, or null. */
+fun appIconData(ctx: Context, pkg: String): String? = try {
+    val d = ctx.packageManager.getApplicationIcon(pkg)
+    val bmp = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+    d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(bmp))
+    val bytes = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    "data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+} catch (_: Exception) { null }
+
+fun appLabel(ctx: Context, pkg: String): String = try {
+    ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString()
+} catch (_: Exception) { pkg }
+
+/**
+ * Installed navigation apps for the map area: those that open a place or a route (geo: and
+ * google.navigation: links) or call themselves a maps app, and can be launched. JSON for the page.
+ */
+fun navigationApps(ctx: Context): String {
+    val pm = ctx.packageManager
+    val probes = listOf(
+        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:0,0?q=İzmir")),
+        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=İzmir")),
+        android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_APP_MAPS))
+    val pkgs = probes.flatMap { pm.queryIntentActivities(it, 0) }.map { it.activityInfo.packageName }
+        .distinct().filter { it != ctx.packageName && pm.getLaunchIntentForPackage(it) != null }
+    return JSONArray().apply {
+        pkgs.forEach { put(JSONObject().put("pkg", it).put("app", appLabel(ctx, it)).put("icon", appIconData(ctx, it) ?: JSONObject.NULL)) }
+    }.toString()
+}
+
 /**
  * The dock's volume control on the system media volume: the page sets it, and any change made
  * elsewhere (steering-wheel keys, the car's own bar) comes back as {volume:{cur,max}}.
@@ -162,22 +192,11 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         return artData
     }
 
-    // Each app's own launcher icon as a small PNG data URL, so any music app looks right on the
-    // card without being known in advance; made once per app.
+    // Each app's own icon, so any music app looks right on the card without being known in advance.
     private val icons = HashMap<String, String?>()
-    private fun icon(pkg: String): String? = icons.getOrPut(pkg) {
-        try {
-            val d = ctx.packageManager.getApplicationIcon(pkg)
-            val bmp = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
-            d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(bmp))
-            val bytes = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
-            "data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
-        } catch (_: Exception) { null }
-    }
+    private fun icon(pkg: String): String? = icons.getOrPut(pkg) { appIconData(ctx, pkg) }
 
-    private fun label(pkg: String): String = try {
-        ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString()
-    } catch (_: Exception) { pkg }
+    private fun label(pkg: String): String = appLabel(ctx, pkg)
 
     fun close() {
         try { manager.removeOnActiveSessionsChangedListener(sessionsChanged) } catch (_: Exception) { }
