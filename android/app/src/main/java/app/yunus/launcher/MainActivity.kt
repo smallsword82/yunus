@@ -50,6 +50,8 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var halBridge: HalBridge
     private var carHal: CarHal? = null
+    private lateinit var shell: ShellLink
+    private lateinit var embed: AppEmbed
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +101,20 @@ class MainActivity : Activity() {
                 // Commands to the car need BYD's signature permissions, which this app cannot hold.
                 @JavascriptInterface
                 fun command(json: String) {}
+
+                // Shows the first installed of [packages] (comma separated) inside slot [slot] at
+                // x,y size w×h (page pixels = screen pixels); the page then gets
+                // {embed:{slot,display}}.
+                @JavascriptInterface
+                fun embedApp(slot: String, packages: String, x: Int, y: Int, w: Int, h: Int) = runOnUiThread {
+                    embed.show(slot, packages.split(','), x, y, w, h) { id ->
+                        postToPage(JSONObject().put("embed", JSONObject().put("slot", slot).put("display", id)).toString())
+                    }
+                }
+
+                // Hides a slot while a Yunus card covers its area, and shows it again after.
+                @JavascriptInterface
+                fun embedVisible(slot: String, visible: Boolean) = runOnUiThread { embed.setVisible(slot, visible) }
             }, "YunusNative")
             webChromeClient = object : WebChromeClient() { // alert/confirm/prompt dialogs
                 // The page is our own asset, so its location requests are allowed without a prompt
@@ -112,10 +128,14 @@ class MainActivity : Activity() {
             }
         }
         halBridge = HalBridge(assets, filesDir, ::postToPage)
-        setContentView(web)
+        val root = android.widget.FrameLayout(this).apply { addView(web) }
+        shell = ShellLink(this) { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }
+        embed = AppEmbed(this, root, shell)
+        setContentView(root)
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)
-        halBridge.start()
+        // halBridge (the Kinex HAL service over ADB) is no longer started: CarHal reads the car
+        // in-process, and the ADB connection is now used only for the shell helper (ShellLink).
         // Ask for the BYDAuto _COMMON permissions (dangerous/grantable) once. With them we can
         // construct the HAL devices — instrument, ac, doorlock, gearbox, charging, statistic... —
         // and register listeners; live values then arrive through the push path. The enforcing
@@ -161,7 +181,7 @@ class MainActivity : Activity() {
 
     override fun onResume() { super.onResume(); web.onResume() }
     override fun onPause() { web.onPause(); super.onPause() }
-    override fun onDestroy() { carHal?.close(); halBridge.close(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); web.destroy(); super.onDestroy() }
 
     private fun postToPage(message: String) {
         runOnUiThread {
@@ -171,6 +191,137 @@ class MainActivity : Activity() {
             }
         }
     }
+}
+
+/**
+ * Other apps' screens inside Yunus (Google Maps in the map area, …), the way Kinex does it: each
+ * slot is a private virtual display drawn into a TextureView over its area. The app is started on
+ * the display by the shell helper (`am start --display <id>`; the shell may launch onto a display
+ * it does not own) and touches on the view are injected into that display by the same helper.
+ */
+private class AppEmbed(private val activity: Activity, private val root: android.widget.FrameLayout, private val shell: ShellLink) {
+    private class Slot(val view: android.view.TextureView) {
+        var display: android.hardware.display.VirtualDisplay? = null
+        val displayId get() = display?.display?.displayId ?: -1
+    }
+    private val slots = HashMap<String, Slot>()
+
+    /** Shows [packages]' first installed app in slot [name] at x,y size w×h (screen pixels). */
+    fun show(name: String, packages: List<String>, x: Int, y: Int, w: Int, h: Int, onReady: (Int) -> Unit) {
+        val launch = packages.firstNotNullOfOrNull { activity.packageManager.getLaunchIntentForPackage(it)?.component } ?: return
+        val slot = slots.getOrPut(name) {
+            Slot(android.view.TextureView(activity)).also { s ->
+                root.addView(s.view)
+                s.view.setOnTouchListener { _, ev -> shell.send(touchLine(s.displayId, ev)); true }
+            }
+        }
+        slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
+        slot.view.visibility = android.view.View.VISIBLE
+        val dpi = activity.resources.displayMetrics.densityDpi
+        fun attach(texture: android.graphics.SurfaceTexture) {
+            texture.setDefaultBufferSize(w, h)
+            val existing = slot.display
+            if (existing != null) { existing.resize(w, h, dpi); onReady(slot.displayId); return }
+            val dm = activity.getSystemService(android.hardware.display.DisplayManager::class.java)
+            // OWN_CONTENT_ONLY | DESTROY_CONTENT_ON_REMOVAL (hidden flag 1 << 8), as Kinex uses.
+            val flags = android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or (1 shl 8)
+            slot.display = dm.createVirtualDisplay("yunus-$name", w, h, dpi, android.view.Surface(texture), flags)
+            // The helper stops the app's task elsewhere first; otherwise that task would just come
+            // to the front on the main screen.
+            shell.send("launch ${slot.displayId} ${launch.flattenToShortString()}")
+            onReady(slot.displayId)
+        }
+        val texture = slot.view.surfaceTexture
+        if (texture != null) attach(texture)
+        else slot.view.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(t: android.graphics.SurfaceTexture, width: Int, height: Int) = attach(t)
+            override fun onSurfaceTextureSizeChanged(t: android.graphics.SurfaceTexture, width: Int, height: Int) {}
+            override fun onSurfaceTextureUpdated(t: android.graphics.SurfaceTexture) {}
+            // Keep the texture (and so the display's surface) across a pause.
+            override fun onSurfaceTextureDestroyed(t: android.graphics.SurfaceTexture) = false
+        }
+    }
+
+    fun setVisible(name: String, visible: Boolean) {
+        slots[name]?.view?.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    fun close() {
+        for (s in slots.values) { s.display?.release(); root.removeView(s.view) }
+        slots.clear()
+    }
+
+    // "t <display> <action> <id> <x> <y> …" in the view's own pixels, which are the display's.
+    private fun touchLine(display: Int, ev: android.view.MotionEvent) = buildString {
+        append("t ").append(display).append(' ').append(ev.action)
+        for (i in 0 until ev.pointerCount) append(' ').append(ev.getPointerId(i)).append(' ').append(ev.getX(i)).append(' ').append(ev.getY(i))
+    }
+}
+
+/**
+ * Yunus's line to its shell-side helper (ShellHelper, run with app_process from this APK). If the
+ * helper is not running it is started over Yunus's own ADB connection to the car (127.0.0.1:5555;
+ * the owner approves Yunus's key once on the screen). Lines are sent in order on one thread.
+ */
+private class ShellLink(private val ctx: android.content.Context, private val status: (String) -> Unit) {
+    companion object { private const val PORT = 19340 }
+    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "yunus-shell").apply { isDaemon = true } }
+    // The app's install time is part of it, so after an update the old helper (old code) is
+    // not reused but replaced.
+    private val token = File(ctx.filesDir, "shell.token").let { f ->
+        if (f.exists()) f.readText() else java.util.UUID.randomUUID().toString().also { f.writeText(it) }
+    } + "-" + ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime
+    private var socket: Socket? = null
+
+    fun send(line: String) = worker.execute {
+        try { write(line) } catch (_: Throwable) {
+            try { socket?.close() } catch (_: Throwable) { }
+            socket = null
+            try { write(line) } catch (t: Throwable) { status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") }
+        }
+    }
+
+    private fun write(line: String) {
+        val s = socket ?: connect()
+        s.getOutputStream().apply { write("$line\n".toByteArray()); flush() }
+    }
+
+    private fun connect(): Socket {
+        tryConnect()?.let { socket = it; return it }
+        status("Kabuk yardımcısı başlatılıyor (araç ekranında hata ayıklama iznini onayla)")
+        val apk = ctx.applicationInfo.sourceDir
+        // The helper runs in the foreground of an ADB shell that stays open (as Kinex does): a
+        // backgrounded one died with the session, which adbd closes as soon as the shell exits.
+        // Its life is tied to Yunus's: when Yunus goes, the connection and the helper go too.
+        Thread({
+            try {
+                DirectAdb("127.0.0.1", 5555, ctx.filesDir).use {
+                    it.connect()
+                    // "[S]" so the pattern does not match this pkill's own command line.
+                    it.shell("pkill -f 'app.yunus.launcher.[S]hellHelper'", 1)
+                    it.hold("CLASSPATH=$apk exec app_process /system/bin app.yunus.launcher.ShellHelper $PORT $token 2>/data/local/tmp/yunus_helper.log")
+                }
+            } catch (t: Throwable) { status("Kabuk yardımcısı durdu: ${t.message ?: t.javaClass.simpleName}") }
+        }, "yunus-shell-adb").apply { isDaemon = true }.start()
+        repeat(30) {
+            Thread.sleep(500)
+            tryConnect()?.let { socket = it; status("Kabuk yardımcısı hazır"); return it }
+        }
+        error("yardımcı başlamadı")
+    }
+
+    private fun tryConnect(): Socket? = try {
+        val s = Socket()
+        s.connect(InetSocketAddress("127.0.0.1", PORT), 1000)
+        s.tcpNoDelay = true
+        s.getOutputStream().apply { write("$token\n".toByteArray()); flush() }
+        s.soTimeout = 2000
+        val reply = s.getInputStream().bufferedReader().readLine()
+        s.soTimeout = 0
+        if (reply == "ok") s else { s.close(); null }
+    } catch (_: Throwable) { null }
+
+    fun close() { worker.shutdownNow(); try { socket?.close() } catch (_: Throwable) { } }
 }
 
 /**
@@ -202,7 +353,7 @@ private class HalBridge(private val assets: AssetManager, private val appFiles: 
                 try {
                     connection = "ADB bağlantısı deneniyor"
                     publishStatus()
-                    val adb = DirectAdb(ADB_HOST, ADB_PORT)
+                    val adb = DirectAdb(ADB_HOST, ADB_PORT, appFiles)
                     adb.use {
                         it.connect()
                         val localJar = File(appFiles, HAL_JAR_ASSET)
@@ -282,23 +433,26 @@ private class HalBridge(private val assets: AssetManager, private val appFiles: 
     }
 }
 
-/** Minimal ADB-over-TCP transport. Authentication uses Android's per-install RSA keypair. */
-private class DirectAdb(host: String, port: Int) : java.io.Closeable {
+/** Minimal ADB-over-TCP transport, authenticated with the app's own RSA key (see AdbAuth). */
+private class DirectAdb(host: String, port: Int, keyDir: File) : java.io.Closeable {
     private val socket = Socket().apply { connect(InetSocketAddress(host, port), 2500); soTimeout = 5000 }
     private val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
     private val output = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
-    private val auth = AdbAuth()
+    private val auth = AdbAuth(keyDir)
 
     fun connect() {
         sendAdb("CNXN", 0x01000000, 4096, "host::features=shell_v2\u0000".toByteArray(Charsets.US_ASCII))
+        var signed = false
         repeat(4) {
             val packet = readAdb()
             when (packet.command) {
-                "CNXN" -> return
+                "CNXN" -> { socket.soTimeout = 5000; return }
                 "AUTH" -> {
                     when (packet.arg0) {
-                        1 -> sendAdb("AUTH", 2, 0, auth.sign(packet.payload))
-                        2 -> sendAdb("AUTH", 3, 0, auth.publicKey())
+                        // A second token means adbd did not know our key: send the public key, and
+                        // adbd asks the owner on screen, so give them a minute to approve it.
+                        1 -> if (!signed) { signed = true; sendAdb("AUTH", 2, 0, auth.sign(packet.payload)) }
+                             else { sendAdb("AUTH", 3, 0, auth.publicKey()); socket.soTimeout = 60_000 }
                         else -> error("ADB auth türü desteklenmiyor: ${packet.arg0}")
                     }
                 }
@@ -338,6 +492,13 @@ private class DirectAdb(host: String, port: Int) : java.io.Closeable {
         // stream after a short start window while leaving the remote shell process running.
         try { socket.soTimeout = waitSeconds * 1000; try { stream.readAvailable(4096) } catch (_: java.net.SocketTimeoutException) { } }
         finally { closeStream(stream); socket.soTimeout = 5000 }
+    }
+
+    /** Runs [command] and keeps its stream, and so the process, open until it ends or the connection closes. */
+    fun hold(command: String) {
+        val stream = open("shell:$command")
+        socket.soTimeout = 0
+        while (stream.readAvailable(4096).isNotEmpty()) { }
     }
 
     private fun open(destination: String): AdbStream {
@@ -452,21 +613,26 @@ private class DirectAdb(host: String, port: Int) : java.io.Closeable {
 
 private fun DataInputStream.readIntLE(): Int = readUnsignedByte() or (readUnsignedByte() shl 8) or (readUnsignedByte() shl 16) or (readUnsignedByte() shl 24)
 private fun DataOutputStream.writeIntLE(v: Int) { writeByte(v); writeByte(v ushr 8); writeByte(v ushr 16); writeByte(v ushr 24) }
-/** Android KeyStore-backed ADB RSA credentials; never exports the private key from the keystore. */
-private class AdbAuth : java.io.Closeable {
-    private val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-    private val alias = "yunus-adb-rsa"
+/**
+ * ADB RSA credentials, kept in the app's private files: the head unit's Android keystore fails to
+ * sign with them ("Keystore operation failed"). The owner approves this key once on the screen.
+ */
+private class AdbAuth(dir: File) : java.io.Closeable {
     private val pair: java.security.KeyPair
     init {
-        val existing = keyStore.getEntry(alias, null) as? java.security.KeyStore.PrivateKeyEntry
-        pair = if (existing != null) java.security.KeyPair(existing.certificate.publicKey, existing.privateKey) else {
-            val gen = java.security.KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
-            gen.initialize(android.security.keystore.KeyGenParameterSpec.Builder(alias, android.security.keystore.KeyProperties.PURPOSE_SIGN or android.security.keystore.KeyProperties.PURPOSE_VERIFY)
-                .setDigests(android.security.keystore.KeyProperties.DIGEST_SHA1, android.security.keystore.KeyProperties.DIGEST_SHA256).setKeySize(2048).build())
-            gen.generateKeyPair()
+        val privFile = File(dir, "adbkey.pk8")
+        val pubFile = File(dir, "adbkey.x509")
+        val factory = java.security.KeyFactory.getInstance("RSA")
+        pair = if (privFile.exists() && pubFile.exists()) java.security.KeyPair(
+            factory.generatePublic(java.security.spec.X509EncodedKeySpec(pubFile.readBytes())),
+            factory.generatePrivate(java.security.spec.PKCS8EncodedKeySpec(privFile.readBytes())))
+        else java.security.KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().also {
+            privFile.writeBytes(it.private.encoded); pubFile.writeBytes(it.public.encoded)
         }
     }
-    fun sign(token: ByteArray): ByteArray = java.security.Signature.getInstance("SHA1withRSA").run { initSign(pair.private); update(token); sign() }
+    // adbd verifies RSA over an SHA-1 digest and the 20-byte token *is* that digest, so sign the
+    // DigestInfo itself (SHA1withRSA would hash the token a second time).
+    fun sign(token: ByteArray): ByteArray = java.security.Signature.getInstance("NONEwithRSA").run { initSign(pair.private); update(SHA1_DIGEST_INFO + token); sign() }
     fun publicKey(): ByteArray {
         val rsa = pair.public as java.security.interfaces.RSAPublicKey
         val words = 64
@@ -488,6 +654,10 @@ private class AdbAuth : java.io.Closeable {
         return out
     }
     override fun close() = Unit
+
+    companion object {
+        private val SHA1_DIGEST_INFO = byteArrayOf(0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14)
+    }
 }
 
 /**

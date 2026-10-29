@@ -1191,7 +1191,7 @@ function onCarLoaded(gltf) {
   wake(2000);
   if (S.gear === 'P') snapSaveAt = performance.now() + 1500; // settled default view for next start
   // Give the car a couple of frames on screen before the map starts its own heavy work.
-  setTimeout(startMap, 300);
+  setTimeout(startMapArea, 300);
 }
 // ---------- tailgate ----------
 // The model's tailgate is not a separate part, so at load time the triangles in the
@@ -2293,7 +2293,23 @@ function buildMap() {
     if (myPos) { dropDemoRoute(); map.once('load', dropDemoRoute); }
   } catch (e) { console.warn('map failed', e); }
 }
-setTimeout(startMap, 8000);
+setTimeout(() => { if (!mapEmbedded) startMap(); }, 8000);
+// On the car the map area is the real Google Maps app, run inside Yunus on a private virtual
+// display (see AppEmbed/ShellHelper in the app); Yunus's own map is the fallback and the desktop
+// preview's map. A Yunus card over the area hides Maps while it is open.
+let mapEmbedded = false;
+function startMapArea() {
+  if (!(window.YunusNative && YunusNative.embedApp)) return startMap();
+  const r = $('map').getBoundingClientRect();
+  mapEmbedded = true;
+  YunusNative.embedApp('map', MAPS_APPS.join(','), Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
+}
+function mapEmbedFailed() {
+  if (!mapEmbedded) return;
+  mapEmbedded = false;
+  YunusNative.embedVisible('map', false);
+  startMap();
+}
 // Navigation is Google Maps: the head unit has no split screen and one app cannot be shown inside
 // another, so a tap on the map or the search box hands over to Maps full screen.
 const MAPS_APPS = ['com.google.android.apps.maps', 'app.revanced.android.apps.maps'];
@@ -2646,11 +2662,13 @@ function openCard(name) {
   card.classList.toggle('tall', !!c.tall);
   refreshCard();
   card.classList.add('open');
+  if (mapEmbedded) YunusNative.embedVisible('map', false); // the card sits over the map area
   document.querySelectorAll('[data-card]').forEach((b) => b.classList.toggle('on', b.dataset.card === name));
   if (c.cam && S.gear === 'P') camTo(c.cam);
 }
 function closeCard() {
   current = null; card.classList.remove('open', 'full');
+  if (mapEmbedded) YunusNative.embedVisible('map', true);
   document.querySelectorAll('[data-card]').forEach((b) => b.classList.remove('on'));
   if (S.gear === 'P') camTo('default');
 }
@@ -3105,6 +3123,12 @@ window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
   // simulation active until a validated telemetry field reaches this API.
   if (m.bridge) { window.YunusBridgeStatus = m.bridge; return; }
+  if (m.embed) { (window.YunusEmbed = window.YunusEmbed || {})[m.embed.slot] = m.embed.display; return; }
+  if (m.embedStatus) {
+    window.YunusEmbedStatus = m.embedStatus;
+    if (/yok|durdu/.test(m.embedStatus)) mapEmbedFailed(); // the shell helper could not run
+    return;
+  }
   if (m.halEvent) { window.YunusLastHalEvent = m.halEvent; return; }
   // Live BYDAuto HAL events pushed by the car (CarHal, the direct-HAL listener reader). Collected
   // by device+type so values can be mapped to dashboard fields; most only change while driving or
