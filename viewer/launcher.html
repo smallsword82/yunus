@@ -394,7 +394,10 @@ button { font-family:inherit; color:inherit; }
    mirrored like the interior rear-view mirror. Placed each frame above the car (placeRearCam). */
 #rearCam { position:absolute; left:0; top:0; width:360px; height:90px; z-index:3; border-radius:46px / 40px; overflow:hidden; background:#000;
   box-shadow:0 0 0 3px rgba(255,255,255,.08), 0 8px 22px rgba(0,0,0,.5); opacity:0; transition:opacity .3s; pointer-events:none; }
-#rearCam.show { opacity:1; }
+#rearCam.show { opacity:1; pointer-events:auto; }
+/* Closes the mirror (Yunus › Ekran › "Sürüşte dikiz aynası" brings it back). */
+#rearClose { position:absolute; top:8px; right:14px; width:34px; height:34px; border-radius:50%; border:0; background:rgba(0,0,0,.55); color:#fff;
+  font-size:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:1; }
 #rearCam canvas { width:100%; height:100%; display:block; transform:scaleX(-1); }
 /* Blind-spot camera: a small window beside the car on the signalled side (placed each frame
    from the car's position on screen, see placeBsCam) */
@@ -720,7 +723,7 @@ button { font-family:inherit; color:inherit; }
         }
       } catch (e) {}
     </script>
-    <div id="rearCam"><canvas id="rearCanvas" width="720" height="180"></canvas></div>
+    <div id="rearCam"><canvas id="rearCanvas" width="720" height="180"></canvas><button id="rearClose" aria-label="Dikiz aynasını kapat"><i class="ti ti-x"></i></button></div>
     <div id="bsCam"><canvas id="bsCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="bsArrow"></i><span id="bsTxt">Sol kamera</span></div></div>
     <button class="hot" id="hTrunk" data-act="trunk"><b>Aç</b><span>Bagaj</span></button>
     <button class="hot" id="hShade" data-act="shade"><b>Aç</b><span>Tavan perdesi</span></button>
@@ -2448,6 +2451,7 @@ function updateBlindSpot() {
 // the car looks plus a margin. The picture is the rear camera mirrored left-right, as a mirror
 // shows it. Demo picture: the road falling away behind with a car following.
 const rearCtx = $('rearCanvas').getContext('2d');
+$('rearClose').onclick = (e) => { e.stopPropagation(); S.set.rearMirror = false; saveSettings(); };
 let rearT = 0, rearAt = 0;
 function updateRearCam(now) {
   const el = $('rearCam'), on = S.set.rearMirror && S.gear === 'D' && !!carObj;
@@ -2467,7 +2471,9 @@ function updateRearCam(now) {
   el.style.top = Math.max(90, y0 - ch - 26) + 'px';
   if (now - rearAt < 33) return; // ~30 fps is plenty
   rearAt = now;
-  rearT += 0.03 + S.speed * 0.0006;
+  // The mirror is a drawing (there is no rear camera feed): on the device its lines move only with
+  // the car's speed and no car follows; the preview adds a little motion and a following car.
+  rearT += (DEVICE ? 0 : 0.03) + S.speed * 0.0006;
   const c = rearCtx, W = 720, H = 180, vx = W / 2, vy = H * 0.38;
   const sky = c.createLinearGradient(0, 0, 0, vy);
   sky.addColorStop(0, '#5f7287'); sky.addColorStop(1, '#a7b2bd');
@@ -2485,6 +2491,7 @@ function updateRearCam(now) {
       c.beginPath(); c.moveTo(...p(a)); c.lineTo(...p(b)); c.stroke();
     }
   }
+  if (DEVICE) return;
   // A car following at a varying distance.
   const k = 0.35 + 0.25 * Math.sin(rearT * 0.7), cx = vx + 40 * k, cy = vy + (H - vy) * k * k + 6, s = 30 + 150 * k * k;
   c.fillStyle = '#20242a'; c.fillRect(cx - s / 2, cy - s * 0.5, s, s * 0.5);
@@ -3169,7 +3176,7 @@ const CARDS = {
       <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
     if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v < 2.2 ? 'low' : ''}">${pressNum(v)} ${pressUnit()}<span>${v < 2.2 ? 'Düşük basınç' : '24°C'}</span></div>`;
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
-    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
+    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
       <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
       <div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <button class="btn ${themeMode === 'auto' ? 'on' : ''}" data-theme="auto"><i class="ti ti-contrast"></i>Oto</button>
