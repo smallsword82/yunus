@@ -131,6 +131,11 @@ input { user-select:text; -webkit-user-select:text; }
 #stage.portrait #sidePanel { grid-row:3; grid-column:1; border-left:0; border-top:1px solid var(--cd); }
 #stage.portrait #dock { grid-row:4; grid-column:1; flex-wrap:wrap; align-content:center; padding:6px 20px; }
 #stage.portrait #dock .sepBreak { flex-basis:100%; height:0; margin:4px 0; border:0; }
+/* Upright: climate and seats on the top row (passenger seat included), then the car button, the
+   apps and the volume on the bottom row. */
+#stage.portrait #dock > * { order:3; }
+#stage.portrait #dock > .tempCtl, #stage.portrait #dock > .clim { order:1; }
+#stage.portrait #dock > .sepBreak { order:2; }
 #stage.portrait #divider { left:0; right:0; width:auto; height:36px; bottom:auto; top:calc(var(--carW, 720px) - 18px); cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait #sideHandle { left:0 !important; right:0; width:auto; height:36px; bottom:auto; cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait.dragging #divider, #stage.portrait.dragging #sideHandle { transition:none; }
