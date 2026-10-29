@@ -812,6 +812,7 @@ const SETTINGS = {
     ['tog', 'projAuto', 'Bağlanınca sormadan tam ekran aç'],
   ],
   system: [
+    ['tog', 'autoPlay', 'Araç çalışınca son müziği çal'],
     ['seg', 'speedUnit', 'Hız birimi', [['kmh', 'km/h'], ['mph', 'mph']]],
     ['seg', 'pressUnit', 'Lastik basıncı', [['bar', 'bar'], ['psi', 'PSI'], ['kpa', 'kPa']]],
     ['seg', 'lang', 'Dil', [['tr', 'Türkçe'], ['en', 'English']]],
@@ -824,7 +825,7 @@ const SETTING_DEFAULTS = {
   acc: true, lka: true, ldw: true, elka: true, bsd: true, rcta: true, dow: true, fcw: true, tsr: true, tsrWarn: 'visual',
   soc: 90, acCurrent: 16, sched: false, v2l: false,
   mirrorFold: true, mirrorTilt: true, mirrorHeat: false, seatEasy: false,
-  mediaVol: 12, spdVol: 'low', avas: true, touchSound: true,
+  mediaVol: 12, spdVol: 'low', avas: true, touchSound: true, autoPlay: false,
   mapArea: 'map', navApp: '', bt: true, wifi: true, hotspot: false,
   projector: 'yunus', projAlways: true, projAuto: false,
   speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
@@ -3549,6 +3550,7 @@ const CAR_HAL_MAP = {
 // so after a cold start the car would otherwise not say its battery, range or settings for a while.
 const CAR_HAL_KEEP = ['Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
   'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C'];
+let autoPlayDone = false;
 window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
   // simulation active until a validated telemetry field reaches this API.
@@ -3558,7 +3560,18 @@ window.yunusCar = (m) => {
     if (m.embed.slot === 'map' && m.embed.display < 0) mapEmbedFailed(); // Maps not installed
     return;
   }
-  if (m.media) { liveMedia = { ...m.media, at: performance.now() }; renderMedia(); return; }
+  if (m.media) {
+    liveMedia = { ...m.media, at: performance.now() };
+    // Setting "Araç çalışınca son müziği çal": once per start, the last app resumes if nothing plays.
+    if (!autoPlayDone && liveMedia.access) {
+      autoPlayDone = true;
+      if (S.set.autoPlay && !liveMedia.playing) {
+        if (liveMedia.pkg) YunusNative.media('play'); // its app still open, paused
+        else if (liveMedia.last) YunusNative.mediaResume(liveMedia.last.pkg);
+      }
+    }
+    renderMedia(); return;
+  }
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
   if (m.embedStatus) {

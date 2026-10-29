@@ -208,37 +208,53 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
 
     /**
      * Starts [pkg]'s music with nothing of it open, the way Android Auto does: connect to the app's
-     * media browser service and press play on the session it hands over (Spotify, YouTube Music,
-     * … then play in the background). An app without that service gets a play key, and is opened
-     * if it has no receiver for one either.
+     * media browser service and press play on the session it hands over (Spotify … then play in the
+     * background). An app that refuses outside clients (YouTube Music) or has no such service gets a
+     * play key instead: through the system for the last app (as the steering-wheel key does, which
+     * may restart it), else to its own receiver. Still silent after a few seconds, the app is opened
+     * when [openIfSilent] (a tap in the card), never on the car-start resume.
      */
     private var browser: android.media.browse.MediaBrowser? = null
-    fun start(pkg: String) {
+    fun start(pkg: String, openIfSilent: Boolean = true) {
         chosen = pkg
         val pm = ctx.packageManager
         val service = pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService").setPackage(pkg), 0).firstOrNull()?.serviceInfo
-        if (service != null) {
-            browser?.disconnect()
-            var b: android.media.browse.MediaBrowser? = null
-            b = android.media.browse.MediaBrowser(ctx, ComponentName(service.packageName, service.name), object : android.media.browse.MediaBrowser.ConnectionCallback() {
-                override fun onConnected() {
-                    try { MediaController(ctx, b!!.sessionToken).transportControls.play() } catch (_: Exception) { }
-                    // Stay bound a little while the app starts playing and publishes its session.
-                    main.postDelayed({ if (browser === b) { b?.disconnect(); browser = null } }, 15000)
-                }
-                override fun onConnectionFailed() { open(pkg) }
-            }, null)
-            browser = b
-            b.connect()
-            return
+        if (service == null) return playKey(pkg, openIfSilent)
+        browser?.disconnect()
+        var b: android.media.browse.MediaBrowser? = null
+        b = android.media.browse.MediaBrowser(ctx, ComponentName(service.packageName, service.name), object : android.media.browse.MediaBrowser.ConnectionCallback() {
+            override fun onConnected() {
+                try { MediaController(ctx, b!!.sessionToken).transportControls.play() } catch (_: Exception) { }
+                // Stay bound a little while the app starts playing and publishes its session.
+                main.postDelayed({ if (browser === b) { b?.disconnect(); browser = null } }, 15000)
+                openIfStillSilent(pkg, openIfSilent)
+            }
+            override fun onConnectionFailed() { if (browser === b) browser = null; playKey(pkg, openIfSilent) }
+        }, null)
+        browser = b
+        b.connect()
+    }
+
+    private fun playKey(pkg: String, openIfSilent: Boolean) {
+        val keys = intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)
+            .map { android.view.KeyEvent(it, android.view.KeyEvent.KEYCODE_MEDIA_PLAY) }
+        if (pkg == last) keys.forEach { ctx.getSystemService(android.media.AudioManager::class.java).dispatchMediaKeyEvent(it) }
+        else {
+            val receiver = android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON).setPackage(pkg)
+            ctx.packageManager.queryBroadcastReceivers(receiver, 0).firstOrNull()?.activityInfo?.let { target ->
+                receiver.component = ComponentName(target.packageName, target.name)
+                receiver.addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+                keys.forEach { ctx.sendBroadcast(android.content.Intent(receiver).putExtra(android.content.Intent.EXTRA_KEY_EVENT, it)) }
+            }
         }
-        val receiver = android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON).setPackage(pkg)
-        val target = pm.queryBroadcastReceivers(receiver, 0).firstOrNull()?.activityInfo ?: return open(pkg)
-        receiver.component = ComponentName(target.packageName, target.name)
-        receiver.addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-        for (action in intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP))
-            ctx.sendBroadcast(android.content.Intent(receiver).putExtra(android.content.Intent.EXTRA_KEY_EVENT,
-                android.view.KeyEvent(action, android.view.KeyEvent.KEYCODE_MEDIA_PLAY)))
+        openIfStillSilent(pkg, openIfSilent)
+    }
+
+    private fun openIfStillSilent(pkg: String, openIfSilent: Boolean) {
+        if (!openIfSilent) return
+        main.postDelayed({
+            if (all.none { it.packageName == pkg && it.playbackState?.state == PlaybackState.STATE_PLAYING }) open(pkg)
+        }, 4000)
     }
 
     private fun open(pkg: String) {

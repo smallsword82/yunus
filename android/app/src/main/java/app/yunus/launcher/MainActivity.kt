@@ -134,6 +134,11 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaStart(pkg: String) = runOnUiThread { media.start(pkg) }
 
+                // The car-start resume (setting "Araç çalışınca son müziği çal"): plays in the
+                // background only, never opens the app over Yunus.
+                @JavascriptInterface
+                fun mediaResume(pkg: String) = runOnUiThread { media.start(pkg, openIfSilent = false) }
+
                 @JavascriptInterface
                 fun mediaSeek(ms: Double) = runOnUiThread { media.seek(ms.toLong()) }
 
