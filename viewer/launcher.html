@@ -2466,11 +2466,12 @@ function dropDemoRoute() {
 }
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition((p) => {
-    const first = !myPos;
+    const prev = myPos, first = !prev;
     myPos = [p.coords.longitude, p.coords.latitude];
     if (p.coords.heading != null && !isNaN(p.coords.heading)) NAV.heading = p.coords.heading;
     if (meMarker) meMarker.setLngLat(myPos);
-    if (first && map) map.jumpTo({ center: myPos });
+    // The first fix, or a jump of more than 2 km (a late first real fix), moves the map there.
+    if (map && (first || distM(prev, myPos) > 2000)) map.jumpTo({ center: myPos });
     if (first) dropDemoRoute();
     if (NAV.active) updateNav();
   }, (e) => console.warn('location', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
