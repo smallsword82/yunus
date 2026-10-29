@@ -198,7 +198,7 @@ button { font-family:inherit; color:inherit; }
 .srcBtn { display:flex; align-items:center; gap:6px; background:var(--cd2); border:0; border-radius:14px; padding:4px 10px 4px 8px; color:var(--tx); font:500 16px Inter,sans-serif; cursor:pointer; }
 .srcBtn i { font-size:18px; }
 .srcBtn .ti-chevron-down { color:var(--mu); font-size:15px; }
-#srcPop { position:absolute; z-index:20; width:360px; padding:10px; border-radius:20px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
+#srcPop { position:absolute; z-index:20; width:360px; max-height:620px; overflow-y:auto; padding:10px; border-radius:20px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
   opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; }
 #srcPop.show { opacity:1; transform:none; pointer-events:auto; }
 #srcPop button { width:100%; display:flex; align-items:center; gap:14px; padding:12px; border:0; border-radius:12px; background:none; color:var(--tx); font:400 21px Inter,sans-serif; cursor:pointer; text-align:left; }
@@ -1758,13 +1758,13 @@ function openSrcPop() {
   if (liveMedia && liveMedia.access) {
     // The apps with a media session; picking one makes the card follow and control it.
     const list = liveMedia.sessions || [];
-    // Nothing open: the installed music apps, to start one.
+    // The open sessions first (pick one to follow it), then the other music apps (start one).
     const apps = (liveMedia.apps || []).filter((a) => !list.some((x) => x.pkg === a.pkg));
-    $('srcPop').innerHTML = !list.length && apps.length ? apps.map((x) => `<button data-start="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : appLook(x.pkg).color}">${appIcon(x, 42)}</div>
-      <span>${x.app}<small>Başlat</small></span>${liveMedia.last && x.pkg === liveMedia.last.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`).join('')
-      : list.length ? list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : look.color}">${x.icon ? appIcon(x, 42) : `<i class="ti ti-${look.icon}"></i>`}</div>
+    $('srcPop').innerHTML = list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : look.color}">${x.icon ? appIcon(x, 42) : `<i class="ti ti-${look.icon}"></i>`}</div>
       <span>${x.app}<small>${x.title || ''}${x.playing ? ' · çalıyor' : ''}</small></span>${x.pkg === liveMedia.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`; }).join('')
-      : '<button disabled><span>Açık medya uygulaması yok<small>Spotify, YouTube Music ya da radyoyu başlat</small></span></button>';
+      + apps.map((x) => `<button data-start="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : appLook(x.pkg).color}">${appIcon(x, 42)}</div>
+      <span>${x.app}<small>Başlat</small></span>${!liveMedia.pkg && liveMedia.last && x.pkg === liveMedia.last.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`).join('')
+      || '<button disabled><span>Müzik uygulaması yok<small>Spotify, YouTube Music ya da radyoyu yükle</small></span></button>';
   } else
   $('srcPop').innerHTML = SOURCES.map((x) => `<button data-src="${x.id}"><div class="ic" style="background:${x.color}"><i class="ti ti-${x.icon}"></i></div>
     <span>${x.name}<small>${x.title} · ${x.sub}</small></span>${x.id === S.src ? '<i class="ti ti-check"></i>' : ''}</button>`).join('');

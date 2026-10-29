@@ -52,18 +52,20 @@ fun navigationApps(ctx: Context): String {
  * USB, Bluetooth music) and the phone over Bluetooth (the Bluetooth app's media service). Other apps
  * with a media service, such as the Google app for podcasts, are left out. JSON for the page.
  */
-fun mediaApps(ctx: Context): JSONArray {
+fun mediaApps(ctx: Context, seen: Set<String> = emptySet()): JSONArray {
     val pm = ctx.packageManager
     val launchable = pm.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN)
         .addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0).map { it.activityInfo.packageName }.toSet()
     val browsers = pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService"), 0)
         .map { it.serviceInfo.packageName }.toSet()
-    val mediaName = Regex("music|radio|mediacenter|media[.]player|video|audio|podcast|tunes|spotify|youtube|deezer|fizy|tidal|soundcloud", RegexOption.IGNORE_CASE)
+    val mediaName = Regex("music|radio|mediacenter|media[.]player|video|audio|podcast|tunes|tube|player|spotify|youtube|deezer|fizy|tidal|soundcloud", RegexOption.IGNORE_CASE)
     val notMedia = Regex("call|phone|dial|camera|gallery|photo", RegexOption.IGNORE_CASE)
     fun isMedia(pkg: String): Boolean {
         val info = try { pm.getApplicationInfo(pkg, 0) } catch (_: Exception) { return false }
         if (info.category == android.content.pm.ApplicationInfo.CATEGORY_AUDIO || info.category == android.content.pm.ApplicationInfo.CATEGORY_VIDEO) return true
-        return mediaName.containsMatchIn(pkg) && !notMedia.containsMatchIn(pkg)
+        // Its package or its name (SmartTube is org.smarttube.beta), or it has played media before.
+        val name = "$pkg ${appLabel(ctx, pkg)}"
+        return pkg in seen || mediaName.containsMatchIn(name) && !notMedia.containsMatchIn(name)
     }
     // Bluetooth isn't launchable but plays the phone through its media service.
     val bluetooth = browsers.filter { it == "com.android.bluetooth" || it == "com.google.android.bluetooth" }
@@ -123,6 +125,8 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     // shows it, and play starts it again (as Kinex does).
     private val prefs = ctx.getSharedPreferences("media", Context.MODE_PRIVATE)
     private var last: String? = prefs.getString("last", null)
+    // Every app that has had a media session here, so it stays in the card's app list.
+    private val seen = HashSet(prefs.getStringSet("seen", emptySet()).orEmpty())
     private var apps: JSONArray? = null
     private var artData: String? = null
 
@@ -224,12 +228,11 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private fun send() {
         val c = current
         if (c != null && c.packageName != last) { last = c.packageName; prefs.edit().putString("last", last).apply() }
+        if (sessions.any { seen.add(it.packageName) }) { prefs.edit().putStringSet("seen", HashSet(seen)).apply(); apps = null }
         val out = JSONObject().put("access", true)
-        // Nothing open: the last app, and the installed music apps to start one from.
-        if (c == null) {
-            last?.let { out.put("last", JSONObject().put("pkg", it).put("app", label(it)).put("icon", icon(it) ?: JSONObject.NULL)) }
-            out.put("apps", apps ?: mediaApps(ctx).also { apps = it })
-        }
+        // Nothing open: the last app. Always: the installed music apps, to start one from.
+        if (c == null) last?.let { out.put("last", JSONObject().put("pkg", it).put("app", label(it)).put("icon", icon(it) ?: JSONObject.NULL)) }
+        out.put("apps", apps ?: mediaApps(ctx, seen).also { apps = it })
         out.put("sessions", JSONArray().apply {
             sessions.forEach { put(JSONObject().put("pkg", it.packageName).put("app", label(it.packageName)).put("icon", icon(it.packageName) ?: JSONObject.NULL)
                 .put("title", it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "")
