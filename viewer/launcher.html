@@ -143,7 +143,7 @@ input { user-select:text; -webkit-user-select:text; }
 #stage.portrait #appTray { bottom:240px; width:1000px; max-height:1100px; }
 .trayHead { display:flex; align-items:center; padding:24px 28px 8px 32px; font-size:28px; font-weight:600; }
 .trayHead button { margin-left:auto; background:var(--cd); border:0; width:52px; height:52px; border-radius:50%; font-size:26px; cursor:pointer; }
-.trayGrid { overflow-y:auto; min-height:0; padding:12px 22px 28px; display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:28px 6px; }
+.trayGrid { overflow-y:auto; min-height:0; touch-action:pan-y; overscroll-behavior:contain; /* more apps than fit: scroll down */ padding:12px 22px 28px; display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:28px 6px; }
 /* Both dock rows within 1080 px: slightly smaller keys and tighter spacing. */
 #stage.portrait .dk { width:74px; height:74px; }
 #stage.portrait .dkApp div { width:64px; height:64px; font-size:34px; }
