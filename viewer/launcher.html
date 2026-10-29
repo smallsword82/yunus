@@ -136,6 +136,10 @@ input { user-select:text; -webkit-user-select:text; }
 #stage.portrait #dock > * { order:3; }
 #stage.portrait #dock > .tempCtl, #stage.portrait #dock > .clim { order:1; }
 #stage.portrait #dock > .sepBreak { order:2; }
+/* Bottom row: the apps in the middle, the car button left, the volume right (balanceDock gives the
+   car button a right margin as wide as the volume keys, so the apps sit at the centre). */
+#stage.portrait #dock > .sep:not(.sepBreak) { display:none; }
+#stage.portrait #dockApps, #stage.portrait #vDn { margin-left:auto; }
 #stage.portrait #divider { left:0; right:0; width:auto; height:36px; bottom:auto; top:calc(var(--carW, 720px) - 18px); cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait #sideHandle { left:0 !important; right:0; width:auto; height:36px; bottom:auto; cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait.dragging #divider, #stage.portrait.dragging #sideHandle { transition:none; }
@@ -2045,6 +2049,15 @@ function normalizeLayout() {
 }
 // After turning the screen: sizes kept within the new length, handles moved across, the embedded
 // apps and the card refitted.
+// Upright, the apps sit in the middle of the dock's bottom row: the car button gets a right margin
+// as wide as the volume keys are, measured (the gaps differ between WebView versions).
+function balanceDock() {
+  const car = $('carBtn');
+  car.style.marginRight = '';
+  if (!PORTRAIT) return;
+  const right = ($('vUp').getBoundingClientRect().right - $('vDn').getBoundingClientRect().left) / stageScale;
+  car.style.marginRight = Math.max(0, right - car.getBoundingClientRect().width / stageScale) + 'px';
+}
 function relayout() {
   const car = carW >= 1900 || carW >= LEN() ? LEN() : Math.min(carW, LEN());
   setCarW(car, true);
@@ -2053,6 +2066,7 @@ function relayout() {
   placeHandles();
   syncEmbedSoon();
   setTimeout(fitCard, 450);
+  setTimeout(balanceDock, 450);
   wake(1500); // the 3D view and the map follow the new size while the columns move
 }
 function setCarW(w, animate) {
@@ -3425,6 +3439,7 @@ $('dockPick').onclick = (e) => {
 // Tapping anywhere outside the dock ends editing.
 document.addEventListener('pointerdown', (e) => { if (dockEditing() && !e.target.closest('#dock,#dockPick')) setDockEditing(false); });
 renderDock();
+setTimeout(balanceDock, 600); // started upright: centre the apps once the dock is laid out
 $('sideApps').onclick = (e) => {
   const p = e.target.closest('[data-side-pkg]'); if (p) return openSidePkg(p.dataset.sidePkg);
   const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp);
