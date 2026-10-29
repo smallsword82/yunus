@@ -25,8 +25,15 @@ Sonra tarayıcıda `http://localhost:8765/launcher.html` aç. Geliştirme için
 
 ## Test APK (Android)
 
-`android/` is a small WebView app that packs `viewer/` as assets and shows it full screen, so the
-design can be tried on the car's screen (no vehicle data yet; everything is the demo state).
+`android/` is a WebView app that packs `viewer/` as assets and shows it full screen at the car's
+native resolution. It reads **live vehicle data** in-process through the BYDAuto HAL: with the
+grantable `BYDAUTO_*_COMMON` permissions it constructs the HAL devices (instrument, charging,
+statistic, ota, ...) and registers listeners, and the car pushes real values through
+`onDataEventChanged` — e.g. 12V voltage, temperature, battery cell voltages, seatbelt state. This
+is the same data channel BYD Road Computer and the electro reader use, and needs no root and no
+BYD signature. The signature-gated `_GET`/`_SET` getters (exact SOC%, range, speedometer on demand)
+stay locked to BYD-signed apps; those fields populate from the push stream while driving. Received
+events are visible at `window.YunusCarData` on the page.
 
 ```bash
 cd android

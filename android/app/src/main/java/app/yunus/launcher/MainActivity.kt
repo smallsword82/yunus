@@ -36,6 +36,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The assets are served from https://appassets.androidplatform.net/assets/ through
  * WebViewAssetLoader, so the page's ES modules, fetches and WebAssembly load as from a server.
  */
+private val CAR_COMMON_PERMS = arrayOf(
+    "android.permission.BYDAUTO_AC_COMMON", "android.permission.BYDAUTO_BODYWORK_COMMON",
+    "android.permission.BYDAUTO_CHARGING_COMMON", "android.permission.BYDAUTO_DOOR_LOCK_COMMON",
+    "android.permission.BYDAUTO_ENERGY_COMMON", "android.permission.BYDAUTO_ENGINE_COMMON",
+    "android.permission.BYDAUTO_GEARBOX_COMMON", "android.permission.BYDAUTO_INSTRUMENT_COMMON",
+    "android.permission.BYDAUTO_LIGHT_COMMON", "android.permission.BYDAUTO_PM2P5_COMMON",
+    "android.permission.BYDAUTO_SAFETY_BELT_COMMON", "android.permission.BYDAUTO_SETTING_COMMON",
+    "android.permission.BYDAUTO_SPEED_COMMON", "android.permission.BYDAUTO_STATISTIC_COMMON",
+    "android.permission.BYDAUTO_TIME_COMMON", "android.permission.BYDAUTO_TYRE_COMMON")
+
 class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var halBridge: HalBridge
@@ -79,9 +89,29 @@ class MainActivity : Activity() {
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)
         halBridge.start()
-        // Live vehicle data the way 3rd-party apps on this head unit do it (e.g. electro.app.br):
-        // read the BYDAuto HAL devices directly via listeners, in-process, no BYDAUTO permissions.
+        // Ask for the BYDAuto _COMMON permissions (dangerous/grantable) once. With them we can
+        // construct the HAL devices — instrument, ac, doorlock, gearbox, charging, statistic... —
+        // and register listeners; live values then arrive through the push path. The enforcing
+        // getters stay locked behind BYD's signature _GET perms, which no third-party app can hold.
+        requestCarPermissions()
+        // Live vehicle data the way 3rd-party apps on this head unit do it (BYD Road Computer /
+        // electro.app.br): read the BYDAuto HAL devices directly via listeners, in-process.
         carHal = CarHal(applicationContext, ::postToPage).also { it.start() }
+    }
+
+    private fun requestCarPermissions() {
+        try {
+            val want = CAR_COMMON_PERMS.filter {
+                checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+            if (want.isNotEmpty()) requestPermissions(want.toTypedArray(), 1)
+        } catch (_: Throwable) { }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Re-start the HAL reader so any devices unlocked by a fresh grant get listeners attached.
+        if (requestCode == 1) { carHal?.close(); carHal = CarHal(applicationContext, ::postToPage).also { it.start() } }
     }
 
     private fun hideSystemBars() {
@@ -444,12 +474,18 @@ private class AdbAuth : java.io.Closeable {
  * {carHal:{dev,type,int|float|double}} only when its value changes.
  */
 private class CarHal(private val ctx: android.content.Context, private val emit: (String) -> Unit) {
+    // Every device we can construct once the _COMMON perms are granted. Each one that constructs
+    // gets a listener; the car pushes live values through onDataEventChanged (not permission-gated).
+    // speed/bodywork are listed too but enforce _GET even on getInstance, so they simply fail here.
     private val deviceClasses = listOf(
+        "instrument.BYDAutoInstrumentDevice", "ac.BYDAutoAcDevice",
+        "doorlock.BYDAutoDoorLockDevice", "energy.BYDAutoEnergyDevice",
+        "engine.BYDAutoEngineDevice", "gearbox.BYDAutoGearboxDevice",
         "charging.BYDAutoChargingDevice", "statistic.BYDAutoStatisticDevice",
-        "gearbox.BYDAutoGearboxDevice", "tyre.BYDAutoTyreDevice",
-        "light.BYDAutoLightDevice", "pm2p5.BYDAutoPM2p5Device",
-        "power.BYDAutoPowerDevice", "sensor.BYDAutoSensorDevice",
-        "ota.BYDAutoOtaDevice", "safetybelt.BYDAutoSafetyBeltDevice")
+        "tyre.BYDAutoTyreDevice", "light.BYDAutoLightDevice",
+        "pm2p5.BYDAutoPM2p5Device", "power.BYDAutoPowerDevice",
+        "sensor.BYDAutoSensorDevice", "ota.BYDAutoOtaDevice",
+        "safetybelt.BYDAutoSafetyBeltDevice", "setting.BYDAutoSettingDevice")
     private val held = java.util.concurrent.CopyOnWriteArrayList<Any>()
     private val last = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)
