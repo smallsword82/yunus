@@ -1246,7 +1246,12 @@ const PRESETS = {
   left: { theta: 90, phi: 83, r: 55 }, right: { theta: 270, phi: 83, r: 55 },
   overhead: { theta: 270, phi: 1, r: 90 }, rear: { theta: 160, phi: 72, r: 60 },
   drive: { theta: 180, phi: 58, r: 120 }, roof: { theta: 25, phi: 38, r: 60 },
+  // Charging: from the right side a little higher and further back, looking above the car's
+  // middle, so the car sits lower in the panel (under the large level) and the cable on the
+  // ground beside it is in view.
+  charge: { theta: 262, phi: 76, r: 68 },
 };
+const CHARGE_TARGET = new THREE.Vector3(0, 1.05, -0.35);
 const box = $('car3d');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 // Checking each shader's compile log makes the GPU driver finish compiling synchronously; on the
@@ -1352,7 +1357,7 @@ const presetPos = (p, center = target) => {
   return new THREE.Vector3(r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph), r * Math.sin(ph) * Math.cos(th)).add(center);
 };
 function camTo(name) {
-  const center = name === 'drive' ? DRIVE_TARGET : target;
+  const center = name === 'drive' ? DRIVE_TARGET : name === 'charge' ? CHARGE_TARGET : target;
   camAnim = { from: cam.position.clone(), to: presetPos(PRESETS[name], center), fromT: controls.target.clone(), toT: center.clone(), t: 0 };
 }
 renderer.domElement.addEventListener('dblclick', () => { if (S.gear === 'P') camTo('default'); });
@@ -1767,8 +1772,8 @@ const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(char
   // outside the car, then along the ground back towards the rear, inside the view.
   const path = new THREE.CatmullRomCurve3([
     port.clone().add(new THREE.Vector3(-0.08, -0.02, 0)), new THREE.Vector3(port.x - 0.4, port.y - 0.04, port.z - 0.03),
-    new THREE.Vector3(port.x - 0.7, 0.55, port.z - 0.1), new THREE.Vector3(port.x - 0.82, 0.035, port.z - 0.3),
-    new THREE.Vector3(port.x - 0.95, 0.035, port.z - 1.0), new THREE.Vector3(port.x - 1.1, 0.035, port.z - 1.9)]);
+    new THREE.Vector3(port.x - 0.6, 0.5, port.z - 0.1), new THREE.Vector3(port.x - 0.62, 0.035, port.z - 0.45),
+    new THREE.Vector3(port.x - 0.55, 0.035, port.z - 1.4), new THREE.Vector3(port.x - 0.6, 0.035, port.z - 2.6)]);
   const cableMat = new THREE.MeshStandardMaterial({ color: 0x25282d, roughness: 0.6 });
   chargeGear.add(new THREE.Mesh(new THREE.TubeGeometry(path, 60, 0.032, 10, false), cableMat));
   // The plug body at the flap, pointing out of the car (−x is the car's right).
@@ -2387,7 +2392,7 @@ function setCharge(v, fromCar) {
   wake(1500);
   $('hCharge').style.color = v ? 'var(--ok)' : '';
   $('hCharge').querySelector('span').textContent = v ? 'Şarj ediliyor' : 'Şarj portu';
-  if (v) camTo('right');
+  if (v) camTo('charge');
   refreshCard();
 }
 // Sunshade opening in percent (0 closed, 100 fully back), like the window percentages.
