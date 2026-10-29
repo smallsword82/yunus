@@ -20,7 +20,7 @@ Araç verisi canlı okunuyor, Google Maps harita alanının içinde çalışıyo
 | Kilit, kör nokta | ❌ okunamıyor (BYD imzalı cihazlar) |
 | Google Maps harita alanında | ✅ otomatik açılıyor, dokunma/kaydırma çalışıyor |
 | Ayarlar | ✅ araba butonu → aracın ayarları; basılı tut → Yunus ayarları |
-| Müzik kartı | ❌ hâlâ demo — sıradaki iş |
+| Müzik kartı (medya oturumları) | ✅ emülatörde YouTube Music + YouTube ile doğrulandı; araçta radyo ile denenecek |
 
 ## Bilinmesi gerekenler
 
@@ -52,10 +52,10 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
 
 ## Sıradaki işler
 
-1. **Müzik kartı (Kinex gibi):** radyo/şarkı adı, kapak, önceki/oynat/sonraki. Radyo uygulamasının
-   tamamını gömme — kullanıcı istemedi. Kaynak: medya oturumu (`com.byd.mediacenter` şu an çalıyor
-   görünüyor). `NotificationListenerService` + `MediaSessionManager.getActiveSessions` gerekir;
-   kullanıcı bir kez **bildirim erişimi** vermeli.
+1. **Müzik kartı araçta:** kod hazır ve emülatörde doğrulandı (`MediaBridge.kt`: başlık, sanatçı,
+   kapak, ilerleme, önceki/oynat/sonraki, kaynak seçici). Araçta Yunus'a bir kez **bildirim erişimi**
+   verilmeli (karttaki yazıya dokun → "Yunus müzik kartı"). Radyonun (`com.byd.mediacenter`) kapak
+   ve RDS metni nasıl geldiğine bak.
 2. **Kart + harita:** harita alanını kapatan bir kart açılınca Maps gizleniyor mu, kapanınca geri
    geliyor mu — kod hazır, araçta görülmedi.
 3. **Sürüş kaydı:** hız (motor devrinden hesap, göstergeyle kalibre), pil %, tüketim, ICC, hız
@@ -63,6 +63,10 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
 4. İsteğe bağlı: küçük gömülü pencerelerde düşük dpi (içerik sığsın).
 
 ## Çalışma ortamı
+
+- **Evde test:** `yunus34` emülatörü (Android 14, Google Play'li, 1920×1080 / 240 dpi — araç gibi):
+  `emulator -avd yunus34`. Kullanıcı Play Store'a kendi hesabıyla girdi, YouTube Music / YouTube
+  güncel. Yunus'a orada bildirim erişimi verildi. (Araç verisi ve BYD uygulamaları emülatörde yok.)
 
 - Araç: `adb connect 10.184.30.214:5555` (kablosuz ADB açık).
 - Derleme: `android/` içinde `./gradlew assembleDebug` → `app/build/outputs/apk/debug/yunus-0.1-test.apk`.
