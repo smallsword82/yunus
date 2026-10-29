@@ -120,6 +120,29 @@ input { user-select:text; -webkit-user-select:text; }
 #sidePanel.appOpen #sideApps { display:none; }
 #sidePanel.appOpen #sideApp { display:flex; }
 #stage.dragging { transition:none; }
+/* Portrait (the Dolphin's screen turned upright, 1080×1920): the windows stack, car on top, then
+   the map, the third window and the dock. The same sizes (--carW, --sideW) become heights and the
+   handles lie across; the dock takes two rows (climate, then apps and volume). */
+#stage.portrait { width:1080px; height:1920px; grid-template-columns:1fr; grid-template-rows:var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 224px;
+  transition:grid-template-rows .35s cubic-bezier(.2,.8,.2,1); }
+#stage.portrait.dragging { transition:none; }
+#stage.portrait #carPanel { grid-row:1; grid-column:1; }
+#stage.portrait #mapWrap { grid-row:2; grid-column:1; min-height:0; }
+#stage.portrait #sidePanel { grid-row:3; grid-column:1; border-left:0; border-top:1px solid var(--cd); }
+#stage.portrait #dock { grid-row:4; grid-column:1; flex-wrap:wrap; align-content:center; padding:6px 20px; }
+#stage.portrait #dock .sepBreak { flex-basis:100%; height:0; margin:4px 0; border:0; }
+#stage.portrait #divider { left:0; right:0; width:auto; height:36px; bottom:auto; top:calc(var(--carW, 720px) - 18px); cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
+#stage.portrait #sideHandle { left:0 !important; right:0; width:auto; height:36px; bottom:auto; cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1); }
+#stage.portrait.dragging #divider, #stage.portrait.dragging #sideHandle { transition:none; }
+#stage.portrait #divider div, #stage.portrait #sideHandle div { width:110px; height:8px; }
+#stage.portrait #card { max-height:100%; }
+/* Both dock rows within 1080 px: slightly smaller keys and tighter spacing. */
+#stage.portrait .dk { width:74px; height:74px; }
+#stage.portrait .dkApp div { width:64px; height:64px; font-size:34px; }
+#stage.portrait #dock > * + * { margin-left:8px; }
+#stage.portrait .tempCtl .dk { width:42px; }
+#stage.portrait .tempCtl b { font-size:34px; min-width:92px; }
+#stage.portrait .dk .dolphin { width:66px; }
 #mapWrap, #carPanel { min-width:0; }
 /* Tesla: drag the edge of the car view to widen it up to full screen */
 #divider { position:absolute; top:0; bottom:112px; left:calc(var(--carW, 720px) - 18px); width:36px; z-index:7; cursor:ew-resize; touch-action:none;
@@ -809,7 +832,7 @@ button { font-family:inherit; color:inherit; }
     <button class="dk clim" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
     <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="14" r="7.5"/><circle cx="10.5" cy="14" r="2"/><path d="M3 13h5.5M12.5 13H18M10.5 16v5.5"/><path d="M17 2.5c-.8 1 .8 2 0 3s.8 2 0 3M20.5 2.5c-.8 1 .8 2 0 3s.8 2 0 3"/></svg></button>
     <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
-    <div class="sep"></div>
+    <div class="sep sepBreak"></div>
     <div id="dockApps"></div>
     <button class="dk dkApp" id="dockAdd" aria-label="Uygulama ekle"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-plus"></i></div></button>
     <button class="dk" id="dockDone">Bitti</button>
@@ -1101,10 +1124,19 @@ function viewSize() {
   if (!isFinite(w) || w <= 0) w = innerWidth; if (!isFinite(h) || h <= 0) h = innerHeight;
   return { w, h };
 }
+// The screen upright (the Dolphin's display turns) gives the portrait stage, 1080×1920.
+let PORTRAIT = false;
 function fit() {
   const { w, h } = viewSize();
-  const k = stageScale = Math.min(w / 1920, h / 1080);
-  stage.style.transform = `translate(${(w - 1920 * k) / 2}px, ${(h - 1080 * k) / 2}px) scale(${k})`;
+  const portrait = h > w * 1.1;
+  const SW = portrait ? 1080 : 1920, SH = portrait ? 1920 : 1080;
+  const k = stageScale = Math.min(w / SW, h / SH);
+  stage.style.transform = `translate(${(w - SW * k) / 2}px, ${(h - SH * k) / 2}px) scale(${k})`;
+  if (portrait !== PORTRAIT) {
+    PORTRAIT = portrait;
+    stage.classList.toggle('portrait', portrait);
+    try { relayout(); } catch {} // not yet on the first fit: the layout code is set up later
+  }
   // Revealed only once the correct scale is applied, so the stage never flashes at the wrong
   // (unscaled 1920x1080) size before the fit on load.
   stage.style.visibility = 'visible';
@@ -1979,23 +2011,40 @@ function drawEnergy() {
 let lastFrame = performance.now(), cardsAt = 0;
 
 // ---------- column split (Tesla: drag the edge to give the car or the map the full screen) ----------
-// Resting widths for the car column: 0 = map full screen, 720 = normal, 1920 = car full screen.
+// Resting sizes for the car column: 0 = map full screen, 720 = normal, LEN() = car full screen.
 // With the side window open as well, the three columns share the screen in equal thirds.
-const CAR_W = 720, CAR_FULL = 1920, THIRD = 640;
+// The sizes run along the screen's long side: widths in landscape, heights in portrait (where the
+// dock's two rows take 224 px of the 1920).
+const CAR_W = 720;
+const LEN = () => (PORTRAIT ? 1920 - 224 : 1920);
+const THIRDS = () => (PORTRAIT ? Math.round(LEN() / 3) : 640);
+const axisPos = (e) => (PORTRAIT ? e.clientY : e.clientX);
 let carW = CAR_W, colDrag = null;
-const carSnaps = (side) => (side > 0 ? [0, THIRD, 1920 - side] : [0, CAR_W, CAR_FULL]);
+const carSnaps = (side) => (side > 0 ? [0, THIRDS(), LEN() - side] : [0, CAR_W, LEN()]);
 // Whenever car, map and side window are all showing, give each a third of the screen.
 function normalizeLayout() {
-  if (carW > 0 && sideW > 0 && 1920 - carW - sideW > 0) { setSideW(THIRD, true); setCarW(THIRD, true); }
+  if (carW > 0 && sideW > 0 && LEN() - carW - sideW > 0) { setSideW(THIRDS(), true); setCarW(THIRDS(), true); }
+}
+// After turning the screen: sizes kept within the new length, handles moved across, the embedded
+// apps and the card refitted.
+function relayout() {
+  const car = carW >= 1900 || carW >= LEN() ? LEN() : Math.min(carW, LEN());
+  setCarW(car, true);
+  setSideW(Math.min(sideW, LEN() - car), true);
+  normalizeLayout();
+  placeHandles();
+  syncEmbedSoon();
+  setTimeout(fitCard, 450);
+  wake(1500); // the 3D view and the map follow the new size while the columns move
 }
 function setCarW(w, animate) {
   carW = w;
   stage.classList.toggle('dragging', !animate);
   stage.style.setProperty('--carW', w + 'px');
-  stage.classList.toggle('car-wide', w > 1000);
-  if (w >= CAR_FULL && current) closeCard();
+  stage.classList.toggle('car-wide', w > 1000 && !PORTRAIT);
+  if (w >= LEN() && current) closeCard();
   // The side window can't be wider than what the car column leaves.
-  if (sideW > 1920 - w) setSideW(1920 - w, animate);
+  if (sideW > LEN() - w) setSideW(LEN() - w, animate);
   else placeHandles();
   syncEmbedSoon();
   setTimeout(fitCard, 400); // after the columns' transition
@@ -2016,7 +2065,7 @@ function syncEmbedSoon() {
   }, 450);
 }
 $('divider').onpointerdown = (e) => {
-  colDrag = { x: e.clientX, w: carW, side: sideW };
+  colDrag = { x: axisPos(e), w: carW, side: sideW };
   try { $('divider').setPointerCapture(e.pointerId); } catch {}
   stage.classList.add('dragging');
   if (mapEmbedded) YunusNative.embedVisible('map', false);
@@ -2024,12 +2073,12 @@ $('divider').onpointerdown = (e) => {
 };
 addEventListener('pointermove', (e) => {
   if (!colDrag) return;
-  const dx = (e.clientX - colDrag.x) / stageScale;
-  setCarW(Math.min(CAR_FULL, Math.max(0, colDrag.w + dx)), false);
+  const dx = (axisPos(e) - colDrag.x) / stageScale;
+  setCarW(Math.min(LEN(), Math.max(0, colDrag.w + dx)), false);
 });
 function endColDrag(e) {
   if (!colDrag) return;
-  const dx = (e.clientX - colDrag.x) / stageScale, from = colDrag.w, side = colDrag.side;
+  const dx = (axisPos(e) - colDrag.x) / stageScale, from = colDrag.w, side = colDrag.side;
   colDrag = null;
   if (Math.abs(dx) < 6) { setCarW(from, true); return; }
   // A decent flick moves one step in that direction; otherwise snap to the nearest width.
@@ -2038,13 +2087,13 @@ function endColDrag(e) {
   if (i >= 0 && Math.abs(dx) > 150) to = snaps[Math.max(0, Math.min(snaps.length - 1, i + Math.sign(dx)))];
   setCarW(to, true);
   // The side window gave way while dragging; give its width back if it still fits.
-  if (side > 0) setSideW(Math.min(side, 1920 - to), true);
+  if (side > 0) setSideW(Math.min(side, LEN() - to), true);
   normalizeLayout();
 }
 addEventListener('pointerup', endColDrag);
 addEventListener('pointercancel', endColDrag);
 // Double-tap: normal <-> car full screen; from map full screen it returns to normal.
-$('divider').ondblclick = () => setCarW(carW === CAR_W ? CAR_FULL : CAR_W, true);
+$('divider').ondblclick = () => setCarW(carW === CAR_W ? LEN() : CAR_W, true);
 renderer.setAnimationLoop(() => {
   if (camAnim) {
     camAnim.t = Math.min(1, camAnim.t + 0.025);
@@ -2075,8 +2124,9 @@ renderer.setAnimationLoop(() => {
     lastBox.w = box.clientWidth; lastBox.h = box.clientHeight;
     resize3d();
   }
-  const mapW = $('mapWrap').clientWidth;
-  if (mapW !== lastBox.map) { lastBox.map = mapW; map && mapW > 10 && map.resize(); }
+  // Width and height: in portrait the map window changes height when the windows are resized.
+  const mapW = $('mapWrap').clientWidth, mapH = $('mapWrap').clientHeight;
+  if (mapW !== lastBox.map || mapH !== lastBox.mapH) { lastBox.map = mapW; lastBox.mapH = mapH; map && mapW > 10 && map.resize(); }
   stepViewShift();
   // Performance mode: the 3D view is only drawn while something in it moves (camera, a part
   // easing open or shut, blinking lamps, the road while driving), at most 30 times a second.
@@ -2548,9 +2598,9 @@ function startMapArea() {
     if (mapEmbedded) { mapEmbedded = false; YunusNative.embedVisible('map', false); }
     return startMap();
   }
-  const r = $('map').getBoundingClientRect();
+  const [x, y, w, h] = screenRect($('map'));
   mapEmbedded = true;
-  YunusNative.embedApp('map', navPackages().join(','), Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
+  YunusNative.embedApp('map', navPackages().join(','), x, y, w, h);
 }
 function mapEmbedFailed() {
   if (!mapEmbedded) return;
@@ -3160,8 +3210,8 @@ const APPS = [
 // narrow, half the screen, or full screen.
 const SIDE_W = 600;
 let sideW = 0, sideDrag = null;
-const sideRoom = () => 1920 - carW;
-const sideSnaps = () => (carW > 0 ? [0, THIRD, sideRoom()] : [0, SIDE_W, 960, 1920]);
+const sideRoom = () => LEN() - carW;
+const sideSnaps = () => (carW > 0 ? [0, THIRDS(), sideRoom()] : [0, SIDE_W, Math.round(LEN() / 2), LEN()]);
 function setSideW(w, animate) {
   sideW = Math.max(0, Math.min(w, sideRoom()));
   if (sideW > 0) fillSideApps();
@@ -3173,7 +3223,9 @@ function setSideW(w, animate) {
 }
 // The side window's handle sits on its left edge, but never on top of the car column's handle.
 function placeHandles() {
-  $('sideHandle').style.left = Math.max(carW + 18, 1920 - sideW - 36) + 'px';
+  const at = Math.max(carW + 18, LEN() - sideW - 36) + 'px';
+  $('sideHandle').style.left = PORTRAIT ? '' : at;
+  $('sideHandle').style.top = PORTRAIT ? at : '';
 }
 placeHandles();
 // On the device the third window lists the real apps (filled the first time it opens: reading the
@@ -3187,9 +3239,16 @@ function fillSideApps() {
     `<button class="app" data-side-pkg="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('');
 }
 function embedSide() {
-  const r = $('sideApp').getBoundingClientRect();
-  if (r.width < 80) return YunusNative.embedVisible('side', false);
-  YunusNative.embedApp('side', sidePkg, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
+  const [x, y, w, h] = screenRect($('sideApp'));
+  if (w < 60) return YunusNative.embedVisible('side', false);
+  YunusNative.embedApp('side', sidePkg, x, y, w, h);
+}
+// An element's place on the screen in physical pixels, for the embedded apps' windows. The page is
+// laid out 1920 CSS px wide (viewport meta), so a CSS px is a screen px only when the screen is
+// 1920 wide (the car in landscape); upright it is about half of one.
+function screenRect(el) {
+  const r = el.getBoundingClientRect(), k = (window.visualViewport ? visualViewport.scale : 1) * devicePixelRatio;
+  return [r.left, r.top, r.width, r.height].map((v) => Math.round(v * k));
 }
 // Opens an app in the third window, opening the window first when it is closed.
 function openInSide(pkg) {
@@ -3357,18 +3416,18 @@ $('sideClose').onclick = () => {
   closeSideApp();
 };
 $('sideHandle').onpointerdown = (e) => {
-  sideDrag = { x: e.clientX, w: sideW };
+  sideDrag = { x: axisPos(e), w: sideW };
   try { $('sideHandle').setPointerCapture(e.pointerId); } catch {}
   stage.classList.add('dragging');
 };
 addEventListener('pointermove', (e) => {
   if (!sideDrag) return;
-  const dx = (e.clientX - sideDrag.x) / stageScale;
+  const dx = (axisPos(e) - sideDrag.x) / stageScale;
   setSideW(sideDrag.w - dx, false);
 });
 function endSideDrag(e) {
   if (!sideDrag) return;
-  const dx = (e.clientX - sideDrag.x) / stageScale, from = sideDrag.w;
+  const dx = (axisPos(e) - sideDrag.x) / stageScale, from = sideDrag.w;
   sideDrag = null;
   const snaps = sideSnaps();
   // A tap opens to the narrow width or closes; a drag snaps to the nearest width, and a quick
@@ -3402,7 +3461,7 @@ function openCard(name) {
   if (DEVICE && ['phone', 'camera', 'climate', 'music'].includes(name) && openCarCard(name)) return;
   // From the full-screen car view, the car key brings the normal layout back so the vehicle
   // settings open beside the car.
-  if (name === 'controls' && carW >= CAR_FULL && current !== name) setCarW(CAR_W, true);
+  if (name === 'controls' && carW >= LEN() && current !== name) setCarW(CAR_W, true);
   if (current === name) return closeCard();
   current = name;
   const c = CARDS[name];
@@ -3686,7 +3745,7 @@ function openSeatPop(k, btn) {
   seatPopFor = k;
   renderSeatPop();
   const r = btn.getBoundingClientRect(), s = stage.getBoundingClientRect();
-  $('seatPop').style.left = THREE.MathUtils.clamp((r.left - s.left) / stageScale + 42 - 215, 16, 1920 - 430 - 16) + 'px';
+  $('seatPop').style.left = THREE.MathUtils.clamp((r.left - s.left) / stageScale + 42 - 215, 16, (PORTRAIT ? 1080 : 1920) - 430 - 16) + 'px';
   $('seatPop').classList.add('show');
 }
 function closeSeatPop() { seatPopFor = null; $('seatPop').classList.remove('show'); }
