@@ -130,6 +130,9 @@ class MainActivity : Activity() {
                 fun mediaChoose(pkg: String) = runOnUiThread { media.choose(pkg) }
 
                 @JavascriptInterface
+                fun mediaSeek(ms: Double) = runOnUiThread { media.seek(ms.toLong()) }
+
+                @JavascriptInterface
                 fun mediaOpen() = runOnUiThread {
                     media.currentPackage()?.let { pkg -> packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) } }
                 }

@@ -206,7 +206,8 @@ button { font-family:inherit; color:inherit; }
 #srcPop button span { flex:1; } #srcPop button small { display:block; font-size:15px; color:var(--mu); }
 #srcPop button .ti-check { color:var(--ok); font-size:24px; }
 .mm span { font-size:17px; color:var(--mu); }
-.mm .bar { height:5px; border-radius:3px; background:var(--cd2); margin:8px 0 6px; overflow:hidden; }
+/* The bar seeks on touch: a transparent 14px border makes it finger-sized without changing its look or layout. */
+.mm .bar { height:33px; border-radius:3px; /* border-box: 5px track + 2×14px border */ background:var(--cd2); margin:-6px 0 -8px; overflow:hidden; border:14px solid transparent; border-left:0; border-right:0; background-clip:padding-box; touch-action:none; }
 .mm .bar div { height:100%; background:var(--tx); width:0; }
 .mm .ctl { display:flex; gap:28px; font-size:30px; }
 .mm .ctl button { background:none; border:0; cursor:pointer; padding:0; font-size:inherit; }
@@ -1704,24 +1705,29 @@ function renderMedia() {
   $('mmSub').textContent = x.sub;
   $('mmProg').parentElement.style.visibility = x.live ? 'hidden' : '';
 }
+// The app's own icon (sent by the app) when there is one, else a matching tabler icon.
+const appIcon = (x, size) => x.icon ? `<img src="${x.icon}" alt="" style="width:${size}px;height:${size}px;border-radius:${size / 4}px;vertical-align:middle">`
+  : `<i class="ti ti-${appLook(x.pkg).icon}" style="color:${appLook(x.pkg).color}"></i>`;
 function renderLiveMedia() {
   const m = liveMedia, look = appLook(m.pkg);
   const label = !m.access ? 'İzin gerekli' : m.pkg ? m.app : 'Medya';
-  $('srcBtn').innerHTML = `<i class="ti ti-${m.access ? look.icon : 'lock'}" style="color:${m.access ? look.color : 'var(--mu)'}"></i>${label}<i class="ti ti-chevron-down"></i>`;
+  $('srcBtn').innerHTML = `${m.access && m.pkg ? appIcon(m, 22) : `<i class="ti ti-${m.access ? 'music' : 'lock'}" style="color:var(--mu)"></i>`}${label}<i class="ti ti-chevron-down"></i>`;
+  // No cover (radio, some apps): the app's own icon on the tile.
   $('mmArt').outerHTML = m.art
     ? `<div id="mmArt" class="art" style="background:url('${m.art}') center/cover"></div>`
+    : m.access && m.icon ? `<div id="mmArt" class="art fallback"><img src="${m.icon}" alt="" style="width:56%;height:56%;border-radius:22%"></div>`
     : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`;
   $('mmTitle').textContent = !m.access ? 'Müzik kartı için bildirim erişimi ver' : m.pkg ? (m.title || m.app) : 'Çalan bir şey yok';
   $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (m.artist || m.album || '') : '';
   $('mmPlay').innerHTML = `<i class="ti ti-player-${m.playing ? 'pause' : 'play'}"></i>`;
   $('mmProg').parentElement.style.visibility = m.dur > 0 ? '' : 'hidden'; // radio has no length
-  if (m.dur > 0) $('mmProg').style.width = (livePos() / m.dur * 100) + '%';
+  if (m.dur > 0 && !mmSeeking) $('mmProg').style.width = (livePos() / m.dur * 100) + '%';
 }
 function openSrcPop() {
   if (liveMedia && liveMedia.access) {
     // The apps with a media session; picking one makes the card follow and control it.
     const list = liveMedia.sessions || [];
-    $('srcPop').innerHTML = list.length ? list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${look.color}"><i class="ti ti-${look.icon}"></i></div>
+    $('srcPop').innerHTML = list.length ? list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : look.color}">${x.icon ? appIcon(x, 42) : `<i class="ti ti-${look.icon}"></i>`}</div>
       <span>${x.app}<small>${x.title || ''}${x.playing ? ' · çalıyor' : ''}</small></span>${x.pkg === liveMedia.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`; }).join('')
       : '<button disabled><span>Açık medya uygulaması yok<small>Spotify, YouTube Music ya da radyoyu başlat</small></span></button>';
   } else
@@ -1756,12 +1762,36 @@ $('mmPlay').onclick = () => {
   if (liveMedia) return liveMedia.access ? YunusNative.media('toggle') : YunusNative.mediaAccess();
   S.playing = !S.playing; $('mmPlay').innerHTML = `<i class="ti ti-player-${S.playing ? 'pause' : 'play'}"></i>`;
 };
+// Tap or drag the progress bar to seek (live media that has a length). Not a card swipe.
+const mmBar = $('mmProg').parentElement;
+let mmSeeking = false;
+function mmSeekAt(e) {
+  const r = mmBar.getBoundingClientRect();
+  const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  $('mmProg').style.width = (f * 100) + '%';
+  return f;
+}
+mmBar.addEventListener('pointerdown', (e) => {
+  if (!(liveMedia && liveMedia.access && liveMedia.dur > 0)) return;
+  e.stopPropagation();
+  mmBar.setPointerCapture(e.pointerId);
+  mmSeeking = true; mmSeekAt(e);
+});
+mmBar.addEventListener('pointermove', (e) => { if (mmSeeking) mmSeekAt(e); });
+mmBar.addEventListener('pointerup', (e) => {
+  if (!mmSeeking) return;
+  mmSeeking = false;
+  const ms = Math.round(mmSeekAt(e) * liveMedia.dur);
+  YunusNative.mediaSeek(ms);
+  Object.assign(liveMedia, { pos: ms, at: performance.now() }); // until the app reports back
+});
+mmBar.addEventListener('pointercancel', () => { mmSeeking = false; });
 $('mmPrev').onclick = () => liveMedia && liveMedia.access && YunusNative.media('prev');
 $('mmNext').onclick = () => liveMedia && liveMedia.access && YunusNative.media('next');
 if (window.YunusNative && YunusNative.mediaRefresh) YunusNative.mediaRefresh(); // first now playing
 let mmPos = 84;
 function updateCards() {
-  if (liveMedia) { if (liveMedia.dur > 0) $('mmProg').style.width = (livePos() / liveMedia.dur * 100) + '%'; }
+  if (liveMedia) { if (liveMedia.dur > 0 && !mmSeeking) $('mmProg').style.width = (livePos() / liveMedia.dur * 100) + '%'; }
   else {
     if (S.playing) mmPos = (mmPos + 0.5) % 238;
     $('mmProg').style.width = (mmPos / 238 * 100) + '%';

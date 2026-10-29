@@ -88,6 +88,8 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         }
     }
 
+    fun seek(ms: Long) { current?.transportControls?.seekTo(ms) }
+
     /** The app behind the current session, to open it full screen. */
     fun currentPackage(): String? = current?.packageName
 
@@ -95,7 +97,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         val c = current
         val out = JSONObject().put("access", true)
         out.put("sessions", JSONArray().apply {
-            sessions.forEach { put(JSONObject().put("pkg", it.packageName).put("app", label(it.packageName))
+            sessions.forEach { put(JSONObject().put("pkg", it.packageName).put("app", label(it.packageName)).put("icon", icon(it.packageName) ?: JSONObject.NULL)
                 .put("title", it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "")
                 .put("playing", it.playbackState?.state == PlaybackState.STATE_PLAYING)) }
         })
@@ -108,7 +110,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
             var pos = st?.position ?: 0L
             if (st != null && st.state == PlaybackState.STATE_PLAYING && st.lastPositionUpdateTime > 0)
                 pos += ((SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong()
-            out.put("pkg", c.packageName).put("app", label(c.packageName))
+            out.put("pkg", c.packageName).put("app", label(c.packageName)).put("icon", icon(c.packageName) ?: JSONObject.NULL)
                 .put("title", title).put("artist", artist)
                 .put("album", md?.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "")
                 .put("playing", st?.state == PlaybackState.STATE_PLAYING)
@@ -132,6 +134,19 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
             "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
         }
         return artData
+    }
+
+    // Each app's own launcher icon as a small PNG data URL, so any music app looks right on the
+    // card without being known in advance; made once per app.
+    private val icons = HashMap<String, String?>()
+    private fun icon(pkg: String): String? = icons.getOrPut(pkg) {
+        try {
+            val d = ctx.packageManager.getApplicationIcon(pkg)
+            val bmp = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+            d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(bmp))
+            val bytes = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+            "data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } catch (_: Exception) { null }
     }
 
     private fun label(pkg: String): String = try {
