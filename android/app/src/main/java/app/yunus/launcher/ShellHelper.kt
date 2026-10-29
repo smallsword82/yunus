@@ -56,11 +56,45 @@ object ShellHelper {
         }
     }
 
-    // Fixed argument lists (no shell): stop the app's task elsewhere, then start it on the display.
+    // Fixed argument lists (no shell): keep the display upright, stop the app's task elsewhere,
+    // then start it on the display.
     private fun launch(display: Int, component: String) {
         if (!COMPONENT.matches(component)) return
+        lockRotation(display)
         ProcessBuilder("am", "force-stop", component.substringBefore('/')).inheritIO().start().waitFor()
         ProcessBuilder("am", "start", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
+        keepOnDisplay(display, component.substringBefore('/'))
+    }
+
+    // Some apps start over in a new task right after launch (Chrome's restart, splash screens,
+    // permission flows); a task started without a display lands on the main screen. For a short
+    // while after the launch, a task of that same app found on the main screen is moved back onto
+    // the display. Only that app, only from the main screen, only onto Yunus's own display.
+    private val watching = HashMap<Int, Long>()
+    private fun keepOnDisplay(display: Int, pkg: String) {
+        val id = System.nanoTime()
+        synchronized(watching) { watching[display] = id }
+        Thread {
+            val end = SystemClock.uptimeMillis() + 20000
+            while (SystemClock.uptimeMillis() < end && synchronized(watching) { watching[display] == id }) {
+                SystemClock.sleep(700)
+                try {
+                    for ((task, onDisplay, pkgs) in Tasks.roots())
+                        if (onDisplay == 0 && pkg in pkgs) { Tasks.move(task, display); System.err.println("moved $pkg task $task back to display $display") }
+                } catch (t: Throwable) { System.err.println("keep $pkg: $t"); return@Thread }
+            }
+        }.start()
+    }
+
+    // An app that asks for portrait (YouTube's player) would turn the whole display, leaving a narrow
+    // strip in Yunus's wide window: the display stays at rotation 0 and ignores such requests.
+    // Android 10 knows "set-fix-to-user-rotation", 12+ "fixed-to-user-rotation" and
+    // "set-ignore-orientation-request"; the ones a version lacks just fail.
+    private fun lockRotation(display: Int) {
+        val d = display.toString()
+        for (cmd in listOf(listOf("user-rotation", "-d", d, "lock", "0"), listOf("set-fix-to-user-rotation", "-d", d, "enabled"),
+                listOf("fixed-to-user-rotation", "-d", d, "enabled"), listOf("set-ignore-orientation-request", "-d", d, "true")))
+            ProcessBuilder(listOf("cmd", "window") + cmd).inheritIO().start().waitFor()
     }
 
     // Private displays are hidden from everyone but their owner (DisplayManager returns null to
@@ -73,8 +107,7 @@ object ShellHelper {
             val dump = ProcessBuilder("dumpsys", "display").start().inputStream.bufferedReader().readText()
             // Android 10: DisplayInfo{"name, displayId 7", uniqueId "virtual:<owner>,…
             // Android 14: DisplayInfo{"name", displayId 7, …, uniqueId "virtual:<owner>,…
-            val ok = Regex("""DisplayInfo\{"[^"]*(?:", )?displayId $display[",][^
-]*?uniqueId "virtual:${Regex.escape(OWNER)},""").containsMatchIn(dump)
+            val ok = Regex("""DisplayInfo\{"[^"]*(?:", )?displayId $display[",][^\n]*?uniqueId "virtual:${Regex.escape(OWNER)},""").containsMatchIn(dump)
             if (ok) owned.add(display)
             return ok
         }
@@ -111,5 +144,37 @@ private class TouchInjector {
         setDisplayId.invoke(event, display)
         inject.invoke(inputManager, event, 0) // 0: INJECT_INPUT_EVENT_MODE_ASYNC
         event.recycle()
+    }
+}
+
+/**
+ * The system's task list and moving a task to another display, as the shell may (hidden APIs, via
+ * reflection). Android 12+ has root tasks (getAllRootTaskInfos / moveRootTaskToDisplay), Android 10
+ * stacks (getAllStackInfos / moveStackToDisplay); each entry is (id, display, packages in it).
+ */
+private object Tasks {
+    private val atm by lazy { Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null) }
+
+    private fun field(o: Any, name: String): Any? = try { o.javaClass.getField(name).get(o) } catch (_: Exception) { null }
+    private fun pkgOf(c: Any?) = (c as? android.content.ComponentName)?.packageName
+
+    fun roots(): List<Triple<Int, Int, Set<String>>> {
+        val rootInfos = atm.javaClass.methods.firstOrNull { it.name == "getAllRootTaskInfos" && it.parameterCount == 0 }
+        if (rootInfos != null) return (rootInfos.invoke(atm) as List<*>).filterNotNull().map { info ->
+            val names = (field(info, "childTaskNames") as? Array<*>)?.mapNotNull { (it as? String)?.substringBefore('/') }.orEmpty()
+            Triple(field(info, "taskId") as Int, field(info, "displayId") as Int,
+                (names + listOfNotNull(pkgOf(field(info, "topActivity")), pkgOf(field(info, "baseActivity")))).toSet())
+        }
+        val stacks = atm.javaClass.getMethod("getAllStackInfos").invoke(atm) as List<*>
+        return stacks.filterNotNull().map { info ->
+            val names = (field(info, "taskNames") as? Array<*>)?.mapNotNull { (it as? String)?.substringBefore('/') }.orEmpty()
+            Triple(field(info, "stackId") as Int, field(info, "displayId") as Int, (names + listOfNotNull(pkgOf(field(info, "topActivity")))).toSet())
+        }
+    }
+
+    fun move(id: Int, display: Int) {
+        val m = atm.javaClass.methods.firstOrNull { it.name == "moveRootTaskToDisplay" }
+            ?: atm.javaClass.getMethod("moveStackToDisplay", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+        m.invoke(atm, id, display)
     }
 }
