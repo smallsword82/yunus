@@ -452,6 +452,11 @@ button { font-family:inherit; color:inherit; }
 #navPanel .warn { color:#ffb020; font-size:18px; margin:4px 10px; }
 #navBanner { top:72px; left:24px; right:112px; max-width:720px; box-sizing:border-box; padding:18px 20px 18px 24px; display:flex; align-items:center; gap:20px; background:#1d6b42; color:#fff; z-index:3; }
 #navBanner > * + * { margin-left:20px; }
+/* In a narrow map window the buttons drop under the text instead of squeezing it. */
+#navBanner { flex-wrap:wrap; }
+#navBanner .nbText { flex:1 1 240px; min-width:0; }
+#navBanner .nbBtns { display:flex; margin-left:auto; }
+#navBanner .nbBtns > * + * { margin-left:12px; }
 #navBanner > i { font-size:70px; }
 #navBanner b { display:block; font-size:40px; font-weight:600; }
 #navBanner span { display:block; font-size:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -2802,11 +2807,11 @@ function updateNav() {
   if (toNext < 50 && !NAV.nearSaid) { NAV.nearSaid = 1; speak(`Şimdi ${text.toLowerCase()}`); }
   $('navBanner').style.display = '';
   $('navBanner').innerHTML = `<i class="ti ti-${stepIcon(next)}"></i>
-    <div style="flex:1;min-width:0"><b>${fmtDist(toNext)}</b><span>${escHtml(text)}${road ? ' · ' + escHtml(road) : ''}</span>
+    <div class="nbText"><b>${fmtDist(toNext)}</b><span>${escHtml(text)}${road ? ' · ' + escHtml(road) : ''}</span>
       <small>Varış ${fmtClock(restS)} · ${fmtDur(restS)} · ${fmtDist(rest)}</small></div>
-    <button data-voice aria-label="Sesli yönlendirme"><i class="ti ti-volume${NAV.voice ? '' : '-off'}"></i></button>
+    <div class="nbBtns"><button data-voice aria-label="Sesli yönlendirme"><i class="ti ti-volume${NAV.voice ? '' : '-off'}"></i></button>
     <button data-overview aria-label="Rotanın tamamı"><i class="ti ti-route"></i></button>
-    <button data-stop aria-label="Navigasyonu bitir"><i class="ti ti-x"></i></button>`;
+    <button data-stop aria-label="Navigasyonu bitir"><i class="ti ti-x"></i></button></div>`;
   if (map) map.easeTo({ center: pos, zoom: 16.5, pitch: 50, bearing: NAV.heading != null ? NAV.heading : map.getBearing(), duration: 900 });
 }
 $('navBanner').addEventListener('click', (e) => {
