@@ -104,7 +104,7 @@ input { user-select:text; -webkit-user-select:text; }
 #stage { position:absolute; width:1920px; height:1080px; left:0; top:0; transform-origin:0 0; visibility:hidden; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
   /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
      stacks its app list into one tall column and would push the dock off screen) */
-  grid-template-columns:var(--carW, 720px) 1fr var(--sideW, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
+  grid-template-columns:var(--sigL, 0px) var(--carW, 720px) 1fr var(--sideW, 0px) var(--sigR, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
 /* hidden third column on the right: an app window, pulled out from the right edge */
 #sidePanel { min-width:0; min-height:0; overflow:clip; background:var(--pn); border-left:1px solid var(--cd); display:flex; flex-direction:column; }
 #sideHandle { position:absolute; top:0; bottom:112px; width:36px; z-index:7; cursor:ew-resize; touch-action:none;
@@ -168,7 +168,7 @@ input { user-select:text; -webkit-user-select:text; }
 #stage.portrait .dk .dolphin { width:66px; }
 #mapWrap, #carPanel { min-width:0; }
 /* Tesla: drag the edge of the car view to widen it up to full screen */
-#divider { position:absolute; top:0; bottom:112px; left:calc(var(--carW, 720px) - 18px); width:36px; z-index:7; cursor:ew-resize; touch-action:none;
+#divider { position:absolute; top:0; bottom:112px; left:calc(var(--sigL, 0px) + var(--carW, 720px) - 18px); width:36px; z-index:7; cursor:ew-resize; touch-action:none;
   display:flex; align-items:center; justify-content:center; transition:left .35s cubic-bezier(.2,.8,.2,1); }
 #stage.dragging #divider { transition:none; }
 #divider div { width:8px; height:110px; border-radius:4px; background:var(--cd2); }
@@ -177,6 +177,11 @@ button { font-family:inherit; color:inherit; }
 
 /* car panel */
 #carPanel { position:relative; background:var(--pn); overflow:hidden; }
+/* Columns: [left signal] car | map | third window [right signal]; the signal columns are 0 wide unless
+   the trial "Sinyalde kenardan kamera penceresi" opens one. */
+#stage:not(.portrait) #carPanel { grid-column:2; grid-row:1; }
+#stage:not(.portrait) #mapWrap { grid-column:3; grid-row:1; }
+#stage:not(.portrait) #sidePanel { grid-column:4; grid-row:1; }
 #status { position:absolute; top:28px; left:36px; right:36px; display:flex; align-items:center; font-size:26px; z-index:2; }
 #gears { display:flex; gap:18px; font-weight:500; cursor:pointer; }
 #gears span { color:var(--mu); }
@@ -418,6 +423,11 @@ button { font-family:inherit; color:inherit; }
 #sigPane.right .bsLbl { left:auto; right:8px; }
 #sigPane .bsLbl { font-size:20px; padding:6px 12px; }
 #stage.portrait #sigPane { top:140px; width:620px; height:370px; }
+/* Landscape: the side view is a column of the layout (the car window moves towards the middle). */
+#stage:not(.portrait) #sigPane { position:relative; grid-row:1; grid-column:1; top:auto; left:auto; right:auto; width:auto; height:auto; min-width:0; align-self:stretch;
+  transform:none; border-radius:0; box-shadow:none; z-index:auto; display:flex; align-items:center; }
+#stage:not(.portrait) #sigPane.right { grid-column:5; }
+#stage:not(.portrait) #sigPane canvas { height:100%; } /* drawn at the column's own size */
 
 /* seats */
 .seats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -600,7 +610,7 @@ button { font-family:inherit; color:inherit; }
 .app span { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } /* long app names */
 
 /* dock */
-#dock { grid-column:1 / 4; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
+#dock { grid-column:1 / -1; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
 .dk:hover { background:var(--cd); }
 .dk .dolphin { width:78px; height:auto; }
@@ -2442,6 +2452,14 @@ function blindSpotWanted() {
   if (!S.signal || S.gear !== 'D' || S.bsMode === 'off') return false;
   return S.bsMode === 'always' || S.speed < 30;
 }
+// Trial: the signal's side view as a column at that edge (landscape); the map gives up the room.
+const SIG_COL = 520;
+const sigW = { left: 0, right: 0 };
+function setSigCol(side) {
+  sigW.left = side === 'left' ? SIG_COL : 0; sigW.right = side === 'right' ? SIG_COL : 0;
+  stage.style.setProperty('--sigL', sigW.left + 'px'); stage.style.setProperty('--sigR', sigW.right + 'px');
+  placeHandles(); syncEmbedSoon(); wake(1500);
+}
 function updateBlindSpot() {
   const cam = $('bsCam');
   if (blindSpotWanted()) {
@@ -2458,12 +2476,16 @@ function updateBlindSpot() {
       $('sigArrow').className = `ti ti-arrow-big-${bsSide}`;
       $('sigTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
       $('sigPane').classList.add('show');
+      if (!PORTRAIT) setSigCol(bsSide); // landscape: a column; upright it slides over the edge
     }
     if (!bsRaf) bsRaf = requestAnimationFrame(drawBlindSpot);
   } else if (cam.classList.contains('show') && !bsHideTimer) {
     // Tesla keeps the view up briefly after the stalk is released.
     const delay = S.gear === 'D' ? 2000 : 0;
-    bsHideTimer = setTimeout(() => { cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null; }, delay);
+    bsHideTimer = setTimeout(() => {
+      cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null;
+      if (sigW.left || sigW.right) setSigCol(null);
+    }, delay);
   }
 }
 // Rear camera strip: shown while driving (setting on), centred above the car, about as wide as
@@ -2571,41 +2593,56 @@ function placeBsCam() {
 const bsCtx = $('bsCanvas').getContext('2d');
 const sigCtx = $('sigCanvas').getContext('2d'); // the trial edge pane shows the same drawing
 let bsT = 0;
-function drawBlindSpot() {
-  const c = bsCtx, W = 672, H = 400, flip = bsSide === 'right';
-  bsT += (DEVICE ? 0 : 0.004) + S.speed * 0.00025; // a drawing, not a camera: on the device it moves only with speed
+// The side view, drawn at any size: the small tile (672×400) and the trial's column (its own size,
+// so it fills the column without cropping). Proportions follow the frame; a tall frame puts the
+// horizon a little higher and thickens the lines by its short side.
+function paintSideView(c, W, H, flip) {
+  const u = Math.min(W, H) / 400, tall = H > W;
   c.save();
   if (flip) { c.translate(W, 0); c.scale(-1, 1); }
-  const sky = c.createLinearGradient(0, 0, 0, H * 0.42);
+  const hz = tall ? 0.36 : 0.42;
+  const sky = c.createLinearGradient(0, 0, 0, H * hz);
   sky.addColorStop(0, '#6d7f93'); sky.addColorStop(1, '#a9b4bf');
   c.fillStyle = sky; c.fillRect(0, 0, W, H);
-  c.fillStyle = '#3d4249'; c.fillRect(0, H * 0.42, W, H);
-  // Vanishing point to the right: the side camera looks backwards along the car.
-  const vx = W * 0.82, vy = H * 0.42;
+  c.fillStyle = '#3d4249'; c.fillRect(0, H * hz, W, H);
+  // Vanishing point towards the car's side: the side camera looks backwards along the car.
+  const vx = W * (tall ? 0.78 : 0.82), vy = H * hz;
   c.fillStyle = '#4b5058';
-  c.beginPath(); c.moveTo(vx, vy); c.lineTo(W * 0.05, H); c.lineTo(W * 1.2, H); c.closePath(); c.fill();
-  c.strokeStyle = '#e8e8e8'; c.lineWidth = 6;
+  c.beginPath(); c.moveTo(vx, vy); c.lineTo(W * 0.05 - (tall ? W * 0.4 : 0), H); c.lineTo(W * 1.2, H); c.closePath(); c.fill();
+  c.strokeStyle = '#e8e8e8'; c.lineWidth = 6 * u;
   for (let i = 0; i < 6; i++) {
     const a = ((i / 6 + bsT) % 1), b = Math.min(1, a + 0.08);
-    const p = (k) => [vx + (W * 0.32 - vx) * k * k, vy + (H - vy) * k * k];
+    const p = (k) => [vx + (W * (tall ? 0.12 : 0.32) - vx) * k * k, vy + (H - vy) * k * k];
     c.beginPath(); c.moveTo(...p(a)); c.lineTo(...p(b)); c.stroke();
   }
   // A car approaching in the next lane (the preview's demo; the device has no such data).
   if (!DEVICE) {
     const k = (Math.sin(bsT * 3) + 1) / 2 * 0.6 + 0.15;
-    const cx = vx + (W * 0.12 - vx) * k, cy = vy + (H * 0.78 - vy) * k, s = 30 + 170 * k;
-    c.fillStyle = '#1c1f24'; c.fillRect(cx - s / 2, cy - s * 0.55, s, s * 0.55);
-    c.fillStyle = '#d9dde3'; c.fillRect(cx - s * 0.42, cy - s * 0.45, s * 0.84, s * 0.18);
+    const cx = vx + (W * 0.12 - vx) * k, cy = vy + (H * 0.78 - vy) * k, sz = (30 + 170 * k) * u;
+    c.fillStyle = '#1c1f24'; c.fillRect(cx - sz / 2, cy - sz * 0.55, sz, sz * 0.55);
+    c.fillStyle = '#d9dde3'; c.fillRect(cx - sz * 0.42, cy - sz * 0.45, sz * 0.84, sz * 0.18);
   }
   // Own car body along the edge of the frame.
   c.fillStyle = '#8f949b';
-  c.beginPath(); c.moveTo(W, H * 0.3); c.quadraticCurveTo(W * 0.9, H * 0.6, W * 0.78, H); c.lineTo(W, H); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(W, H * 0.3); c.quadraticCurveTo(W * 0.9, H * 0.6, W * (tall ? 0.7 : 0.78), H); c.lineTo(W, H); c.closePath(); c.fill();
   c.restore();
   // Guide lines are drawn unmirrored so they read the same on both sides.
-  c.strokeStyle = 'rgba(245,197,66,.8)'; c.lineWidth = 4;
+  c.strokeStyle = 'rgba(245,197,66,.8)'; c.lineWidth = 4 * u;
   const gx = flip ? W * 0.3 : W * 0.7;
   c.beginPath(); c.moveTo(gx, H); c.lineTo(flip ? W * 0.45 : W * 0.55, H * 0.55); c.stroke();
-  if (S.set.sigEdge) sigCtx.drawImage($('bsCanvas'), 0, 0);
+}
+function drawBlindSpot() {
+  const flip = bsSide === 'right';
+  bsT += (DEVICE ? 0 : 0.004) + S.speed * 0.00025; // a drawing, not a camera: on the device it moves only with speed
+  paintSideView(bsCtx, 672, 400, flip);
+  // The trial's pane at its own size (a column in landscape, the slide-in pane upright).
+  if (S.set.sigEdge) {
+    const cv = $('sigCanvas'), w = cv.clientWidth, h = cv.clientHeight;
+    if (w > 10 && h > 10) {
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      paintSideView(sigCtx, w, h, flip);
+    }
+  }
   placeBsCam();
   bsRaf = $('bsCam').classList.contains('show') ? requestAnimationFrame(drawBlindSpot) : null;
 }
@@ -3300,7 +3337,7 @@ function setSideW(w, animate) {
 }
 // The side window's handle sits on its left edge, but never on top of the car column's handle.
 function placeHandles() {
-  const at = Math.max(carW + 18, LEN() - sideW - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
+  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - sideW - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
   $('sideHandle').style.left = PORTRAIT ? '' : at;
   $('sideHandle').style.top = PORTRAIT ? at : '';
 }
