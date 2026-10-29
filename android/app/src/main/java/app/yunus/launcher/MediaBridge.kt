@@ -160,7 +160,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     // Every app that has played media here, so it stays in the card's app list. ("seen2": the first
     // list also took apps whose session never played, such as the Google app.)
     private val seen = HashSet(prefs.getStringSet("seen2", emptySet()).orEmpty())
-    private var apps: JSONArray? = null
+    @Volatile private var apps: JSONArray? = null
     private var artData: String? = null
 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { list -> use(list.orEmpty()) }
@@ -199,7 +199,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     // is left out.
     private fun shown() {
         sessions = all.filter { c ->
-            isBluetoothApp(c.packageName) || c.packageName in seen || isMediaApp(ctx, c.packageName) ||
+            isBluetoothApp(c.packageName) || c.packageName in seen || isMedia(c.packageName) ||
                 !c.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrBlank() || c.playbackState?.state == PlaybackState.STATE_PLAYING
         }
     }
@@ -289,40 +289,56 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         }, 6000)
     }
 
+    // The card's message is built off the main thread: covers (scaled, JPEG), app icons and the
+    // list of music apps take time, and at a car start the system is busy enough that holding the
+    // main thread made Android report Yunus as not responding. The main thread only takes a
+    // snapshot of the sessions (their metadata and states are immutable copies).
+    private class Snap(val pkg: String, val md: MediaMetadata?, val st: PlaybackState?)
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "yunus-media").apply { isDaemon = true } }
+
     private fun send() {
         val c = current
         if (c != null && c.packageName != last) { last = c.packageName; prefs.edit().putString("last", last).apply() }
         if (sessions.filter { !isBluetoothApp(it.packageName) }.any { seen.add(it.packageName) }) { prefs.edit().putStringSet("seen2", HashSet(seen)).apply(); apps = null }
-        val out = JSONObject().put("access", true)
-        // Nothing open: the last app. Always: the installed music apps, to start one from.
         if (startFailed != null && sessions.any { it.playbackState?.state == PlaybackState.STATE_PLAYING }) startFailed = null
-        startFailed?.let { out.put("startFailed", it) }
-        if (c == null) last?.let { out.put("last", JSONObject().put("pkg", it).put("app", label(it)).put("icon", icon(it) ?: JSONObject.NULL)) }
-        out.put("apps", apps ?: mediaApps(ctx, seen).also { apps = it })
+        val now = c?.let { Snap(it.packageName, it.metadata, it.playbackState) }
+        val all = sessions.map { Snap(it.packageName, it.metadata, it.playbackState) }
+        val lastPkg = last
+        val failed = startFailed
+        val seenNow = HashSet(seen)
+        worker.execute { emit(JSONObject().put("media", build(now, all, lastPkg, failed, seenNow)).toString()) }
+    }
+
+    private fun build(c: Snap?, all: List<Snap>, lastPkg: String?, failed: String?, seenNow: Set<String>): JSONObject {
+        val out = JSONObject().put("access", true)
+        failed?.let { out.put("startFailed", it) }
+        // Nothing open: the last app. Always: the installed music apps, to start one from.
+        if (c == null) lastPkg?.let { out.put("last", JSONObject().put("pkg", it).put("app", label(it)).put("icon", icon(it) ?: JSONObject.NULL)) }
+        out.put("apps", apps ?: mediaApps(ctx, seenNow).also { apps = it })
         out.put("sessions", JSONArray().apply {
-            sessions.forEach { put(JSONObject().put("pkg", it.packageName).put("app", label(it.packageName)).put("icon", icon(it.packageName) ?: JSONObject.NULL)
-                .put("title", it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "")
-                .put("playing", it.playbackState?.state == PlaybackState.STATE_PLAYING)) }
+            all.forEach { put(JSONObject().put("pkg", it.pkg).put("app", label(it.pkg)).put("icon", icon(it.pkg) ?: JSONObject.NULL)
+                .put("title", it.md?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "")
+                .put("playing", it.st?.state == PlaybackState.STATE_PLAYING)) }
         })
         if (c != null) {
-            val md = c.metadata
-            val st = c.playbackState
+            val md = c.md
+            val st = c.st
             val title = md?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE) ?: ""
             val artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE) ?: ""
             // Position now, from the last report and the playback speed.
             var pos = st?.position ?: 0L
             if (st != null && st.state == PlaybackState.STATE_PLAYING && st.lastPositionUpdateTime > 0)
                 pos += ((SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong()
-            out.put("pkg", c.packageName).put("app", label(c.packageName)).put("icon", icon(c.packageName) ?: JSONObject.NULL)
+            out.put("pkg", c.pkg).put("app", label(c.pkg)).put("icon", icon(c.pkg) ?: JSONObject.NULL)
                 .put("title", title).put("artist", artist)
                 .put("album", md?.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "")
                 .put("playing", st?.state == PlaybackState.STATE_PLAYING)
                 // The app's own reason it can't play ("Please login…"), shown on the card.
                 .put("error", if (st?.state == PlaybackState.STATE_ERROR) st.errorMessage?.toString() ?: "" else "")
                 .put("pos", pos).put("dur", md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L)
-                .put("art", art(c.packageName, title, md) ?: JSONObject.NULL)
+                .put("art", art(c.pkg, title, md) ?: JSONObject.NULL)
         }
-        emit(JSONObject().put("media", out).toString())
+        return out
     }
 
     // The cover as a small JPEG data URL, encoded once per track.
@@ -346,9 +362,13 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private fun icon(pkg: String): String? = icons.getOrPut(pkg) { appIconData(ctx, pkg) }
 
     private fun label(pkg: String): String = appLabel(ctx, pkg)
+    // Whether a session's app counts as media, asked on every playback change: kept per app.
+    private val mediaKind = HashMap<String, Boolean>()
+    private fun isMedia(pkg: String) = mediaKind.getOrPut(pkg) { isMediaApp(ctx, pkg) }
 
     fun close() {
         browser?.disconnect()
+        worker.shutdownNow()
         try { manager.removeOnActiveSessionsChangedListener(sessionsChanged) } catch (_: Exception) { }
         all.forEach { it.unregisterCallback(callback) }
     }
