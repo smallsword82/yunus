@@ -4018,6 +4018,7 @@ window.yunusCar = (m) => {
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.net) { renderNet(m.net); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
+  if (m.redraw) { wake(800); return; } // back in front: draw again
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
     if (/yok|durdu/.test(m.embedStatus)) mapEmbedFailed(); // the shell helper could not run

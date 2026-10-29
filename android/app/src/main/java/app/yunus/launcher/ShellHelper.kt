@@ -68,6 +68,15 @@ object ShellHelper {
         keepOnDisplay(display, component.substringBefore('/'))
     }
 
+    private fun nudge(display: Int) {
+        val line = ProcessBuilder("dumpsys", "display").start().inputStream.bufferedReader().readText()
+            .lineSequence().firstOrNull { it.contains("DisplayInfo{") && Regex("displayId $display[,\"]").containsMatchIn(it) } ?: return
+        val (w, h) = Regex("real (\\d+) x (\\d+)").find(line)?.destructured ?: return
+        ProcessBuilder("wm", "size", "${w.toInt() - 1}x$h", "-d", display.toString()).inheritIO().start().waitFor()
+        SystemClock.sleep(200)
+        ProcessBuilder("wm", "size", "reset", "-d", display.toString()).inheritIO().start().waitFor()
+    }
+
     // The window's close button: every task on that display (only Yunus's own) is removed, as
     // swiping an app away in recents does; the next launch starts the app afresh.
     private fun close(display: Int) {
@@ -92,6 +101,10 @@ object ShellHelper {
                         if (onDisplay == 0 && pkg in pkgs) {
                             Tasks.move(task, display)
                             System.err.println("moved $pkg task $task back to display $display")
+                            // A video surface (SurfaceView) can stay behind on the main screen after the
+                            // move; a relayout on the display (1 px narrower, then back) brings it along.
+                            SystemClock.sleep(300)
+                            nudge(display)
                             // Its start had put it in front of Yunus on the main screen; with it gone the
                             // home screen would show, so Yunus (single task) comes back to the front.
                             ProcessBuilder("am", "start", "-n", "$OWNER/.MainActivity").inheritIO().start().waitFor()

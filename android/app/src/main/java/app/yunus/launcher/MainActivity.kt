@@ -308,9 +308,14 @@ class MainActivity : Activity() {
         }
     }
 
+    // Back in front, also after another window covered Yunus (an app in the third window starting
+    // its player on the main screen for a moment): the page draws only on change, so it is asked to
+    // draw again, or the screen would stay black.
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemBars()
+        if (!hasFocus) return
+        hideSystemBars()
+        if (::web.isInitialized) { web.invalidate(); postToPage(JSONObject().put("redraw", true).toString()) }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
