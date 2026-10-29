@@ -305,6 +305,7 @@ button { font-family:inherit; color:inherit; }
 #telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Inter,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
 #telltales .more.red { color:#ff3b30; background:rgba(255,59,48,.14); }
 .tt { width:40px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; }
+.tt.flash { animation:blink .8s steps(1) infinite; } /* the cluster reports it flashing */
 .tt svg { width:36px; height:28px; }
 .tt b { font:700 14px Arial, sans-serif; letter-spacing:.5px; border:2.5px solid currentColor; border-radius:7px; padding:2px 5px; white-space:nowrap; }
 .tt.red { color:#ff3b30; } .tt.amber { color:#ffb020; } .tt.green { color:#30d158; } .tt.blue { color:#3d8bff; } .tt.grey { color:#8a8f98; }
@@ -996,7 +997,8 @@ function saveSettings() { try { localStorage.setItem('settings', JSON.stringify(
 // Units (Settings > System). Tyre pressures are kept in bar, speed in km/h; the speed-limit sign
 // stays in km/h because that is what the road signs say.
 const pressUnit = () => ({ bar: 'bar', psi: 'PSI', kpa: 'kPa' })[S.set.pressUnit] || 'bar';
-const pressNum = (bar) => (S.set.pressUnit === 'psi' ? Math.round(bar * 14.5038) : S.set.pressUnit === 'kpa' ? Math.round(bar * 100) : bar.toFixed(1));
+const tyreLow = (pos) => (S.tyreState && S.tyreState[pos] != null ? S.tyreState[pos] === 2 : S.tyres[pos] != null && S.tyres[pos] < 2.2);
+const pressNum = (bar) => (bar == null ? '—' : S.set.pressUnit === 'psi' ? Math.round(bar * 14.5038) : S.set.pressUnit === 'kpa' ? Math.round(bar * 100) : bar.toFixed(1));
 // Default launcher, as in Kinex: shows whether this launcher is the car's home screen and
 // switches it. On the car "Varsayılan yap" asks Android for the home role (the system's own
 // "Ana ekran uygulaması" choice) and, where DiLink blocks that, sets it through the local ADB
@@ -1100,7 +1102,7 @@ const TELLTALES = [
   { id: 'abs', name: 'ABS arızası', color: 'amber', desc: 'ABS çalışmıyor, frenler çalışır. Sert frende tekerlek kilitlenebilir.' },
   { id: 'escoff', name: 'ESC kapalı', color: 'amber', auto: () => !S.set.esp, desc: 'Denge kontrolü kapatıldı; virajlarda yavaş sürün.' },
   { id: 'esc', name: 'ESC arızası', color: 'amber', desc: 'Denge kontrolü arızalı. Kısa yanıp sönme: sistem devrede.' },
-  { id: 'tpms', name: 'Lastik basıncı', color: 'amber', auto: () => Object.values(S.tyres).some((v) => v < 2.2), desc: 'Düşük basınç ya da TPMS arızası. Lastikleri kontrol edin.' },
+  { id: 'tpms', name: 'Lastik basıncı', color: 'amber', auto: () => ['FL', 'FR', 'RL', 'RR'].some(tyreLow), desc: 'Düşük basınç ya da TPMS arızası. Lastikleri kontrol edin.' },
   { id: 'daw', name: 'Sürücü dikkat uyarısı', color: 'amber', desc: 'Yorgunluk belirtisi algılandı; mola verin.' },
   { id: 'cpd', name: 'Çocuk algılama (CPD)', color: 'amber', text: () => 'CPD', desc: 'CPD kapalı ya da arızalı.' },
   { id: 'fog', name: 'Arka sis lambası', color: 'amber', auto: () => S.fog, desc: 'Arka sis lambası açık.' },
@@ -1119,8 +1121,12 @@ const TELLTALES = [
 S.faults = {};
 S.fog = false;
 const ttColor = (t) => (typeof t.color === 'function' ? t.color() : t.color);
-const ttLit = (t) => (t.auto ? t.auto() : !!S.faults[t.id]);
-const ttHtml = (t) => `<div class="tt ${ttColor(t)}" title="${t.name}">${t.text ? `<b>${t.text()}</b>` : ICONS[t.id]}</div>`;
+// On the car the instrument cluster reports its warning lights (CAR_HAL_MAP → {tt:{id: value}});
+// a light it has reported follows the car, the others their rule or (preview) the demo faults.
+const halTT = {};
+const ttLit = (t) => (t.id in halTT ? halTT[t.id].on : t.auto ? t.auto() : !!S.faults[t.id]);
+const ttFault = (t) => (t.id in halTT ? halTT[t.id].on : !t.auto && !!S.faults[t.id]);
+const ttHtml = (t) => `<div class="tt ${ttColor(t)}${halTT[t.id] && halTT[t.id].flash ? ' flash' : ''}" title="${t.name}">${t.text ? `<b>${t.text()}</b>` : ICONS[t.id]}</div>`;
 // The status bar shows only active warnings (amber and red). Always-on information lights (OK,
 // drive mode, AVH standby, park brake in P, ...) stay in the Warnings list, as on Tesla.
 const isWarning = (t) => ['amber', 'red'].includes(ttColor(t)) && t.id !== 'epb';
@@ -1141,7 +1147,7 @@ function updateTelltales() {
   }
   // A red fault also pops up a notification with the manual's advice; a tap hides it until
   // a different red fault appears.
-  const red = TELLTALES.find((t) => !t.auto && ttColor(t) === 'red' && S.faults[t.id]);
+  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !['plug', 'epb'].includes(t.id) && ttFault(t));
   if (!red) dismissedAlert = null;
   $('warnBanner').classList.toggle('show', !!red && red.id !== dismissedAlert);
   if (red) $('warnBanner').innerHTML = `${ttHtml(red)}<div><b>${red.name}</b><br><span style="font-size:17px;color:var(--mu)">${red.desc}</span></div>`;
@@ -1350,6 +1356,9 @@ const DEV = location.hash === '#debug';
 // On the head unit (or the emulator) the app is there: real data and the car's own screens only,
 // none of the desktop preview's demo content or demo taps.
 const DEVICE = !!window.YunusNative;
+// Tyre pressures come from the car (Tyre device); until it reports them the card shows "—".
+if (DEVICE) S.tyres = { FL: null, FR: null, RL: null, RR: null };
+S.tyreState = {}; // TYRE_PRESSURE_STATE_*: 0 normal, 1 over, 2 under
 carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
 function onCarLoaded(gltf) {
   performance.mark('car-loaded');
@@ -2039,12 +2048,12 @@ function updateCards() {
   const vals = SIM.hist.filter((v) => v !== null);
   $('enAvg').textContent = vals.length ? `Son ${vals.length >> 1} sn ortalaması ${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} Wh/km` : 'Sürüşe başlayınca tüketim burada çizilir';
   drawEnergy();
-  const t = S.tyres, low = Object.values(t).some((v) => v < 2.2);
-  $('tyreState').textContent = low ? 'Düşük basınç' : 'Normal';
+  const t = S.tyres, low = ['FL', 'FR', 'RL', 'RR'].some(tyreLow), none = Object.values(t).every((v) => v == null);
+  $('tyreState').textContent = none ? 'Bekleniyor' : low ? 'Düşük basınç' : 'Normal';
   $('tyreState').style.color = low ? 'var(--dn)' : '';
-  const tyre = (v, pos) => `<div style="${pos}" class="${v < 2.2 ? 'low' : ''}">${pressNum(v)}<span>${pressUnit()}</span></div>`;
+  const tyre = (k, pos) => `<div style="${pos}" class="${tyreLow(k) ? 'low' : ''}">${pressNum(t[k])}<span>${pressUnit()}</span></div>`;
   $('ccTyres').innerHTML = `<img src="img/overhead.png" alt="">` +
-    tyre(t.FL, 'left:22%;top:28px') + tyre(t.FR, 'right:22%;top:28px') + tyre(t.RL, 'left:22%;bottom:22px') + tyre(t.RR, 'right:22%;bottom:22px');
+    tyre('FL', 'left:22%;top:28px') + tyre('FR', 'right:22%;top:28px') + tyre('RL', 'left:22%;bottom:22px') + tyre('RR', 'right:22%;bottom:22px');
   const tr = SIM.trip, mins = Math.floor((Date.now() - tr.start) / 60000);
   $('trDist').innerHTML = `${tr.km.toFixed(1).replace('.', ',')}<span>km</span>`;
   $('trKwh').innerHTML = `${Math.max(0, tr.kwh).toFixed(2).replace('.', ',')}<span>kWh</span>`;
@@ -3234,7 +3243,7 @@ const CARDS = {
         `<button class="btn ${S.windows[k] ? 'on' : ''}" data-win="${k}">${l} %${S.windows[k]}</button>`).join('')}
       <button class="btn ${S.sunshade ? 'on' : ''}" style="grid-column:1/3" data-do="shade"><i class="ti ti-sun"></i>Cam tavan perdesi %${S.sunshade}</button></div>
       <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
-    if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v < 2.2 ? 'low' : ''}">${pressNum(v)} ${pressUnit()}<span>${v < 2.2 ? 'Düşük basınç' : '24°C'}</span></div>`;
+    if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v != null && v < 2.2 ? 'low' : ''}">${pressNum(v)} ${pressUnit()}<span>${v != null && v < 2.2 ? 'Düşük basınç' : ''}</span></div>`;
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
     if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['tog', 'sigEdge', 'Sinyalde kenardan kamera penceresi (deneme)'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
       <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
@@ -4140,13 +4149,43 @@ const CAR_HAL_MAP = {
   'Setting 0x34100022': (v) => ({ regen: v === 3 ? 'high' : 'std' }), // SET_DR_ENERGY_FB: 2 standard, 3 high
   'Setting 0x24C00010': (v) => ({ steer: v === 2 ? 'sport' : 'comfort' }), // steering assist: 1 comfort, 2 sport
   'Setting 0x4FA0000B': (v) => ({ seats: { driver: { heat: Math.max(0, v - 1), vent: 0, auto: false } } }), // driver seat heat: 1 off, 2/3 levels
+  // Warning lights, INSTRUMENT_2IN1_FAULT_* (FAULT_INDICATOR_*: 0 unknown, 1 lit, 2 off, 3-7 flashing).
+  'Instrument 0x2960000E': (v) => ({ tt: { main: v } }), // MAIN_ALARM_INDICATOR
+  'Instrument 0x29600026': (v) => ({ tt: { key: v } }), // SMART_KEY_SYS_WARN_LIGHT
+  'Instrument 0x27500014': (v) => ({ tt: { abs: v } }), // ABS_FAILURE_WARN_LIGHT
+  'Instrument 0x2750002C': (v) => ({ tt: { esc: v } }), // ESP_FAILURE_WARN_LIGHT
+  'Instrument 0x28700014': (v) => ({ tt: { tpms: v } }), // TYRE_PRESSURE_SYS_FAILURE_WARN_LIGHT
+  'Instrument 0x27500020': (v) => ({ tt: { brake: v } }), // BRAKE_SYS_FAILURE_WARN_LIGHT
+  'Instrument 0x2870000E': (v) => ({ tt: { steer: v } }), // STEERING_SYS_FAILURE_WARN_LIGHT
+  'Instrument 0x2870002C': (v) => ({ tt: { coolant: v } }), // COOLANT_TEMP_HIGH_WARN_LIGHT
+  'Instrument 0x2A60002C': (v) => ({ tt: { plug: v } }), // POWER_BATTERY_CHARGE_CONNECT_INDICATOR
+  'Instrument 0x2A600026': (v) => ({ tt: { lowv: v } }), // LOW_POWER_BATTERY_WARN_LIGHT (12 V)
+  'Instrument 0x2A600032': (v) => ({ tt: { hvhot: v } }), // POWER_BATTERY_HEAT_WARN_LIGHT
+  'Instrument 0x2B000008': (v) => ({ tt: { hvfault: v } }), // POWER_BAT_FAILURE_WARN_LIGHT
+  'Instrument 0x2A60001A': (v) => ({ tt: { powertrain: v } }), // POWER_SYS_FAILURE_WARN_LIGHT
+  'Instrument 0x2B00001A': (v) => ({ tt: { power: v } }), // DRIVE_POWER_LIMIT_INDICATOR
+  'Instrument 0x2750001A': (v) => ({ tt: { epb: v } }), // ELEC_PARKING_STATE_INDICATOR
+  'Instrument 0x27500008': (v) => ({ tt: { airbag: v } }), // SRS_FAILURE_WARN_LIGHT
+  'Instrument 0x2C000014': (v) => ({ tt: { ok: v } }), // OK_INDICATOR
+  'Instrument 0x28F0000E': (v) => ({ tt: { pos: v } }), // SMALL_LIGHT_INDICATOR (position lights)
+  'Instrument 0x2B00000E': (v) => ({ tt: { acc: v } }), // CRUISE_CTRL_INDICATOR
+  'Instrument 0x28F0002C': (v) => ({ tt: { belt: v } }), // DRIVER_SEAT_BELT_INDICATOR_LIGHT_STATUS
+  // Tyres: TYRE_PRESSURE_VALUE_* (0..4094, taken as kPa until checked on the car) and _STATE_*.
+  'Tyre 0x99000124': (v) => ({ tyres: { FL: v / 100 } }),
+  'Tyre 0x99000128': (v) => ({ tyres: { FR: v / 100 } }),
+  'Tyre 0x9900012C': (v) => ({ tyres: { RL: v / 100 } }),
+  'Tyre 0x99000130': (v) => ({ tyres: { RR: v / 100 } }),
+  'Tyre 0x99000123': (v) => ({ tyreState: { FL: v } }),
+  'Tyre 0x99000127': (v) => ({ tyreState: { FR: v } }),
+  'Tyre 0x9900012B': (v) => ({ tyreState: { RL: v } }),
+  'Tyre 0x9900012F': (v) => ({ tyreState: { RR: v } }),
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
 };
 // Values that change slowly are kept across restarts: most events only arrive when they change,
 // so after a cold start the car would otherwise not say its battery, range or settings for a while.
-const CAR_HAL_KEEP = ['Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
+const CAR_HAL_KEEP = ['Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
   'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C'];
 let autoPlayDone = false, playingPkg = null;
 window.yunusCar = (m) => {
@@ -4176,6 +4215,14 @@ window.yunusCar = (m) => {
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.net) { renderNet(m.net); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
+  if (m.tt) {
+    for (const id in m.tt) {
+      const v = m.tt[id];
+      if (v > 0) halTT[id] = { on: v === 1 || v >= 3, flash: v >= 3 }; else delete halTT[id]; // 0: unknown, the rule applies
+    }
+    updateTelltales();
+    return;
+  }
   if (m.redraw) { wake(800); return; } // back in front: draw again
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
@@ -4214,6 +4261,7 @@ window.yunusCar = (m) => {
   if (m.chargePort != null && m.chargePort !== S.charging) setCharge(m.chargePort, true);
   if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
   if (m.tyres) Object.assign(S.tyres, m.tyres);
+  if (m.tyreState) Object.assign(S.tyreState, m.tyreState);
   if ('signal' in m && m.signal !== S.signal) setSignal(m.signal, true);
   if (m.hazard != null) S.hazard = m.hazard;
   if (m.lights) S.lights = m.lights;
