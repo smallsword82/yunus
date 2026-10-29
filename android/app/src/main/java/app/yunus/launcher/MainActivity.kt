@@ -52,6 +52,7 @@ class MainActivity : Activity() {
     private var carHal: CarHal? = null
     private lateinit var shell: ShellLink
     private lateinit var embed: AppEmbed
+    private lateinit var volPop: VolumeOverlay
     private lateinit var media: MediaBridge
     private lateinit var volume: VolumeBridge
     private lateinit var status: StatusBridge
@@ -207,6 +208,14 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun volumeSet(level: Int) = runOnUiThread { volume.set(level) }
 
+                // The volume bar, drawn natively above the embedded apps (the page can't cover them),
+                // at the page bar's place and with its colours; k is screen px per design px.
+                @JavascriptInterface
+                fun volumePopup(x: Int, y: Int, w: Int, h: Int, k: Double, level: Int, max: Int, bg: String, fg: String, track: String) = runOnUiThread {
+                    val color = { s: String -> try { android.graphics.Color.parseColor(s.trim()) } catch (_: Exception) { android.graphics.Color.GRAY } }
+                    volPop.show(x, y, w, h, k.toFloat(), level, max, color(bg), color(fg), color(track))
+                }
+
                 @JavascriptInterface
                 fun mediaOpen() = runOnUiThread {
                     media.currentPackage()?.let { pkg -> packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) } }
@@ -232,6 +241,7 @@ class MainActivity : Activity() {
         val root = android.widget.FrameLayout(this).apply { addView(web) }
         shell = ShellLink(this) { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }
         embed = AppEmbed(this, root, shell)
+        volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
         volume = VolumeBridge(this, ::postToPage)
         status = StatusBridge(this, ::postToPage).also { it.start() }

@@ -3930,31 +3930,25 @@ const volIcon = () => {
   $('volPop').querySelector('.fill').style.width = pct + '%';
   $('volPop').querySelector('.knob').style.left = pct + '%';
 };
-// The volume bar opens above the volume keys, as in Tesla. The embedded map and third-window apps
-// are drawn above the page, so the one under the bar hides while it shows and comes back after.
-let volCovering = false;
-const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-function coverUnderVolPop(on) {
-  if (on === volCovering) return;
-  volCovering = on;
-  const p = $('volPop').getBoundingClientRect();
-  if (on) {
-    if (sidePkg && overlaps(p, $('sideApp').getBoundingClientRect())) YunusNative.embedVisible('side', false);
-    if (mapEmbedded && overlaps(p, $('map').getBoundingClientRect())) YunusNative.embedVisible('map', false);
-  } else if (!trayOpen) {
-    if (sidePkg) embedSide();
-    if (mapEmbedded && !current) YunusNative.embedVisible('map', true);
-  }
+// The volume bar opens above the volume keys, as in Tesla. On the device it is drawn by the app
+// (VolumeOverlay) at this bar's place and in its colours: the embedded map and third-window apps
+// are drawn above the page, and only a native view can show over them. The preview keeps this one.
+function showNativeVolPop() {
+  const r = $('volPop').getBoundingClientRect(), k = (window.visualViewport ? visualViewport.scale : 1) * devicePixelRatio;
+  const lift = $('volPop').classList.contains('show') ? 0 : 12 * stageScale; // its hidden state sits 12 px lower
+  const css = getComputedStyle(stage), v = (n) => css.getPropertyValue(n).trim();
+  YunusNative.volumePopup(Math.round(r.left * k), Math.round((r.top - lift) * k), Math.round(r.width * k), Math.round(r.height * k),
+    stageScale * k, S.vol, VOL_MAX, v('--cd'), v('--tx'), v('--cd2'));
 }
 function setVol(v, fromSystem) {
   const level = Math.round(THREE.MathUtils.clamp(v, 0, VOL_MAX));
   if (!fromSystem && level !== S.vol && window.YunusNative && YunusNative.volumeSet) YunusNative.volumeSet(level);
   S.vol = level;
   volIcon();
+  if (window.YunusNative && YunusNative.volumePopup) return showNativeVolPop();
   $('volPop').classList.add('show');
-  if (window.YunusNative) coverUnderVolPop(true);
   clearTimeout(volHide);
-  volHide = setTimeout(() => { if (!volDrag) { $('volPop').classList.remove('show'); if (window.YunusNative) coverUnderVolPop(false); } }, 2000);
+  volHide = setTimeout(() => { if (!volDrag) $('volPop').classList.remove('show'); }, 2000);
 }
 $('vUp').onclick = () => setVol(S.vol + 1);
 $('vDn').onclick = () => setVol(S.vol - 1);
