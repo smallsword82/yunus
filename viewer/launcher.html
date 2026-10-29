@@ -2934,6 +2934,14 @@ function pushSeats() { // a seat changed on screen: tell the car, unless the car
   }
 }
 let liveRefreshAt = 0;
+// CarHal event (device + type) -> telemetry message for window.yunusCar.
+const CAR_HAL_MAP = {
+  'Instrument 0x26100014': (v) => ({ doors: { FL: v === 1 } }),
+  'Instrument 0x26100016': (v) => ({ doors: { FR: v === 1 } }),
+  'Instrument 0x26100018': (v) => ({ doors: { RL: v === 1 } }),
+  'Instrument 0x26100017': (v) => ({ doors: { RR: v === 1 } }),
+  'Instrument 0x26100015': (v) => ({ trunk: v === 1 }),
+};
 window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
   // simulation active until a validated telemetry field reaches this API.
@@ -2946,6 +2954,11 @@ window.yunusCar = (m) => {
     const data = (window.YunusCarData = window.YunusCarData || {});
     data[m.carHal.dev + ' ' + m.carHal.type] = m.carHal;
     if (window.__dbg) console.log('carHal', m.carHal);
+    // The body device (real door switches) needs a BYD-signed permission, but the instrument
+    // cluster mirrors each door-ajar warning and is readable (1 open, 0 closed). Ids verified on
+    // the car by opening each door and the tailgate in turn.
+    const map = CAR_HAL_MAP[m.carHal.dev + ' ' + m.carHal.type];
+    if (map && m.carHal.int != null) window.yunusCar(map(m.carHal.int));
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
