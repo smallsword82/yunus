@@ -130,6 +130,10 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaChoose(pkg: String) = runOnUiThread { media.choose(pkg) }
 
+                // Starts a music app's playback when none of it is open (the card's app list).
+                @JavascriptInterface
+                fun mediaStart(pkg: String) = runOnUiThread { media.start(pkg) }
+
                 @JavascriptInterface
                 fun mediaSeek(ms: Double) = runOnUiThread { media.seek(ms.toLong()) }
 

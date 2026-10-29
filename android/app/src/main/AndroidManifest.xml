@@ -41,6 +41,13 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- Music apps for the music card when none is open (see mediaApps), and starting them. -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MEDIA_BUTTON" />
+        </intent>
         <!-- Navigation apps for the map area (see navigationApps). -->
         <intent>
             <action android:name="android.intent.action.VIEW" />

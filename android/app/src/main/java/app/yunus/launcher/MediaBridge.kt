@@ -47,6 +47,33 @@ fun navigationApps(ctx: Context): String {
 }
 
 /**
+ * Music and video apps for the music card when nothing is open: apps that call themselves audio or
+ * video apps (Spotify, YouTube Music, YouTube, …), the car's own media (com.byd.mediacenter: radio,
+ * USB, Bluetooth music) and the phone over Bluetooth (the Bluetooth app's media service). Other apps
+ * with a media service, such as the Google app for podcasts, are left out. JSON for the page.
+ */
+fun mediaApps(ctx: Context): JSONArray {
+    val pm = ctx.packageManager
+    val launchable = pm.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN)
+        .addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0).map { it.activityInfo.packageName }.toSet()
+    val browsers = pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService"), 0)
+        .map { it.serviceInfo.packageName }.toSet()
+    val mediaName = Regex("music|radio|mediacenter|media[.]player|video|audio|podcast|tunes|spotify|youtube|deezer|fizy|tidal|soundcloud", RegexOption.IGNORE_CASE)
+    val notMedia = Regex("call|phone|dial|camera|gallery|photo", RegexOption.IGNORE_CASE)
+    fun isMedia(pkg: String): Boolean {
+        val info = try { pm.getApplicationInfo(pkg, 0) } catch (_: Exception) { return false }
+        if (info.category == android.content.pm.ApplicationInfo.CATEGORY_AUDIO || info.category == android.content.pm.ApplicationInfo.CATEGORY_VIDEO) return true
+        return mediaName.containsMatchIn(pkg) && !notMedia.containsMatchIn(pkg)
+    }
+    // Bluetooth isn't launchable but plays the phone through its media service.
+    val bluetooth = browsers.filter { it == "com.android.bluetooth" || it == "com.google.android.bluetooth" }
+    val pkgs = (launchable.filter(::isMedia) + bluetooth).distinct().filter { it != ctx.packageName }
+    return JSONArray().apply {
+        pkgs.forEach { put(JSONObject().put("pkg", it).put("app", if (it in bluetooth) "Bluetooth" else appLabel(ctx, it)).put("icon", appIconData(ctx, it) ?: JSONObject.NULL)) }
+    }
+}
+
+/**
  * The dock's volume control on the system media volume: the page sets it, and any change made
  * elsewhere (steering-wheel keys, the car's own bar) comes back as {volume:{cur,max}}.
  */
@@ -92,6 +119,11 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private var current: MediaController? = null
     private var chosen: String? = null // package the user picked; null: follow what is playing
     private var artKey: String? = null
+    // The last app that had a session, kept across restarts: when every app is closed the card still
+    // shows it, and play starts it again (as Kinex does).
+    private val prefs = ctx.getSharedPreferences("media", Context.MODE_PRIVATE)
+    private var last: String? = prefs.getString("last", null)
+    private var apps: JSONArray? = null
     private var artData: String? = null
 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { list -> use(list.orEmpty()) }
@@ -134,7 +166,8 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     fun choose(pkg: String) { chosen = pkg; pickCurrent(); send() }
 
     fun command(cmd: String) {
-        val controls = current?.transportControls ?: return
+        val controls = current?.transportControls
+        if (controls == null) { if (cmd == "play" || cmd == "toggle") last?.let { start(it) }; return }
         when (cmd) {
             "play" -> controls.play()
             "pause" -> controls.pause()
@@ -146,12 +179,57 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
 
     fun seek(ms: Long) { current?.transportControls?.seekTo(ms) }
 
-    /** The app behind the current session, to open it full screen. */
-    fun currentPackage(): String? = current?.packageName
+    /** The app behind the current session (else the last one), to open it full screen. */
+    fun currentPackage(): String? = current?.packageName ?: last
+
+    /**
+     * Starts [pkg]'s music with nothing of it open, the way Android Auto does: connect to the app's
+     * media browser service and press play on the session it hands over (Spotify, YouTube Music,
+     * … then play in the background). An app without that service gets a play key, and is opened
+     * if it has no receiver for one either.
+     */
+    private var browser: android.media.browse.MediaBrowser? = null
+    fun start(pkg: String) {
+        chosen = pkg
+        val pm = ctx.packageManager
+        val service = pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService").setPackage(pkg), 0).firstOrNull()?.serviceInfo
+        if (service != null) {
+            browser?.disconnect()
+            var b: android.media.browse.MediaBrowser? = null
+            b = android.media.browse.MediaBrowser(ctx, ComponentName(service.packageName, service.name), object : android.media.browse.MediaBrowser.ConnectionCallback() {
+                override fun onConnected() {
+                    try { MediaController(ctx, b!!.sessionToken).transportControls.play() } catch (_: Exception) { }
+                    // Stay bound a little while the app starts playing and publishes its session.
+                    main.postDelayed({ if (browser === b) { b?.disconnect(); browser = null } }, 15000)
+                }
+                override fun onConnectionFailed() { open(pkg) }
+            }, null)
+            browser = b
+            b.connect()
+            return
+        }
+        val receiver = android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON).setPackage(pkg)
+        val target = pm.queryBroadcastReceivers(receiver, 0).firstOrNull()?.activityInfo ?: return open(pkg)
+        receiver.component = ComponentName(target.packageName, target.name)
+        receiver.addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        for (action in intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP))
+            ctx.sendBroadcast(android.content.Intent(receiver).putExtra(android.content.Intent.EXTRA_KEY_EVENT,
+                android.view.KeyEvent(action, android.view.KeyEvent.KEYCODE_MEDIA_PLAY)))
+    }
+
+    private fun open(pkg: String) {
+        ctx.packageManager.getLaunchIntentForPackage(pkg)?.let { ctx.startActivity(it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
 
     private fun send() {
         val c = current
+        if (c != null && c.packageName != last) { last = c.packageName; prefs.edit().putString("last", last).apply() }
         val out = JSONObject().put("access", true)
+        // Nothing open: the last app, and the installed music apps to start one from.
+        if (c == null) {
+            last?.let { out.put("last", JSONObject().put("pkg", it).put("app", label(it)).put("icon", icon(it) ?: JSONObject.NULL)) }
+            out.put("apps", apps ?: mediaApps(ctx).also { apps = it })
+        }
         out.put("sessions", JSONArray().apply {
             sessions.forEach { put(JSONObject().put("pkg", it.packageName).put("app", label(it.packageName)).put("icon", icon(it.packageName) ?: JSONObject.NULL)
                 .put("title", it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "")
@@ -170,6 +248,8 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
                 .put("title", title).put("artist", artist)
                 .put("album", md?.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "")
                 .put("playing", st?.state == PlaybackState.STATE_PLAYING)
+                // The app's own reason it can't play ("Please login…"), shown on the card.
+                .put("error", if (st?.state == PlaybackState.STATE_ERROR) st.errorMessage?.toString() ?: "" else "")
                 .put("pos", pos).put("dur", md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L)
                 .put("art", art(c.packageName, title, md) ?: JSONObject.NULL)
         }
@@ -199,6 +279,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private fun label(pkg: String): String = appLabel(ctx, pkg)
 
     fun close() {
+        browser?.disconnect()
         try { manager.removeOnActiveSessionsChangedListener(sessionsChanged) } catch (_: Exception) { }
         sessions.forEach { it.unregisterCallback(callback) }
     }

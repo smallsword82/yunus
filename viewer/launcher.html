@@ -1737,7 +1737,10 @@ function renderMedia() {
 const appIcon = (x, size) => x.icon ? `<img src="${x.icon}" alt="" style="width:${size}px;height:${size}px;border-radius:${size / 4}px;vertical-align:middle">`
   : `<i class="ti ti-${appLook(x.pkg).icon}" style="color:${appLook(x.pkg).color}"></i>`;
 function renderLiveMedia() {
-  const m = liveMedia, look = appLook(m.pkg);
+  // Every app closed: the card keeps the last one (play starts it again), as in Kinex.
+  const m = liveMedia.access && !liveMedia.pkg && liveMedia.last
+    ? { ...liveMedia, ...liveMedia.last, idle: true, title: '', artist: 'Çalmak için ▶ dokun' } : liveMedia;
+  const look = appLook(m.pkg);
   const label = !m.access ? 'İzin gerekli' : m.pkg ? m.app : 'Medya';
   $('srcBtn').innerHTML = `${m.access && m.pkg ? appIcon(m, 22) : `<i class="ti ti-${m.access ? 'music' : 'lock'}" style="color:var(--mu)"></i>`}${label}<i class="ti ti-chevron-down"></i>`;
   // No cover (radio, some apps): the app's own icon on the tile.
@@ -1746,7 +1749,7 @@ function renderLiveMedia() {
     : m.access && m.icon ? `<div id="mmArt" class="art fallback"><img src="${m.icon}" alt="" style="width:56%;height:56%;border-radius:22%"></div>`
     : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`;
   $('mmTitle').textContent = !m.access ? 'Müzik kartı için bildirim erişimi ver' : m.pkg ? (m.title || m.app) : 'Çalan bir şey yok';
-  $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (m.artist || m.album || '') : '';
+  $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (m.error || m.artist || m.album || '') : '';
   $('mmPlay').innerHTML = `<i class="ti ti-player-${m.playing ? 'pause' : 'play'}"></i>`;
   $('mmProg').parentElement.style.visibility = m.dur > 0 ? '' : 'hidden'; // radio has no length
   if (m.dur > 0 && !mmSeeking) $('mmProg').style.width = (livePos() / m.dur * 100) + '%';
@@ -1755,7 +1758,11 @@ function openSrcPop() {
   if (liveMedia && liveMedia.access) {
     // The apps with a media session; picking one makes the card follow and control it.
     const list = liveMedia.sessions || [];
-    $('srcPop').innerHTML = list.length ? list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : look.color}">${x.icon ? appIcon(x, 42) : `<i class="ti ti-${look.icon}"></i>`}</div>
+    // Nothing open: the installed music apps, to start one.
+    const apps = (liveMedia.apps || []).filter((a) => !list.some((x) => x.pkg === a.pkg));
+    $('srcPop').innerHTML = !list.length && apps.length ? apps.map((x) => `<button data-start="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : appLook(x.pkg).color}">${appIcon(x, 42)}</div>
+      <span>${x.app}<small>Başlat</small></span>${liveMedia.last && x.pkg === liveMedia.last.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`).join('')
+      : list.length ? list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : look.color}">${x.icon ? appIcon(x, 42) : `<i class="ti ti-${look.icon}"></i>`}</div>
       <span>${x.app}<small>${x.title || ''}${x.playing ? ' · çalıyor' : ''}</small></span>${x.pkg === liveMedia.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`; }).join('')
       : '<button disabled><span>Açık medya uygulaması yok<small>Spotify, YouTube Music ya da radyoyu başlat</small></span></button>';
   } else
@@ -1771,6 +1778,8 @@ $('srcBtn').onclick = (e) => { e.stopPropagation(); $('srcPop').classList.contai
 $('srcPop').onclick = (e) => {
   const p = e.target.closest('[data-pkg]');
   if (p) { YunusNative.mediaChoose(p.dataset.pkg); $('srcPop').classList.remove('show'); return; }
+  const st = e.target.closest('[data-start]');
+  if (st) { YunusNative.mediaStart(st.dataset.start); $('srcPop').classList.remove('show'); return; }
   const b = e.target.closest('[data-src]'); if (!b) return;
   S.src = b.dataset.src;
   try { localStorage.setItem('src', S.src); } catch {}
