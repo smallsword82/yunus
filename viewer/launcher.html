@@ -1998,7 +1998,7 @@ function applyPerf() {
 // Dark map without the CSS filter: the light "positron" style's colours are flipped in lightness
 // (hue kept, saturation lowered), as the filter did, but once per style instead of per frame.
 const mapColorsLight = new Map();
-const COLOR_PROPS = ['background-color', 'fill-color', 'fill-outline-color', 'line-color', 'text-color', 'text-halo-color'];
+const COLOR_PROPS = ['background-color', 'fill-color', 'fill-outline-color', 'fill-extrusion-color', 'line-color', 'text-color', 'text-halo-color'];
 const colorCtx = document.createElement('canvas').getContext('2d');
 function darkColor(c) {
   colorCtx.fillStyle = '#000'; colorCtx.fillStyle = c;
@@ -2396,6 +2396,14 @@ function buildMap() {
       map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: ROUTE } } });
       map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#4a78e8', 'line-width': 9 } });
+      // 3D buildings from the tiles' own heights (OpenMapTiles render_height), as in Kinex's
+      // navigation; they rise from zoom 15, so they show on the tilted driving and guidance views.
+      const firstLabel = map.getStyle().layers.find((l) => l.type === 'symbol');
+      map.addLayer({ id: 'building-3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 15,
+        paint: { 'fill-extrusion-color': '#d6d9de',
+          'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 16, ['coalesce', ['get', 'render_height'], 8]],
+          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+          'fill-extrusion-opacity': 0.85 } }, firstLabel && firstLabel.id);
       setMapStyle(S.mapStyle);
       darkMapLayers();
     });
