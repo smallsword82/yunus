@@ -2,13 +2,88 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=1920, user-scalable=no">
+<!-- The car's WebView is Chromium 74 (2019); it lacks CanvasRenderingContext2D.roundRect
+     (shipped Chrome 99). Polyfill it before any script runs. Accepts a number or a 1-4
+     element radii array [tl, tr, br, bl], matching the spec. -->
+<script>
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    if (typeof r === 'number') r = [r, r, r, r];
+    else if (Array.isArray(r)) {
+      if (r.length === 1) r = [r[0], r[0], r[0], r[0]];
+      else if (r.length === 2) r = [r[0], r[1], r[0], r[1]];
+      else if (r.length === 3) r = [r[0], r[1], r[2], r[1]];
+    } else r = [0, 0, 0, 0];
+    var tl = r[0], tr = r[1], br = r[2], bl = r[3];
+    this.moveTo(x + tl, y);
+    this.lineTo(x + w - tr, y); this.arcTo(x + w, y, x + w, y + tr, tr);
+    this.lineTo(x + w, y + h - br); this.arcTo(x + w, y + h, x + w - br, y + h, br);
+    this.lineTo(x + bl, y + h); this.arcTo(x, y + h, x, y + h - bl, bl);
+    this.lineTo(x, y + tl); this.arcTo(x, y, x + tl, y, tl);
+    this.closePath();
+    return this;
+  };
+}
+</script>
 <title>Yunus</title>
 <!-- Libraries, icons and fonts are bundled in vendor/ so the app works offline in the car
      (MapLibre 4.7.1, Tabler icons 3.19.0, three.js r160, Draco 1.5.6, Inter). Only map tiles need internet. -->
 <link href="vendor/maplibre/maplibre-gl.css" rel="stylesheet">
 <link href="vendor/tabler/tabler-icons.min.css" rel="stylesheet">
 <style>
+/* The car's WebView is Chromium 74, which ignores `gap` on flex containers (flexbox gap needs
+   Chrome 84), so item spacing collapsed and text/icons looked cramped. Re-create each flex
+   container's gap with sibling margins. Kept at the top of the sheet on purpose, so the real
+   rules below (including any child margin:auto) keep priority at equal specificity. */
+.sideHead > * + * { margin-left:12px; }
+#gears > * + * { margin-left:18px; }
+.batt > * + * { margin-left:10px; }
+#ccDots > * + * { margin-left:8px; }
+.mm > * + * { margin-left:18px; }
+.srcBtn > * + * { margin-left:6px; }
+#srcPop button > * + * { margin-left:14px; }
+.mm .ctl > * + * { margin-left:28px; }
+#telltales > * + * { margin-top:8px; }
+#petExit > * + *, #cleanExit > * + * { margin-left:12px; }
+#projPrompt > * + * { margin-left:18px; }
+.homeBox .head > * + * { margin-left:16px; }
+.setRow > * + * { margin-left:20px; }
+.seg > * + * { margin-left:4px; }
+.rng > * + * { margin-left:12px; }
+#sig > * + * { margin-left:18px; }
+#beamInd > * + * { margin-left:10px; }
+.bsLbl > * + * { margin-left:5px; }
+.seat .row > * + * { margin-left:8px; }
+.seatBtn > * + * { margin-top:6px; }
+.seatBtn .lv > * + * { margin-left:4px; }
+#mapStyleBtn > * + * { margin-left:10px; }
+.cpSide > * + * { margin-top:22px; }
+.cpTile > * + * { margin-top:8px; }
+.aaRail > * + * { margin-top:18px; }
+.aaMain > * + * { margin-top:16px; }
+.aaNav > * + * { margin-left:22px; }
+.aaMedia > * + * { margin-left:18px; }
+#search > * + * { margin-left:16px; }
+.btn > * + * { margin-left:12px; }
+.dashTemp > * + * { margin-left:10px; }
+.flowBtns > * + * { margin-left:10px; }
+.fan > * + * { margin-left:14px; }
+.tabs > * + * { margin-top:6px; }
+.tabs button > * + * { margin-left:14px; }
+.paint > * + * { margin-left:14px; }
+.tyres > * + * { margin-left:60px; }
+.player > * + * { margin-left:40px; }
+.app > * + * { margin-top:10px; }
+#dock > * + * { margin-left:14px; }
+#dockApps > * + * { margin-left:14px; }
+#dockPick button > * + * { margin-top:8px; }
+.tempCtl > * + * { margin-left:2px; }
+.seatDk .lv > * + * { margin-left:3px; }
+#vIcon .top > * + * { margin-left:8px; }
+#volPop > * + * { margin-left:20px; }
+#seatPop .auto > * + * { margin-left:10px; }
+
 /* Tesla's UI face (Universal Sans) is proprietary; Inter is the closest free match: neutral, geometric, light numerals. */
 @font-face { font-family: Inter; src: url(vendor/inter/inter-latin-ext.woff2) format('woff2'); font-weight: 100 900;
   unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
@@ -21,7 +96,7 @@
 * { box-sizing:border-box; }
 html,body { margin:0; height:100%; background:#000; overflow:hidden; font-family:Inter,system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
 input { user-select:text; -webkit-user-select:text; }
-#stage { position:absolute; width:1920px; height:1080px; left:0; top:0; transform-origin:0 0; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
+#stage { position:absolute; width:1920px; height:1080px; left:0; top:0; transform-origin:0 0; visibility:hidden; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
   /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
      stacks its app list into one tall column and would push the dock off screen) */
   grid-template-columns:var(--carW, 720px) 1fr var(--sideW, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
@@ -42,7 +117,7 @@ input { user-select:text; -webkit-user-select:text; }
 #stage.dragging { transition:none; }
 #mapWrap, #carPanel { min-width:0; }
 /* Tesla: drag the edge of the car view to widen it up to full screen */
-#divider { position:absolute; top:0; bottom:112px; left:clamp(0px, calc(var(--carW, 720px) - 18px), 1884px); width:36px; z-index:7; cursor:ew-resize; touch-action:none;
+#divider { position:absolute; top:0; bottom:112px; left:calc(var(--carW, 720px) - 18px); width:36px; z-index:7; cursor:ew-resize; touch-action:none;
   display:flex; align-items:center; justify-content:center; transition:left .35s cubic-bezier(.2,.8,.2,1); }
 #stage.dragging #divider { transition:none; }
 #divider div { width:8px; height:110px; border-radius:4px; background:var(--cd2); }
@@ -161,7 +236,7 @@ button { font-family:inherit; color:inherit; }
 
 /* settings rows */
 /* Pet mode (Tesla's Dog mode): a full-screen notice for passers-by with the cabin temperature */
-#petMode, #cleanMode { position:absolute; inset:0; z-index:60; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+#petMode, #cleanMode { position:absolute; top:0; right:0; bottom:0; left:0; z-index:60; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
 #petMode.show, #cleanMode.show { display:flex; }
 #petMode { background:radial-gradient(circle at 50% 40%, #1d3a5f, #0b111a 70%); color:#fff; }
 #petMode .paw { width:140px; height:140px; border-radius:50%; background:rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center; font-size:84px; }
@@ -208,7 +283,7 @@ button { font-family:inherit; color:inherit; }
 .rng b { min-width:64px; text-align:right; font-weight:500; }
 #bsCam.warn { box-shadow:0 0 0 6px #e5484d, 0 10px 30px rgba(0,0,0,.5); }
 #outTemp { position:absolute; top:84px; right:36px; font-size:22px; color:var(--mu); z-index:2; }
-#car3d { position:absolute; inset:0; }
+#car3d { position:absolute; top:0; right:0; bottom:0; left:0; }
 #fpsMeter { position:absolute; top:84px; left:36px; z-index:5; font:500 18px/1.3 ui-monospace,monospace; color:var(--mu); background:var(--cd); padding:6px 10px; border-radius:8px; pointer-events:none; display:none; }
 #fpsMeter.show { display:block; }
 /* Performance mode: the map's dark look comes from recoloured layers instead of a full-screen filter */
@@ -268,7 +343,7 @@ button { font-family:inherit; color:inherit; }
    parked card (below the bottom edge) into view */
 #mapWrap { position:relative; overflow:clip; }
 #carPanel { overflow:clip; }
-#map { position:absolute; inset:0; background:#1a1c20; }
+#map { position:absolute; top:0; right:0; bottom:0; left:0; background:#1a1c20; }
 #stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
 #mapStyleBtn { right:24px; top:24px; height:64px; padding:0 20px; display:flex; align-items:center; gap:10px; font-size:20px; border:0; cursor:pointer; }
 #mapStyleBtn i { font-size:28px; }
@@ -276,9 +351,9 @@ button { font-family:inherit; color:inherit; }
 #stage.sat-map #satCredit { display:block; }
 
 /* phone projection in the map area */
-#proj { position:absolute; inset:0; z-index:2; background:#000; }
+#proj { position:absolute; top:0; right:0; bottom:0; left:0; z-index:2; background:#000; }
 #proj.hidden { display:none; }
-.projScreen { position:absolute; inset:0 0 104px; display:none; }
+.projScreen { position:absolute; top:0; right:0; bottom:104px; left:0; display:none; }
 #proj.carplay #projCarplay, #proj.auto #projAuto { display:flex; }
 #stage.projecting #search, #stage.projecting #navCard, #stage.projecting #recenter, #stage.projecting #mapStyleBtn { display:none; }
 .projBadge { position:absolute; left:0; right:0; bottom:110px; text-align:center; font-size:15px; color:#8a8f98; }
@@ -330,7 +405,7 @@ button { font-family:inherit; color:inherit; }
 /* climate */
 .climate { display:grid; grid-template-columns:1fr 330px; gap:28px; height:100%; }
 .dash { position:relative; border-radius:18px; overflow:hidden; background:#202327; }
-.dash img.base { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.dash img.base { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
 .dash img.flow { position:absolute; left:0; width:100%; transition:opacity .4s; pointer-events:none; }
 .dashTemp { position:absolute; left:28px; bottom:22px; display:flex; align-items:center; gap:10px; font-size:52px; font-weight:300; }
 .dashTemp button { width:64px; height:64px; border-radius:50%; border:0; background:rgba(0,0,0,.45); color:#fff; font-size:30px; cursor:pointer; }
@@ -612,11 +687,11 @@ button { font-family:inherit; color:inherit; }
 
 <script src="vendor/maplibre/maplibre-gl.js"></script>
 <script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as THREE from './vendor/three/build/three.module.js';
+import { GLTFLoader } from './vendor/three/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from './vendor/three/jsm/loaders/DRACOLoader.js';
+import { OrbitControls } from './vendor/three/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from './vendor/three/jsm/environments/RoomEnvironment.js';
 
 const $ = (id) => document.getElementById(id);
 const stage = $('stage');
@@ -703,7 +778,7 @@ const SETTING_DEFAULTS = {
   projector: 'yunus', projAlways: true, projAuto: false,
   speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
   rearMirror: true,
-  petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: false, fps: false, isHome: false,
+  petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: true, fps: false, isHome: false,
 };
 S.set = { ...SETTING_DEFAULTS };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('settings') || '{}')); } catch {}
@@ -735,8 +810,8 @@ function homeBlock() {
 // update check, log upload, restart. Statuses are demo values; on the car they come from the
 // HAL bridge, the ADB connection and Android's permission checks.
 const SERVICES = [
-  ['Araç servis köprüsü (HAL)', 'ok', 'Bağlı · 127.0.0.1:19322'],
-  ['ADB bağlantısı', 'ok', 'Etkin'],
+  ['Araç servis köprüsü (HAL)', 'warn', 'Henüz doğrulanmadı · 127.0.0.1:19322'],
+  ['ADB bağlantısı', 'warn', 'Araçta bağlantı bekleniyor'],
   ['Konum izni', 'ok', 'Her zaman'],
   ['Medya bildirimleri erişimi', 'warn', 'Verilmedi · müzik kartı için gerekli'],
   ['Telefon ve rehber izni', 'warn', 'Verilmedi · aramalar için gerekli'],
@@ -882,11 +957,52 @@ function renderTelltaleList() {
 
 // ---------- fit 1920x1080 stage to the window ----------
 let stageScale = 1;
-function fit() {
-  const k = stageScale = Math.min(innerWidth / 1920, innerHeight / 1080);
-  stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+// The car head unit's WebView can report innerWidth/innerHeight oddly; the layout
+// viewport (clientWidth/clientHeight), and visualViewport when present, are steadier.
+function viewSize() {
+  const de = document.documentElement;
+  let w = Math.min(de.clientWidth || Infinity, innerWidth || Infinity);
+  let h = Math.min(de.clientHeight || Infinity, innerHeight || Infinity);
+  if (window.visualViewport) { w = Math.min(w, visualViewport.width); h = Math.min(h, visualViewport.height); }
+  if (!isFinite(w) || w <= 0) w = innerWidth; if (!isFinite(h) || h <= 0) h = innerHeight;
+  return { w, h };
 }
-addEventListener('resize', fit); fit();
+function fit() {
+  const { w, h } = viewSize();
+  const k = stageScale = Math.min(w / 1920, h / 1080);
+  stage.style.transform = `translate(${(w - 1920 * k) / 2}px, ${(h - 1080 * k) / 2}px) scale(${k})`;
+  // Revealed only once the correct scale is applied, so the stage never flashes at the wrong
+  // (unscaled 1920x1080) size before the fit on load.
+  stage.style.visibility = 'visible';
+  if (dbg) updateDbg(w, h, k);
+}
+addEventListener('resize', fit);
+if (window.visualViewport) visualViewport.addEventListener('resize', fit);
+
+// ---------- screen diagnostic ----------
+// Shows real screen numbers automatically at startup (no touch needed, in case the
+// head unit doesn't deliver pointer events). Tapping it toggles it off/on afterwards.
+let dbg = null;
+function makeDbg() {
+  dbg = document.createElement('div');
+  dbg.id = 'dbgBadge';
+  dbg.style.cssText = 'position:fixed;left:0;top:0;z-index:999999;background:#000d;color:#0f0;'
+    + 'font:14px/1.5 monospace;padding:8px 10px;white-space:nowrap;border:1px solid #0f0';
+  dbg.onclick = () => dbg.remove();
+  document.body.appendChild(dbg);
+}
+function updateDbg(w, h, k) {
+  if (!dbg) return;
+  dbg.textContent = `view ${Math.round(w)}×${Math.round(h)}  win ${innerWidth}×${innerHeight}  `
+    + `client ${document.documentElement.clientWidth}×${document.documentElement.clientHeight}  `
+    + `dpr ${(devicePixelRatio || 1).toFixed(2)}  scale ${k.toFixed(3)}`;
+}
+// The on-screen diagnostic is dev-only now (open with #debug); it no longer shows in normal use.
+if (location.hash === '#debug') {
+  makeDbg();
+  setTimeout(() => { if (dbg) dbg.remove(); dbg = null; }, 20000);
+}
+fit();
 
 // ---------- 3D car (camera presets from Kinex's Dolphin config) ----------
 const PRESETS = {
@@ -897,7 +1013,10 @@ const PRESETS = {
 };
 const box = $('car3d');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// The stage is a fixed 1920x1080 canvas scaled to fit (stageScale), so rendering the 3D at
+// the device pixel ratio makes it ~1/stageScale^2 larger than the screen can show. Multiply by
+// stageScale so the WebGL buffer matches the real on-screen (physical) pixels: native, not inflated.
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * stageScale * (window.visualViewport ? window.visualViewport.scale : 1));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.localClippingEnabled = true; // the sunshade is cut back by a clipping plane
 box.appendChild(renderer.domElement);
@@ -1034,6 +1153,9 @@ function onCarLoaded(gltf) {
   placePlates(car);
   controls.target.copy(target);
   cam.position.copy(presetPos(PRESETS.default));
+  // Performance mode only draws on demand; wake the loop so the freshly loaded car is drawn
+  // (and then kept on screen) instead of staying black until the first touch.
+  wake(2000);
 }
 // ---------- tailgate ----------
 // The model's tailgate is not a separate part, so at load time the triangles in the
@@ -1366,7 +1488,7 @@ function applyPaint() {
   // Hood, roof and pillars take the body colour, or their own on two-tone schemes. They use the
   // body paint material (their own material gets its colour from a black texture).
   if (paintMats[0] && !roofMat) roofMat = paintMats[0].clone();
-  if (roofMat) roofMat.color.setHex(p.roof ?? p.body);
+  if (roofMat) roofMat.color.setHex(p.roof != null ? p.roof : p.body);
   upperMeshes.forEach((o) => { o.material = !paintMats[0] ? o.userData.blackMat : p.roof ? roofMat : paintMats[0]; });
 }
 
@@ -1709,7 +1831,7 @@ controls.addEventListener('end', () => wake(1500)); // let the orbit damping set
 function applyPerf() {
   stage.classList.toggle('perf', S.set.perf);
   $('fpsMeter').classList.toggle('show', S.set.fps);
-  renderer.setPixelRatio(S.set.perf ? 1 : Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio((S.set.perf ? 1 : Math.min(devicePixelRatio, 2)) * stageScale * (window.visualViewport ? window.visualViewport.scale : 1));
   resize3d();
   darkMapLayers();
   wake();
@@ -1724,7 +1846,8 @@ function darkColor(c) {
   colorCtx.fillStyle = '#000'; colorCtx.fillStyle = c;
   const v = colorCtx.fillStyle; // "#rrggbb" or "rgba(...)"
   const m = v.startsWith('#') ? [1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)) : v.match(/[\d.]+/g).slice(0, 3).map(Number);
-  const a = v.startsWith('#') ? 1 : +(v.match(/[\d.]+/g)[3] ?? 1);
+  const am = v.startsWith('#') ? null : v.match(/[\d.]+/g);
+  const a = v.startsWith('#') ? 1 : +(am && am[3] != null ? am[3] : 1);
   const col = new THREE.Color(m[0] / 255, m[1] / 255, m[2] / 255), hsl = {};
   col.getHSL(hsl);
   col.setHSL(hsl.h, hsl.s * 0.6, (1 - hsl.l) * 0.88 + 0.03);
@@ -1739,7 +1862,7 @@ function darkMapLayers() {
     for (const p of COLOR_PROPS) {
       const key = layer.id + '|' + p;
       if (!mapColorsLight.has(key)) {
-        const v = layer.paint?.[p];
+        const v = layer.paint ? layer.paint[p] : undefined;
         if (typeof v !== 'string') continue; // zoom-dependent colours stay as they are
         mapColorsLight.set(key, v);
       }
@@ -1804,7 +1927,7 @@ function glassAt(e) {
   if (!hit) return null;
   if (hit.object === SHADE.node || hit.object === SHADE.glass) return { kind: 'shade', point: hit.point };
   for (let o = hit.object; o; o = o.parent) {
-    const k = /^Window_(FL|FR|RL|RR)$/.exec(o.name)?.[1];
+    const km = /^Window_(FL|FR|RL|RR)$/.exec(o.name); const k = km ? km[1] : undefined;
     if (k) return { kind: 'window', k, point: hit.point };
   }
   return null;
@@ -2266,7 +2389,7 @@ const CARDS = {
 
   camera: { tall: true, cam: 'rear', render: () => `<p class="title">Geri görüş kamerası</p>
     <div style="height:700px;border-radius:18px;background:#111;display:flex;align-items:center;justify-content:center;color:#666;font-size:24px;position:relative;overflow:hidden">
-      <svg viewBox="0 0 400 300" style="position:absolute;inset:0;width:100%;height:100%"><path d="M90 300 L170 120 M310 300 L230 120" stroke="#f5c542" stroke-width="4" fill="none"/><path d="M120 240 H280 M145 180 H255" stroke="#e5484d" stroke-width="3"/></svg>
+      <svg viewBox="0 0 400 300" style="position:absolute;top:0;left:0;width:100%;height:100%"><path d="M90 300 L170 120 M310 300 L230 120" stroke="#f5c542" stroke-width="4" fill="none"/><path d="M120 240 H280 M145 180 H255" stroke="#e5484d" stroke-width="3"/></svg>
       Kamera görüntüsü (araçta BYD kamera servisinden gelecek)</div>` },
 
   apps: { tall: true, render: () => `<p class="title">Uygulamalar</p><div class="grid apps">${APPS.map(([n, i, c]) =>
@@ -2812,6 +2935,22 @@ function pushSeats() { // a seat changed on screen: tell the car, unless the car
 }
 let liveRefreshAt = 0;
 window.yunusCar = (m) => {
+  // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
+  // simulation active until a validated telemetry field reaches this API.
+  if (m.bridge) { window.YunusBridgeStatus = m.bridge; return; }
+  if (m.halEvent) { window.YunusLastHalEvent = m.halEvent; return; }
+  // Live BYDAuto HAL events pushed by the car (CarHal, the direct-HAL listener reader). Collected
+  // by device+type so values can be mapped to dashboard fields; most only change while driving or
+  // charging. Inspect window.YunusCarData to see what the car is actually sending.
+  if (m.carHal) {
+    const data = (window.YunusCarData = window.YunusCarData || {});
+    data[m.carHal.dev + ' ' + m.carHal.type] = m.carHal;
+    if (window.__dbg) console.log('carHal', m.carHal);
+    return;
+  }
+  const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults'];
+  if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
   if (m.powerKw != null) S.powerKw = m.powerKw;
