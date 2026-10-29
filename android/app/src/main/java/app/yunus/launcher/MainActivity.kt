@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     private lateinit var shell: ShellLink
     private lateinit var embed: AppEmbed
     private lateinit var media: MediaBridge
+    private lateinit var volume: VolumeBridge
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -132,6 +133,14 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaSeek(ms: Double) = runOnUiThread { media.seek(ms.toLong()) }
 
+                // Dock volume: the page asks for the level once ({volume:{cur,max}} then follows
+                // every change) and sets it from its keys and slider.
+                @JavascriptInterface
+                fun volumeRefresh() = runOnUiThread { volume.send() }
+
+                @JavascriptInterface
+                fun volumeSet(level: Int) = runOnUiThread { volume.set(level) }
+
                 @JavascriptInterface
                 fun mediaOpen() = runOnUiThread {
                     media.currentPackage()?.let { pkg -> packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) } }
@@ -158,6 +167,7 @@ class MainActivity : Activity() {
         shell = ShellLink(this) { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }
         embed = AppEmbed(this, root, shell)
         media = MediaBridge(this, ::postToPage)
+        volume = VolumeBridge(this, ::postToPage)
         setContentView(root)
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)
@@ -209,7 +219,7 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
     override fun onPause() { web.onPause(); super.onPause() }
-    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); volume.close(); web.destroy(); super.onDestroy() }
 
     private fun postToPage(message: String) {
         runOnUiThread {

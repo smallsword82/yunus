@@ -17,6 +17,32 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /**
+ * The dock's volume control on the system media volume: the page sets it, and any change made
+ * elsewhere (steering-wheel keys, the car's own bar) comes back as {volume:{cur,max}}.
+ */
+class VolumeBridge(private val ctx: Context, private val emit: (String) -> Unit) {
+    private val audio = ctx.getSystemService(android.media.AudioManager::class.java)
+    private val stream = android.media.AudioManager.STREAM_MUSIC
+    private val changed = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, i: android.content.Intent) {
+            if (i.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) == stream) send()
+        }
+    }
+    // Not exported: the system's own broadcast still arrives (Android 14 requires the flag).
+    init {
+        androidx.core.content.ContextCompat.registerReceiver(ctx, changed,
+            android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    fun send() = emit(JSONObject().put("volume", JSONObject()
+        .put("cur", audio.getStreamVolume(stream)).put("max", audio.getStreamMaxVolume(stream))).toString())
+
+    fun set(level: Int) = audio.setStreamVolume(stream, level.coerceIn(0, audio.getStreamMaxVolume(stream)), 0)
+
+    fun close() { try { ctx.unregisterReceiver(changed) } catch (_: Exception) { } }
+}
+
+/**
  * Exists only so Yunus may read the media sessions (Android hands them to an enabled notification
  * listener). It reads no notifications. The owner enables it once in notification access.
  */

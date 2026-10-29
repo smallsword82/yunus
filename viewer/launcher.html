@@ -183,7 +183,8 @@ button { font-family:inherit; color:inherit; }
 #stage.cc-off #ccTrack, #stage.cc-off #ccDots { opacity:0; pointer-events:none; }
 #stage.cc-off #lockBtn { bottom:70px; }
 #ccTrack { display:flex; height:100%; transition:transform .3s cubic-bezier(.2,.8,.2,1); }
-.cc { flex:0 0 100%; padding:12px 22px 22px; box-sizing:border-box; position:relative; }
+/* min-width:0: a long track title must not widen the card past the strip (flex items default to their content width). */
+.cc { flex:0 0 100%; min-width:0; padding:12px 22px 22px; box-sizing:border-box; position:relative; }
 .cc h4 { margin:0 0 8px; font-size:18px; font-weight:500; color:var(--mu); display:flex; justify-content:space-between; }
 .cc h4 b { color:var(--tx); font-weight:500; }
 #ccDots { position:absolute; bottom:10px; left:0; right:0; display:flex; justify-content:center; gap:8px; pointer-events:none; }
@@ -205,7 +206,7 @@ button { font-family:inherit; color:inherit; }
 #srcPop button .ic { width:42px; height:42px; border-radius:10px; flex:none; display:flex; align-items:center; justify-content:center; font-size:24px; color:#fff; }
 #srcPop button span { flex:1; } #srcPop button small { display:block; font-size:15px; color:var(--mu); }
 #srcPop button .ti-check { color:var(--ok); font-size:24px; }
-.mm span { font-size:17px; color:var(--mu); }
+.mm span { display:block; font-size:17px; color:var(--mu); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* The bar seeks on touch: a transparent 14px border makes it finger-sized without changing its look or layout. */
 .mm .bar { height:33px; border-radius:3px; /* border-box: 5px track + 2×14px border */ background:var(--cd2); margin:-6px 0 -8px; overflow:hidden; border:14px solid transparent; border-left:0; border-right:0; background-clip:padding-box; touch-action:none; }
 .mm .bar div { height:100%; background:var(--tx); width:0; }
@@ -479,6 +480,8 @@ button { font-family:inherit; color:inherit; }
 #dockPick p { grid-column:1/-1; margin:0; font-size:18px; color:var(--mu); }
 .dkApp div { width:72px; height:72px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; color:#fff; }
 .tempCtl { display:flex; align-items:center; gap:2px; }
+/* Slid with a finger (dockSlider): the WebView must not take the move as a page pan and cancel it. */
+.tempCtl, #vDn, #vIcon, #vUp { touch-action:none; }
 .tempCtl .dk { width:48px; font-size:36px; color:var(--mu); }
 .tempCtl b { font-size:40px; font-weight:400; min-width:110px; text-align:center; cursor:pointer; }
 #fanCtl b { min-width:76px; display:flex; align-items:center; justify-content:center; }
@@ -3107,9 +3110,10 @@ $('defRear').onclick = () => {
 };
 renderSeatDock();
 renderAirFlow();
-// Volume 0-30 (the DiLink media scale). The dock key shows the level as a bar;
-// any change also pops up a slider above it that can be dragged, and hides after 2 s.
-const VOL_MAX = 30;
+// Volume 0-30 (the DiLink media scale; in the app, the system media volume and its own maximum,
+// see VolumeBridge). The dock key shows the level as a bar; any change also pops up a slider
+// above it that can be dragged, and hides after 2 s.
+let VOL_MAX = 30;
 let volBeforeMute = 12, volHide = 0;
 const volIcon = () => {
   const icon = `ti-volume${S.vol === 0 ? '-3' : S.vol < 10 ? '-2' : ''}`, pct = S.vol / VOL_MAX * 100;
@@ -3119,8 +3123,10 @@ const volIcon = () => {
   $('volPop').querySelector('.fill').style.width = pct + '%';
   $('volPop').querySelector('.knob').style.left = pct + '%';
 };
-function setVol(v) {
-  S.vol = Math.round(THREE.MathUtils.clamp(v, 0, VOL_MAX));
+function setVol(v, fromSystem) {
+  const level = Math.round(THREE.MathUtils.clamp(v, 0, VOL_MAX));
+  if (!fromSystem && level !== S.vol && window.YunusNative && YunusNative.volumeSet) YunusNative.volumeSet(level);
+  S.vol = level;
   volIcon();
   $('volPop').classList.add('show');
   clearTimeout(volHide);
@@ -3135,6 +3141,39 @@ $('volPop').addEventListener('pointerdown', (e) => { volDrag = true; volAt(e); }
 addEventListener('pointermove', (e) => { if (volDrag) volAt(e); });
 addEventListener('pointerup', () => { if (volDrag) { volDrag = false; setVol(S.vol); } });
 volIcon();
+if (window.YunusNative && YunusNative.volumeRefresh) YunusNative.volumeRefresh(); // the system level
+// Slide a finger along a dock control to change it continuously; a tap still steps it once.
+// [stepPx]: page pixels per step; [onSlide]: called once when a slide starts.
+function dockSlider(el, stepPx, get, set, onSlide) {
+  let x0 = null, v0 = 0, sliding = false;
+  // Captured from the touch on: the arrows are narrow, and a finger leaves them in a few pixels.
+  el.addEventListener('pointerdown', (e) => { x0 = e.clientX; v0 = get(); sliding = false; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', (e) => {
+    if (x0 === null) return;
+    const d = (e.clientX - x0) / stageScale;
+    if (!sliding && Math.abs(d) < 12) return;
+    if (!sliding) { sliding = true; if (onSlide) onSlide(); }
+    set(v0 + Math.round(d / stepPx));
+  });
+  const end = () => { x0 = null; };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  // The click that ends a slide is not also a tap on the arrow it started on.
+  el.addEventListener('click', (e) => { if (sliding) { sliding = false; e.stopPropagation(); } }, true);
+}
+for (const id of ['vDn', 'vIcon', 'vUp']) dockSlider($(id), 14, () => S.vol, (v) => setVol(v));
+// Temperature (half degrees) and fan: on the car Yunus cannot set them (a tap opens the car's
+// climate screen), so sliding works off the car only.
+dockSlider($('tVal').parentElement, 22, () => S.temp * 2, (h) => { if (!S.live) setTemp(h / 2); }, () => clearTimeout(tHold));
+dockSlider($('fanCtl'), 30, () => S.fan, (v) => { if (!S.live) setFan(v); });
+// A change from elsewhere (steering-wheel keys, the car's bar) shows on the key; the slider pops up
+// only when the level really changed, not for the first report.
+let volKnown = false;
+function systemVolume(v) {
+  VOL_MAX = v.max || VOL_MAX;
+  if (!volKnown) { volKnown = true; S.vol = v.cur; volIcon(); return; }
+  if (v.cur !== S.vol) setVol(v.cur, true);
+}
 
 // ---------- live vehicle data (Android app + HAL bridge) ----------
 // In the app, MainActivity relays the bridge's state messages here as window.yunusCar({...}):
@@ -3205,6 +3244,7 @@ window.yunusCar = (m) => {
     return;
   }
   if (m.media) { liveMedia = { ...m.media, at: performance.now() }; renderMedia(); return; }
+  if (m.volume) { systemVolume(m.volume); return; }
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
     if (/yok|durdu/.test(m.embedStatus)) mapEmbedFailed(); // the shell helper could not run
