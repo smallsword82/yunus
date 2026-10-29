@@ -720,10 +720,15 @@ private class AdbAuth(dir: File) : java.io.Closeable {
         val privFile = File(dir, "adbkey.pk8")
         val pubFile = File(dir, "adbkey.x509")
         val factory = java.security.KeyFactory.getInstance("RSA")
-        pair = if (privFile.exists() && pubFile.exists()) java.security.KeyPair(
-            factory.generatePublic(java.security.spec.X509EncodedKeySpec(pubFile.readBytes())),
-            factory.generatePrivate(java.security.spec.PKCS8EncodedKeySpec(privFile.readBytes())))
-        else java.security.KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().also {
+        // A key file that can't be read (cut short, or from an older build) is replaced rather than
+        // failing every connection; adbd then asks once more to allow the new key.
+        val saved = try {
+            if (privFile.exists() && pubFile.exists()) java.security.KeyPair(
+                factory.generatePublic(java.security.spec.X509EncodedKeySpec(pubFile.readBytes())),
+                factory.generatePrivate(java.security.spec.PKCS8EncodedKeySpec(privFile.readBytes())))
+            else null
+        } catch (_: Exception) { null }
+        pair = saved ?: java.security.KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().also {
             privFile.writeBytes(it.private.encoded); pubFile.writeBytes(it.public.encoded)
         }
     }
