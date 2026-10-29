@@ -408,6 +408,16 @@ button { font-family:inherit; color:inherit; }
 .bsLbl { position:absolute; top:8px; left:8px; display:flex; align-items:center; gap:5px; background:rgba(0,0,0,.55); color:#fff; padding:4px 8px; border-radius:7px; font-size:14px; }
 .bsLbl i { color:#2fd06a; font-size:17px; animation:blink .7s steps(1) infinite; }
 #bsCam.right .bsLbl { left:auto; right:8px; }
+#bsCam.edgeMode { display:none; } /* the trial's edge pane shows instead */
+#sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:#000;
+  box-shadow:0 16px 48px rgba(0,0,0,.55); transform:translateX(-110%); transition:transform .35s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
+#sigPane.right { left:auto; right:0; transform:translateX(110%); }
+#sigPane.show { transform:translateX(24px); }
+#sigPane.right.show { transform:translateX(-24px); }
+#sigPane canvas { width:100%; height:100%; display:block; }
+#sigPane.right .bsLbl { left:auto; right:8px; }
+#sigPane .bsLbl { font-size:20px; padding:6px 12px; }
+#stage.portrait #sigPane { top:140px; width:620px; height:370px; }
 
 /* seats */
 .seats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -840,6 +850,8 @@ button { font-family:inherit; color:inherit; }
     <button class="btn" id="projLater">Şimdi değil</button><button class="btn primary" id="projOpen">Tam ekran aç</button></div>
   <div id="srcPop" role="dialog"></div>
   <div id="volPop"><i class="ti ti-volume"></i><div class="track"><div class="fill"></div><div class="knob"></div></div></div>
+  <!-- Trial ("Sinyalde kenardan kamera penceresi"): the side view slides in from the signal's edge. -->
+  <div id="sigPane"><canvas id="sigCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="sigArrow"></i><span id="sigTxt">Sol kamera</span></div></div>
   <!-- The app tray, as in Tesla: over all windows, in the middle, just above the dock. -->
   <div id="appTray" role="dialog" aria-label="Uygulamalar">
     <div class="trayHead">Uygulamalar<button id="trayClose" aria-label="Kapat"><i class="ti ti-x"></i></button></div>
@@ -965,7 +977,7 @@ const SETTING_DEFAULTS = {
   mapArea: 'map', navApp: '', bt: true, wifi: true, hotspot: false,
   projector: 'yunus', projAlways: true, projAuto: false,
   speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
-  rearMirror: true,
+  rearMirror: true, sigEdge: false,
   petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: true, fps: false, isHome: false,
 };
 S.set = { ...SETTING_DEFAULTS };
@@ -2440,11 +2452,18 @@ function updateBlindSpot() {
     $('bsArrow').className = `ti ti-arrow-big-${bsSide}`;
     $('bsTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
     cam.classList.add('show');
+    cam.classList.toggle('edgeMode', !!S.set.sigEdge);
+    if (S.set.sigEdge) {
+      $('sigPane').classList.toggle('right', bsSide === 'right');
+      $('sigArrow').className = `ti ti-arrow-big-${bsSide}`;
+      $('sigTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
+      $('sigPane').classList.add('show');
+    }
     if (!bsRaf) bsRaf = requestAnimationFrame(drawBlindSpot);
   } else if (cam.classList.contains('show') && !bsHideTimer) {
     // Tesla keeps the view up briefly after the stalk is released.
     const delay = S.gear === 'D' ? 2000 : 0;
-    bsHideTimer = setTimeout(() => { cam.classList.remove('show'); bsHideTimer = null; }, delay);
+    bsHideTimer = setTimeout(() => { cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null; }, delay);
   }
 }
 // Rear camera strip: shown while driving (setting on), centred above the car, about as wide as
@@ -2550,10 +2569,11 @@ function placeBsCam() {
   el.style.top = THREE.MathUtils.clamp((y0 + y1) / 2 - ch / 2, 90, h - ch - 20) + 'px';
 }
 const bsCtx = $('bsCanvas').getContext('2d');
+const sigCtx = $('sigCanvas').getContext('2d'); // the trial edge pane shows the same drawing
 let bsT = 0;
 function drawBlindSpot() {
   const c = bsCtx, W = 672, H = 400, flip = bsSide === 'right';
-  bsT += 0.004 + S.speed * 0.00025;
+  bsT += (DEVICE ? 0 : 0.004) + S.speed * 0.00025; // a drawing, not a camera: on the device it moves only with speed
   c.save();
   if (flip) { c.translate(W, 0); c.scale(-1, 1); }
   const sky = c.createLinearGradient(0, 0, 0, H * 0.42);
@@ -2570,11 +2590,13 @@ function drawBlindSpot() {
     const p = (k) => [vx + (W * 0.32 - vx) * k * k, vy + (H - vy) * k * k];
     c.beginPath(); c.moveTo(...p(a)); c.lineTo(...p(b)); c.stroke();
   }
-  // A car approaching in the next lane.
-  const k = (Math.sin(bsT * 3) + 1) / 2 * 0.6 + 0.15;
-  const cx = vx + (W * 0.12 - vx) * k, cy = vy + (H * 0.78 - vy) * k, s = 30 + 170 * k;
-  c.fillStyle = '#1c1f24'; c.fillRect(cx - s / 2, cy - s * 0.55, s, s * 0.55);
-  c.fillStyle = '#d9dde3'; c.fillRect(cx - s * 0.42, cy - s * 0.45, s * 0.84, s * 0.18);
+  // A car approaching in the next lane (the preview's demo; the device has no such data).
+  if (!DEVICE) {
+    const k = (Math.sin(bsT * 3) + 1) / 2 * 0.6 + 0.15;
+    const cx = vx + (W * 0.12 - vx) * k, cy = vy + (H * 0.78 - vy) * k, s = 30 + 170 * k;
+    c.fillStyle = '#1c1f24'; c.fillRect(cx - s / 2, cy - s * 0.55, s, s * 0.55);
+    c.fillStyle = '#d9dde3'; c.fillRect(cx - s * 0.42, cy - s * 0.45, s * 0.84, s * 0.18);
+  }
   // Own car body along the edge of the frame.
   c.fillStyle = '#8f949b';
   c.beginPath(); c.moveTo(W, H * 0.3); c.quadraticCurveTo(W * 0.9, H * 0.6, W * 0.78, H); c.lineTo(W, H); c.closePath(); c.fill();
@@ -2583,6 +2605,7 @@ function drawBlindSpot() {
   c.strokeStyle = 'rgba(245,197,66,.8)'; c.lineWidth = 4;
   const gx = flip ? W * 0.3 : W * 0.7;
   c.beginPath(); c.moveTo(gx, H); c.lineTo(flip ? W * 0.45 : W * 0.55, H * 0.55); c.stroke();
+  if (S.set.sigEdge) sigCtx.drawImage($('bsCanvas'), 0, 0);
   placeBsCam();
   bsRaf = $('bsCam').classList.contains('show') ? requestAnimationFrame(drawBlindSpot) : null;
 }
@@ -3176,7 +3199,7 @@ const CARDS = {
       <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
     if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v < 2.2 ? 'low' : ''}">${pressNum(v)} ${pressUnit()}<span>${v < 2.2 ? 'Düşük basınç' : '24°C'}</span></div>`;
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
-    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
+    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['tog', 'sigEdge', 'Sinyalde kenardan kamera penceresi (deneme)'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
       <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
       <div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <button class="btn ${themeMode === 'auto' ? 'on' : ''}" data-theme="auto"><i class="ti ti-contrast"></i>Oto</button>
