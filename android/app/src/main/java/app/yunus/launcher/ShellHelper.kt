@@ -89,7 +89,13 @@ object ShellHelper {
                 SystemClock.sleep(700)
                 try {
                     for ((task, onDisplay, pkgs) in Tasks.roots())
-                        if (onDisplay == 0 && pkg in pkgs) { Tasks.move(task, display); System.err.println("moved $pkg task $task back to display $display") }
+                        if (onDisplay == 0 && pkg in pkgs) {
+                            Tasks.move(task, display)
+                            System.err.println("moved $pkg task $task back to display $display")
+                            // Its start had put it in front of Yunus on the main screen; with it gone the
+                            // home screen would show, so Yunus (single task) comes back to the front.
+                            ProcessBuilder("am", "start", "-n", "$OWNER/.MainActivity").inheritIO().start().waitFor()
+                        }
                 } catch (t: Throwable) { System.err.println("keep $pkg: $t"); return@Thread }
             }
         }.start()
