@@ -1277,6 +1277,9 @@ const traffic = ['left', 'right'].map((side) => {
 const BSD_ZONE = [-7, 1.5]; // metres along the car: from behind the rear bumper to the B-pillar
 const bsd = { left: false, right: false };
 function stepTraffic(dt) {
+  // The overtaking cars and their blind-spot warnings are the preview's demo; on the device there
+  // is no traffic data (the car's blind-spot radar is signature-locked), so none are drawn.
+  if (DEVICE) { traffic.forEach((t) => { t.car.visible = false; }); bsd.left = bsd.right = false; return; }
   for (const t of traffic) {
     const z = t.car.position.z;
     if (t.wait > 0) {
