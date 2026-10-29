@@ -37,6 +37,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Spoken navigation prompts (text-to-speech engine). -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
         <!-- Navigation apps for the map area (see navigationApps). -->
         <intent>
             <action android:name="android.intent.action.VIEW" />

@@ -21,6 +21,8 @@ Araç verisi canlı okunuyor, Google Maps harita alanının içinde çalışıyo
 | Google Maps harita alanında | ✅ otomatik açılıyor, dokunma/kaydırma çalışıyor |
 | Ayarlar | ✅ araba butonu → aracın ayarları; basılı tut → Yunus ayarları |
 | Müzik kartı (medya oturumları) | ✅ emülatörde YouTube Music + YouTube ile doğrulandı (kapak, ikon, sarma, kaynak seçici); araçta radyo/Bluetooth/Spotify denenecek |
+| Yunus Harita navigasyonu | ✅ arama (Photon/OSM), rota (OSRM), adım adım yönlendirme, Türkçe sesli komut, Ev/İş/son aramalar, kaçınma, menzil uyarısı, "Uygulamada aç" — önizleme + emülatörde (ses) doğrulandı; araçta sürüşte denenecek |
+| Navigasyon uygulaması seçimi | ✅ Yunus ayarları → Harita ve telefon (Yunus Harita, Google Maps, Yandex…) |
 | Ses (dock) | ✅ sistem medya sesine bağlı, parmakla kaydırma — emülatörde doğrulandı, araçta denenecek |
 
 ## Bilinmesi gerekenler

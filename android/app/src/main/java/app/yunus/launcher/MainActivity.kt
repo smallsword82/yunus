@@ -133,6 +133,22 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaSeek(ms: Double) = runOnUiThread { media.seek(ms.toLong()) }
 
+                // Spoken navigation prompts, in Turkish, through the system text-to-speech.
+                @JavascriptInterface
+                fun say(text: String) = runOnUiThread { speak(text) }
+
+                // Opens a link (a destination for a navigation app) in the first of [packages] that
+                // handles it, else in any app that does.
+                @JavascriptInterface
+                fun openUri(uri: String, packages: String): Boolean = try {
+                    val view = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    val target = packages.split(',').filter { it.isNotBlank() }
+                        .map { android.content.Intent(view).setPackage(it) }
+                        .firstOrNull { it.resolveActivity(packageManager) != null } ?: view
+                    if (target.resolveActivity(packageManager) == null) false else { startActivity(target); true }
+                } catch (_: Throwable) { false }
+
                 // Installed navigation apps [{pkg,app,icon}] for the map-area choice.
                 @JavascriptInterface
                 fun navApps(): String = navigationApps(this@MainActivity)
@@ -187,6 +203,23 @@ class MainActivity : Activity() {
         carHal = CarHal(applicationContext, ::postToPage).also { it.start() }
     }
 
+    // Text-to-speech starts on the first prompt; a prompt asked for meanwhile is spoken once ready.
+    private var tts: android.speech.tts.TextToSpeech? = null
+    private var ttsReady = false
+    private var ttsPending: String? = null
+    private fun speak(text: String) {
+        if (ttsReady) { tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "yunus-nav"); return }
+        ttsPending = text
+        if (tts == null) tts = android.speech.tts.TextToSpeech(this) { status ->
+            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                tts?.language = java.util.Locale("tr", "TR")
+                ttsReady = true
+                ttsPending?.let { speak(it) }
+                ttsPending = null
+            }
+        }
+    }
+
     private fun requestCarPermissions() {
         try {
             val want = (CAR_COMMON_PERMS + android.Manifest.permission.ACCESS_FINE_LOCATION).filter {
@@ -223,7 +256,7 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
     override fun onPause() { web.onPause(); super.onPause() }
-    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); volume.close(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); volume.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     private fun postToPage(message: String) {
         runOnUiThread {

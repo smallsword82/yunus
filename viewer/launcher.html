@@ -388,6 +388,27 @@ button { font-family:inherit; color:inherit; }
 .floating { position:absolute; background:var(--pn); border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.35); }
 #search { top:24px; left:24px; width:520px; height:72px; display:flex; align-items:center; gap:16px; padding:0 24px; font-size:24px; color:var(--mu); }
 #navCard { top:110px; left:24px; width:520px; padding:18px 24px; font-size:20px; }
+/* Navigation on Yunus's own map: the search / route panel and, while navigating, the turn banner. */
+#navPanel { top:24px; left:24px; width:580px; max-height:calc(100% - 150px); overflow:auto; padding:16px; z-index:3; color:var(--tx); }
+#navPanel input { width:100%; height:66px; border:0; border-radius:14px; padding:0 22px; background:var(--cd2); color:var(--tx); font:400 24px Inter,sans-serif; outline:none; }
+#navPanel .acts { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+#navPanel .acts > * { margin:0 10px 0 0; }
+#navPanel .acts .btn { padding:14px 18px; font-size:19px; background:var(--cd2); }
+#navPanel .acts .btn.on { background:var(--ac); color:#fff; }
+#navPanel .row { display:flex; align-items:center; gap:16px; padding:14px 10px; border-radius:12px; font-size:21px; cursor:pointer; }
+#navPanel .row > * + * { margin-left:16px; }
+#navPanel .row:active { background:var(--cd2); }
+#navPanel .row i { font-size:28px; color:var(--mu); }
+#navPanel .row small { display:block; font-size:16px; color:var(--mu); margin-top:2px; }
+#navPanel .warn { color:#ffb020; font-size:18px; margin:4px 10px; }
+#navBanner { top:24px; left:24px; width:720px; padding:18px 20px 18px 24px; display:flex; align-items:center; gap:20px; background:#1d6b42; color:#fff; z-index:3; }
+#navBanner > * + * { margin-left:20px; }
+#navBanner > i { font-size:70px; }
+#navBanner b { display:block; font-size:40px; font-weight:600; }
+#navBanner span { display:block; font-size:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#navBanner small { display:block; font-size:17px; opacity:.8; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#navBanner button { background:rgba(0,0,0,.22); border:0; border-radius:12px; width:54px; height:54px; color:#fff; font-size:26px; cursor:pointer; flex:none; }
+#stage.navigating #search, #stage.navigating #navCard { display:none; }
 #navCard b { font-size:24px; font-weight:500; display:block; color:var(--tx); }
 #navCard span { color:var(--mu); }
 #recenter { right:24px; bottom:24px; width:72px; height:72px; display:flex; align-items:center; justify-content:center; font-size:32px; border:0; cursor:pointer; }
@@ -623,6 +644,8 @@ button { font-family:inherit; color:inherit; }
     <div id="map"></div>
     <div class="floating" id="search"><i class="ti ti-search"></i>Nereye gidiyoruz?</div>
     <div class="floating" id="navCard"><b>Kadıköy İskele</b><span>12 dk · 5,4 km · varışta %75</span></div>
+    <div class="floating" id="navPanel" style="display:none"></div>
+    <div class="floating" id="navBanner" style="display:none"></div>
     <button class="floating" id="recenter" aria-label="Konumuma dön"><i class="ti ti-current-location"></i></button>
     <button class="floating" id="mapStyleBtn" aria-label="Harita görünümü"></button>
     <div id="satCredit">Uydu görüntüsü: Esri, Maxar, Earthstar Geographics</div>
@@ -2379,7 +2402,6 @@ function buildMap() {
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
     meMarker = new maplibregl.Marker({ element: me }).setLngLat(myPos || CENTER).addTo(map);
-    map.on('click', openMaps); // a tap, not a drag or pinch
     if (myPos) map.jumpTo({ center: myPos });
     const dest = document.createElement('div');
     dest.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
@@ -2394,6 +2416,10 @@ setTimeout(() => { if (!mapEmbedded) startMap(); }, 8000);
 let mapEmbedded = false;
 function startMapArea() {
   if (!(window.YunusNative && YunusNative.embedApp)) return startMap();
+  if (S.set.navApp === 'yunus') { // Yunus's own map with its navigation, chosen in the settings
+    if (mapEmbedded) { mapEmbedded = false; YunusNative.embedVisible('map', false); }
+    return startMap();
+  }
   const r = $('map').getBoundingClientRect();
   mapEmbedded = true;
   YunusNative.embedApp('map', navPackages().join(','), Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
@@ -2404,11 +2430,10 @@ function mapEmbedFailed() {
   YunusNative.embedVisible('map', false);
   startMap();
 }
-// Navigation is Google Maps: the head unit has no split screen and one app cannot be shown inside
-// another, so a tap on the map or the search box hands over to Maps full screen.
 const MAPS_APPS = ['com.google.android.apps.maps', 'app.revanced.android.apps.maps'];
 // The navigation app chosen in Yunus's settings (Harita ve telefon) first, then Google Maps.
-const navPackages = () => (S.set.navApp ? [S.set.navApp] : []).concat(MAPS_APPS);
+// "yunus" is Yunus's own map, so it is not a package.
+const navPackages = () => (S.set.navApp && S.set.navApp !== 'yunus' ? [S.set.navApp] : []).concat(MAPS_APPS);
 const openMaps = () => !!window.YunusNative && navPackages().some((p) => YunusNative.openApp(p));
 // The installed navigation apps with their icons, read from the app when the tab is shown.
 let navAppsCache = null, navAppsAt = 0;
@@ -2420,15 +2445,15 @@ function navAppBlock() {
     try { navAppsCache = JSON.parse(YunusNative.navApps()); } catch { navAppsCache = []; }
     navAppsAt = performance.now();
   }
-  const apps = navAppsCache;
-  const chosen = navPackages().find((p) => apps.some((a) => a.pkg === p)) || (apps[0] || {}).pkg;
+  const apps = [{ pkg: 'yunus', app: 'Yunus Harita', icon: null }].concat(navAppsCache);
+  const chosen = S.set.navApp === 'yunus' ? 'yunus' : navPackages().find((p) => apps.some((a) => a.pkg === p)) || 'yunus';
   return `<p style="font-size:22px;color:var(--mu);margin:0 0 10px">Harita alanındaki navigasyon</p>
     <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">${apps.map((a) =>
       `<button class="btn ${a.pkg === chosen ? 'on' : ''}" data-nav="${a.pkg}">${a.icon
         ? `<img src="${a.icon}" alt="" style="width:34px;height:34px;border-radius:8px">` : '<i class="ti ti-map"></i>'}${a.app}</button>`).join('')
       || '<p style="font-size:17px;color:var(--mu)">Kurulu navigasyon uygulaması bulunamadı.</p>'}</div>`;
 }
-$('search').onclick = openMaps;
+$('search').onclick = () => openSearch();
 $('recenter').onclick = () => map && map.easeTo({ center: myPos || CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
 // The car's GPS (through the WebView's geolocation): the position marker follows it and the map
 // moves to the first fix. Without a fix (desktop preview) the demo position stays.
@@ -2443,11 +2468,234 @@ if (navigator.geolocation) {
   navigator.geolocation.watchPosition((p) => {
     const first = !myPos;
     myPos = [p.coords.longitude, p.coords.latitude];
+    if (p.coords.heading != null && !isNaN(p.coords.heading)) NAV.heading = p.coords.heading;
     if (meMarker) meMarker.setLngLat(myPos);
     if (first && map) map.jumpTo({ center: myPos });
     if (first) dropDemoRoute();
+    if (NAV.active) updateNav();
   }, (e) => console.warn('location', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
 }
+
+// ---------- navigation on Yunus's own map ----------
+// Place search (Photon, OpenStreetMap data) and turn-by-turn routes (OSRM), with the route options,
+// saved places and range check of Kinex's navigation; spoken through the car's text-to-speech
+// (YunusNative.say). Places, recents and options are kept in localStorage.
+const NAV = { dest: null, route: null, step: 1, active: false, offCount: 0, heading: null, farSaid: 0, nearSaid: 0, voice: true };
+let navPlaces;
+try { navPlaces = JSON.parse(localStorage.getItem('navPlaces') || '{}'); } catch { navPlaces = {}; }
+navPlaces.recent = navPlaces.recent || [];
+navPlaces.avoid = navPlaces.avoid || { motorway: false, toll: false, ferry: false };
+const saveNavPlaces = () => { try { localStorage.setItem('navPlaces', JSON.stringify(navPlaces)); } catch {} };
+const here = () => myPos || CENTER;
+const fmtDist = (m) => (m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`);
+const fmtDur = (s) => (s < 3600 ? `${Math.max(1, Math.round(s / 60))} dk` : `${Math.floor(s / 3600)} sa ${Math.round((s % 3600) / 60)} dk`);
+const fmtClock = (s) => new Date(Date.now() + s * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function distM(a, b) { // great-circle metres between [lng, lat] points
+  const r = Math.PI / 180, dLat = (b[1] - a[1]) * r, dLng = (b[0] - a[0]) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+const speak = (text) => { if (NAV.voice && window.YunusNative && YunusNative.say) YunusNative.say(text); };
+
+// Search panel: Home, Work, recent places, and results as you type (nearest area first).
+let navResults = [], navSaving = null;
+const placeRow = (x, kind, i, icon) => `<div class="row" data-${kind}="${i}"><i class="ti ti-${icon}"></i><div>${escHtml(x.name)}<small>${escHtml(x.sub)}</small></div></div>`;
+function openSearch() {
+  if (NAV.active) return;
+  if (!map) startMap();
+  const p = $('navPanel');
+  p.style.display = '';
+  p.innerHTML = `<input id="navQ" placeholder="Nereye gidiyoruz?" autocomplete="off" enterkeyhint="search">
+    <div class="acts">${['home', 'work'].map((k) => `<button class="btn" data-place="${k}"><i class="ti ti-${k === 'home' ? 'home' : 'briefcase'}"></i>${k === 'home' ? 'Ev' : 'İş'}${navPlaces[k] ? '' : ' · ayarla'}</button>`).join('')}
+      <button class="btn" data-close><i class="ti ti-x"></i></button></div>
+    <div id="navList">${navPlaces.recent.map((x, i) => placeRow(x, 'recent', i, 'history')).join('')}</div>`;
+  const q = $('navQ');
+  q.focus();
+  let wait = 0;
+  q.oninput = () => { clearTimeout(wait); wait = setTimeout(() => searchPlaces(q.value.trim()), 350); };
+}
+function closeNavPanel(keepRoute) {
+  $('navPanel').style.display = 'none';
+  navSaving = null;
+  if (!keepRoute && !NAV.active) clearRoute();
+}
+async function searchPlaces(q) {
+  if (q.length < 2) return;
+  const [lng, lat] = here();
+  try {
+    const j = await (await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=7&lat=${lat}&lon=${lng}`)).json();
+    navResults = j.features.map((f) => {
+      const p = f.properties;
+      return { name: p.name || [p.street, p.housenumber].filter(Boolean).join(' ') || p.city || q,
+        sub: [p.name && p.street, p.district, p.city || p.county, p.countrycode !== 'TR' && p.country].filter(Boolean).join(', '),
+        at: f.geometry.coordinates };
+    });
+    $('navList').innerHTML = navResults.map((x, i) => placeRow({ name: x.name, sub: `${x.sub ? x.sub + ' · ' : ''}${fmtDist(distM(here(), x.at))}` }, 'result', i, 'map-pin')).join('')
+      || '<div class="row">Sonuç bulunamadı</div>';
+  } catch { $('navList').innerHTML = '<div class="row">Arama yapılamadı (internet bağlantısı?)</div>'; }
+}
+function chooseDest(place) {
+  if (navSaving) { navPlaces[navSaving] = place; navSaving = null; }
+  navPlaces.recent = [place].concat(navPlaces.recent.filter((x) => x.name !== place.name)).slice(0, 6);
+  saveNavPlaces();
+  NAV.dest = place;
+  routeTo(place);
+}
+function navPanelMsg(text) { $('navPanel').style.display = ''; $('navPanel').innerHTML = `<div class="row" style="cursor:default"><i class="ti ti-route"></i><div>${escHtml(text)}</div></div>`; }
+
+// Route from here to the place; avoided road classes as chosen (retried without if the server
+// can't avoid them). While navigating it re-routes quietly.
+async function routeTo(place, quiet) {
+  const from = here(), avoid = Object.keys(navPlaces.avoid).filter((k) => navPlaces.avoid[k]);
+  const url = (ex) => `https://router.project-osrm.org/route/v1/driving/${from.join(',')};${place.at.join(',')}?overview=full&geometries=geojson&steps=true${ex.length ? '&exclude=' + ex.join(',') : ''}`;
+  if (!quiet) navPanelMsg('Rota hesaplanıyor…');
+  try {
+    let j = await (await fetch(url(avoid))).json();
+    NAV.avoidIgnored = false;
+    if (j.code !== 'Ok' && avoid.length) { j = await (await fetch(url([]))).json(); NAV.avoidIgnored = true; }
+    if (j.code !== 'Ok') throw new Error(j.code);
+    const r = j.routes[0];
+    NAV.route = { coords: r.geometry.coordinates, dist: r.distance, dur: r.duration, steps: r.legs[0].steps };
+    Object.assign(NAV, { step: 1, offCount: 0, farSaid: 0, nearSaid: 0 });
+    drawRoute();
+    if (NAV.active) updateNav(); else { fitRoute(); showRoutePreview(); }
+  } catch { if (!quiet) navPanelMsg('Rota bulunamadı'); }
+}
+function drawRoute() {
+  if (!map || !map.getSource('route')) return;
+  map.getSource('route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: NAV.route.coords } });
+  map.setLayoutProperty('route', 'visibility', 'visible');
+  if (!destMarker) {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
+    destMarker = new maplibregl.Marker({ element: el });
+  }
+  destMarker.setLngLat(NAV.dest.at).addTo(map);
+}
+function clearRoute() {
+  NAV.route = null; NAV.dest = null;
+  if (map && map.getLayer('route')) map.setLayoutProperty('route', 'visibility', 'none');
+  if (destMarker) { destMarker.remove(); destMarker = null; }
+}
+function fitRoute() {
+  if (!map || !NAV.route) return;
+  const b = NAV.route.coords.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(NAV.route.coords[0], NAV.route.coords[0]));
+  map.fitBounds(b, { padding: { top: 140, bottom: 60, left: 640, right: 60 }, pitch: 0, bearing: 0, duration: 800 });
+}
+function showRoutePreview() {
+  const r = NAV.route, d = NAV.dest, km = r.dist / 1000;
+  const short = S.rangeKm && km > S.rangeKm * 0.9;
+  $('navPanel').style.display = '';
+  $('navPanel').innerHTML = `<div class="row" style="cursor:default"><i class="ti ti-flag"></i><div>${escHtml(d.name)}<small>${escHtml(d.sub)}</small></div></div>
+    <div style="font-size:32px;margin:4px 10px">${fmtDur(r.dur)} <span style="color:var(--mu);font-size:21px">· ${fmtDist(r.dist)} · varış ${fmtClock(r.dur)}</span></div>
+    ${short ? `<div class="warn"><i class="ti ti-battery-1"></i> Menzil (${Math.round(S.rangeKm)} km) bu rotaya yetmeyebilir; yolda şarj gerekebilir.</div>` : ''}
+    ${NAV.avoidIgnored ? '<div class="warn">Kaçınma tercihi bu rota için uygulanamadı.</div>' : ''}
+    <div class="acts"><button class="btn on" data-go><i class="ti ti-navigation"></i>Başlat</button>
+      <button class="btn" data-save="home"><i class="ti ti-home"></i>Ev yap</button>
+      <button class="btn" data-save="work"><i class="ti ti-briefcase"></i>İş yap</button>
+      <button class="btn" data-ext><i class="ti ti-external-link"></i>Uygulamada aç</button>
+      <button class="btn" data-close><i class="ti ti-x"></i></button></div>
+    <div class="acts">${[['motorway', 'Otoyoldan kaçın'], ['toll', 'Ücretli yoldan kaçın'], ['ferry', 'Feribottan kaçın']]
+      .map(([k, l]) => `<button class="btn ${navPlaces.avoid[k] ? 'on' : ''}" data-avoid="${k}">${l}</button>`).join('')}</div>`;
+}
+// Hands the destination to the chosen (or any) navigation app.
+function openInNavApp(place) {
+  if (!(window.YunusNative && YunusNative.openUri)) return;
+  const [lng, lat] = place.at;
+  YunusNative.openUri(`google.navigation:q=${lat},${lng}`, navPackages().join(','))
+    || YunusNative.openUri(`geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(place.name)})`, navPackages().join(','));
+}
+$('navPanel').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-result],[data-recent],[data-place],[data-close],[data-go],[data-save],[data-avoid],[data-ext]');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.close !== undefined) return closeNavPanel();
+  if (d.result !== undefined) return chooseDest(navResults[+d.result]);
+  if (d.recent !== undefined) return chooseDest(navPlaces.recent[+d.recent]);
+  if (d.place) {
+    if (navPlaces[d.place]) return chooseDest(navPlaces[d.place]);
+    navSaving = d.place; // the next place chosen becomes Home / Work
+    $('navQ').placeholder = `${d.place === 'home' ? 'Ev' : 'İş'} adresini ara`;
+    return $('navQ').focus();
+  }
+  if (d.save) { navPlaces[d.save] = NAV.dest; saveNavPlaces(); t.classList.add('on'); return; }
+  if (d.avoid) { navPlaces.avoid[d.avoid] = !navPlaces.avoid[d.avoid]; saveNavPlaces(); return routeTo(NAV.dest); }
+  if (d.ext !== undefined) return openInNavApp(NAV.dest);
+  if (d.go !== undefined) return startNav();
+});
+
+// Turn-by-turn: the next maneuver with its distance, the remaining time and arrival, a follow
+// camera, spoken prompts at ~400 m and just before the turn, re-routing when off the route.
+const NAV_SIDE = { left: 'sola', right: 'sağa', 'slight left': 'hafif sola', 'slight right': 'hafif sağa', 'sharp left': 'keskin sola', 'sharp right': 'keskin sağa' };
+const NAV_ICON = { left: 'corner-up-left', 'sharp left': 'corner-up-left', right: 'corner-up-right', 'sharp right': 'corner-up-right',
+  'slight left': 'arrow-up-left', 'slight right': 'arrow-up-right', uturn: 'arrow-back-up', straight: 'arrow-up' };
+function stepText(s) {
+  const m = s.maneuver, side = NAV_SIDE[m.modifier];
+  if (m.type === 'arrive') return 'Hedefe varıyorsunuz';
+  if (m.type === 'roundabout' || m.type === 'rotary') return `Dönel kavşakta ${m.exit || 1}. çıkıştan çıkın`;
+  if (m.type === 'exit roundabout' || m.type === 'exit rotary') return 'Dönel kavşaktan çıkın';
+  if (m.modifier === 'uturn') return 'U dönüşü yapın';
+  if (!side) return 'Düz devam edin';
+  if (m.type === 'fork') return `Yol ayrımında ${side} kalın`;
+  if (m.type === 'on ramp') return `${side[0].toUpperCase() + side.slice(1)} bağlantı yoluna girin`;
+  if (m.type === 'off ramp') return `${side[0].toUpperCase() + side.slice(1)} çıkışa girin`;
+  if (m.type === 'merge') return `${side[0].toUpperCase() + side.slice(1)} katılın`;
+  if (m.type === 'new name' || m.type === 'continue') return `${side[0].toUpperCase() + side.slice(1)} devam edin`;
+  return `${side[0].toUpperCase() + side.slice(1)} dönün`;
+}
+const stepIcon = (s) => (s.maneuver.type === 'arrive' ? 'flag' : /roundabout|rotary/.test(s.maneuver.type) ? 'rotate' : NAV_ICON[s.maneuver.modifier] || 'arrow-up');
+function startNav() {
+  if (!NAV.route) return;
+  NAV.active = true;
+  closeNavPanel(true);
+  stage.classList.add('navigating');
+  speak(`Rota başladı. ${fmtDur(NAV.route.dur)}, ${fmtDist(NAV.route.dist)}.`);
+  updateNav();
+}
+function stopNav(arrived) {
+  NAV.active = false;
+  $('navBanner').style.display = 'none';
+  stage.classList.remove('navigating');
+  clearRoute();
+  if (map) map.easeTo({ center: here(), zoom: 14.5, pitch: 0, bearing: 0, duration: 800 });
+  if (arrived) speak('Hedefinize vardınız');
+}
+function offRouteM(pos) { // metres to the nearest point of the route line (its vertices are dense)
+  let best = Infinity;
+  for (const c of NAV.route.coords) { const d = distM(pos, c); if (d < best) best = d; }
+  return best;
+}
+function updateNav() {
+  if (!NAV.active || !NAV.route) return;
+  const pos = here(), steps = NAV.route.steps;
+  if (distM(pos, NAV.dest.at) < 30) return stopNav(true);
+  // Past a maneuver once within 25 m of it.
+  while (NAV.step < steps.length - 1 && distM(pos, steps[NAV.step].maneuver.location) < 25) { NAV.step++; NAV.farSaid = NAV.nearSaid = 0; }
+  if (offRouteM(pos) > 60) {
+    if (++NAV.offCount === 3) { speak('Rota yeniden hesaplanıyor'); routeTo(NAV.dest, true); }
+  } else NAV.offCount = 0;
+  const next = steps[Math.min(NAV.step, steps.length - 1)], toNext = distM(pos, next.maneuver.location);
+  let rest = toNext, restS = toNext / 13.9;
+  for (let j = NAV.step; j < steps.length; j++) { rest += steps[j].distance; restS += steps[j].duration; }
+  const text = stepText(next), road = next.name && next.maneuver.type !== 'arrive' ? next.name : '';
+  if (toNext < 400 && !NAV.farSaid) { NAV.farSaid = 1; speak(`${fmtDist(toNext)} sonra ${text.toLowerCase()}${road ? ', ' + road : ''}`); }
+  if (toNext < 50 && !NAV.nearSaid) { NAV.nearSaid = 1; speak(`Şimdi ${text.toLowerCase()}`); }
+  $('navBanner').style.display = '';
+  $('navBanner').innerHTML = `<i class="ti ti-${stepIcon(next)}"></i>
+    <div style="flex:1;min-width:0"><b>${fmtDist(toNext)}</b><span>${escHtml(text)}${road ? ' · ' + escHtml(road) : ''}</span>
+      <small>Varış ${fmtClock(restS)} · ${fmtDur(restS)} · ${fmtDist(rest)}</small></div>
+    <button data-voice aria-label="Sesli yönlendirme"><i class="ti ti-volume${NAV.voice ? '' : '-off'}"></i></button>
+    <button data-overview aria-label="Rotanın tamamı"><i class="ti ti-route"></i></button>
+    <button data-stop aria-label="Navigasyonu bitir"><i class="ti ti-x"></i></button>`;
+  if (map) map.easeTo({ center: pos, zoom: 16.5, pitch: 50, bearing: NAV.heading != null ? NAV.heading : map.getBearing(), duration: 900 });
+}
+$('navBanner').addEventListener('click', (e) => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.stop !== undefined) stopNav();
+  else if (t.dataset.voice !== undefined) { NAV.voice = !NAV.voice; updateNav(); }
+  else if (t.dataset.overview !== undefined) fitRoute();
+});
 
 // Street map or satellite. Satellite hides the street style's fills and lines (keeping its
 // labels and the route) and turns off the dark-mode invert filter, which would ruin the photo.
@@ -2846,7 +3094,7 @@ body.addEventListener('click', (e) => {
     else { $('bsCam').classList.remove('show'); updateBlindSpot(); }
   }
   if (t.dataset.light) S.lights = t.dataset.light;
-  if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); if (mapEmbedded) startMapArea(); }
+  if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); startMapArea(); }
   if (t.dataset.fault) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }
   if (t.dataset.set) {
     const k = t.dataset.set;
@@ -3226,7 +3474,7 @@ const carCmd = (cmd, args = {}) => {
 const openCarApp = (component) => window.YunusNative && YunusNative.open(component);
 function setBattery(soc, range) {
   if (soc != null) { $('socTxt').textContent = Math.round(soc) + '%'; $('socBar').style.width = soc + '%'; }
-  if (range != null) $('rangeTxt').textContent = Math.round(range) + ' km';
+  if (range != null) { S.rangeKm = range; $('rangeTxt').textContent = Math.round(range) + ' km'; }
 }
 const seatsSent = {};
 function pushSeats() { // a seat changed on screen: tell the car, unless the car is where this came from
