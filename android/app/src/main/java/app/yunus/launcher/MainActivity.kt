@@ -133,6 +133,10 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaSeek(ms: Double) = runOnUiThread { media.seek(ms.toLong()) }
 
+                // Whether the device (the car's day/night mode) is in night mode, for the Oto theme.
+                @JavascriptInterface
+                fun isNight(): Boolean = isNightMode()
+
                 // Spoken navigation prompts, in Turkish, through the system text-to-speech.
                 @JavascriptInterface
                 fun say(text: String) = runOnUiThread { speak(text) }
@@ -201,6 +205,16 @@ class MainActivity : Activity() {
         // Live vehicle data the way 3rd-party apps on this head unit do it (BYD Road Computer /
         // electro.app.br): read the BYDAuto HAL devices directly via listeners, in-process.
         carHal = CarHal(applicationContext, ::postToPage).also { it.start() }
+    }
+
+    private fun isNightMode() =
+        (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    // uiMode is in configChanges, so a day/night switch arrives here instead of restarting; the
+    // page's Oto theme follows it.
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        postToPage(JSONObject().put("deviceDark", isNightMode()).toString())
     }
 
     // Text-to-speech starts on the first prompt; a prompt asked for meanwhile is spoken once ready.

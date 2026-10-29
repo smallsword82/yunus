@@ -2810,9 +2810,11 @@ const CARDS = {
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
     if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
       <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
-      <div class="grid" style="grid-template-columns:repeat(2,1fr)">
-      <button class="btn ${S.theme === 'dark' ? 'on' : ''}" data-theme="dark"><i class="ti ti-moon"></i>Koyu</button>
-      <button class="btn ${S.theme === 'light' ? 'on' : ''}" data-theme="light"><i class="ti ti-sun"></i>Açık</button></div>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      <button class="btn ${themeMode === 'auto' ? 'on' : ''}" data-theme="auto"><i class="ti ti-contrast"></i>Oto</button>
+      <button class="btn ${themeMode === 'dark' ? 'on' : ''}" data-theme="dark"><i class="ti ti-moon"></i>Koyu</button>
+      <button class="btn ${themeMode === 'light' ? 'on' : ''}" data-theme="light"><i class="ti ti-sun"></i>Açık</button></div>
+      <p style="font-size:17px;color:var(--mu);margin:10px 0 0">Oto: aracın gece/gündüz moduna göre kendiliğinden değişir.</p>
       ${[['tr', 'Araç rengi · Türkiye'], ['world', 'Çift renk · diğer pazarlar']].map(([g, label]) => `
         <p style="font-size:22px;color:var(--mu);margin:28px 0 14px">${label}</p>
         <div class="paints">${PAINTS.filter((p) => p.group === g).map((p) => {
@@ -3079,7 +3081,7 @@ body.addEventListener('click', (e) => {
     if (S.gear === 'P') camTo({ tyres: 'overhead', windows: 'left', doors: 'left', mirrors: 'left', charge: 'right', locks: 'actions', quick: 'actions' }[c.tab] || 'default');
   }
   if (t.dataset.flow) { S.flow[t.dataset.flow] = !S.flow[t.dataset.flow]; renderAirFlow(); }
-  if (t.dataset.theme) setTheme(t.dataset.theme);
+  if (t.dataset.theme) setThemeMode(t.dataset.theme);
   if (t.dataset.paint) {
     S.paintId = t.dataset.paint;
     try { localStorage.setItem('paint', S.paintId); } catch {}
@@ -3531,6 +3533,7 @@ window.yunusCar = (m) => {
   }
   if (m.media) { liveMedia = { ...m.media, at: performance.now() }; renderMedia(); return; }
   if (m.volume) { systemVolume(m.volume); return; }
+  if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
     if (/yok|durdu/.test(m.embedStatus)) mapEmbedFailed(); // the shell helper could not run
@@ -3662,6 +3665,22 @@ function setTheme(t) {
   roadMat.color.set(t === 'light' ? 0xb9bdc4 : 0x1e2024);
   darkMapLayers();
 }
+// Theme mode: Oto (auto) follows the device — the car's night mode in the app (YunusNative.isNight,
+// then {deviceDark} on every change), the system setting elsewhere; or a fixed Koyu / Açık.
+var themeMode;
+try { themeMode = localStorage.getItem('theme') || 'auto'; } catch { themeMode = 'auto'; }
+const darkQuery = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+const nativeNight = !!(window.YunusNative && YunusNative.isNight);
+let deviceDark = nativeNight ? YunusNative.isNight() : darkQuery ? darkQuery.matches : true;
+function applyThemeMode() { setTheme(themeMode === 'auto' ? (deviceDark ? 'dark' : 'light') : themeMode); }
+function setThemeMode(mode) {
+  themeMode = mode;
+  try { localStorage.setItem('theme', mode); } catch {}
+  applyThemeMode();
+}
+function deviceThemeChanged(dark) { deviceDark = dark; if (themeMode === 'auto') applyThemeMode(); }
+if (darkQuery && !nativeNight) darkQuery.addListener((e) => deviceThemeChanged(e.matches));
+applyThemeMode();
 applyPerf();
 </script>
 </body>
