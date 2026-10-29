@@ -683,7 +683,7 @@ button { font-family:inherit; color:inherit; }
   <div id="srcPop" role="dialog"></div>
   <div id="volPop"><i class="ti ti-volume"></i><div class="track"><div class="fill"></div><div class="knob"></div></div></div>
   <footer id="dock">
-    <button class="dk" data-card="controls" aria-label="Araç kontrolleri"><i class="ti ti-car"></i></button>
+    <button class="dk" id="carBtn" aria-label="Araç ayarları (basılı tut: Yunus ayarları)"><i class="ti ti-car"></i></button>
     <div class="tempCtl">
       <button class="dk" id="tDn" aria-label="Sıcaklığı düşür"><i class="ti ti-chevron-left"></i></button>
       <b id="tVal" data-card="climate">22.0°</b>
@@ -778,9 +778,6 @@ const SETTINGS = {
   ],
   conn: [
     ['seg', 'mapArea', 'Harita alanında göster', [['map', 'Harita'], ['carplay', 'CarPlay'], ['auto', 'Android Auto']]],
-    ['tog', 'bt', 'Bluetooth'],
-    ['tog', 'wifi', 'Wi-Fi'],
-    ['tog', 'hotspot', 'Mobil erişim noktası'],
     ['seg', 'projector', 'Kablosuz CarPlay / Android Auto', [['byd', 'Aracın kendi'], ['yunus', 'Yunus']]],
     ['tog', 'projAlways', 'Telefonu her zaman dinle'],
     ['tog', 'projAuto', 'Bağlanınca sormadan tam ekran aç'],
@@ -789,7 +786,6 @@ const SETTINGS = {
     ['seg', 'speedUnit', 'Hız birimi', [['kmh', 'km/h'], ['mph', 'mph']]],
     ['seg', 'pressUnit', 'Lastik basıncı', [['bar', 'bar'], ['psi', 'PSI'], ['kpa', 'kPa']]],
     ['seg', 'lang', 'Dil', [['tr', 'Türkçe'], ['en', 'English']]],
-    ['tog', 'autoTime', 'Otomatik saat'],
     ['info', 'Yazılım', 'Yunus 0.1 · DiLink 3.0'],
     ['btn', 'Ayarları varsayılana döndür', 'resetSettings'],
   ],
@@ -2289,6 +2285,7 @@ function buildMap() {
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
     meMarker = new maplibregl.Marker({ element: me }).setLngLat(myPos || CENTER).addTo(map);
+    map.on('click', openMaps); // a tap, not a drag or pinch
     if (myPos) map.jumpTo({ center: myPos });
     const dest = document.createElement('div');
     dest.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
@@ -2297,6 +2294,11 @@ function buildMap() {
   } catch (e) { console.warn('map failed', e); }
 }
 setTimeout(startMap, 8000);
+// Navigation is Google Maps: the head unit has no split screen and one app cannot be shown inside
+// another, so a tap on the map or the search box hands over to Maps full screen.
+const MAPS_APPS = ['com.google.android.apps.maps', 'app.revanced.android.apps.maps'];
+const openMaps = () => !!window.YunusNative && MAPS_APPS.some((p) => YunusNative.openApp(p));
+$('search').onclick = openMaps;
 $('recenter').onclick = () => map && map.easeTo({ center: myPos || CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
 // The car's GPS (through the WebView's geolocation): the position marker follows it and the map
 // moves to the first fix. Without a fix (desktop preview) the demo position stays.
@@ -2382,13 +2384,12 @@ const CARDS = {
       </div>
     </div>` },
 
-  controls: { tall: true, cam: 'actions', tab: 'quick', render: function () {
+  // Yunus's own settings only. The car's settings are the car's own screen (the car button in the
+  // dock opens it; holding the button opens this card), since Yunus can read but not change them.
+  controls: { tall: true, cam: 'actions', tab: 'display', render: function () {
     const tab = this.tab;
-    const tabs = [['quick', 'ti-bolt', 'Hızlı kontroller'], ['lights', 'ti-bulb', 'Işıklar'], ['locks', 'ti-lock', 'Kilitler'],
-      ['doors', 'ti-door', 'Kapılar'], ['windows', 'ti-window', 'Camlar'], ['drive', 'ti-steering-wheel', 'Sürüş'],
-      ['adas', 'ti-shield-check', 'Sürüş destek'], ['charge', 'ti-charging-pile', 'Şarj'], ['mirrors', 'ti-armchair', 'Ayna ve koltuk'],
-      ['tyres', 'ti-circle-dot', 'Lastikler'], ['display', 'ti-device-desktop', 'Ekran'], ['sound', 'ti-volume', 'Ses'],
-      ['conn', 'ti-wifi', 'Bağlantı'], ['warnings', 'ti-alert-triangle', 'Uyarılar'], ['system', 'ti-settings', 'Sistem']];
+    const tabs = [['display', 'ti-device-desktop', 'Ekran'], ['conn', 'ti-cast', 'Harita ve telefon'],
+      ['warnings', 'ti-alert-triangle', 'Uyarı lambaları'], ['system', 'ti-settings', 'Sistem']];
     let content = SETTINGS[tab] ? renderSettings(SETTINGS[tab]) : '';
     if (tab === 'system') content = homeBlock() + content + maintBlock();
     if (tab === 'conn') content += `<button class="btn" data-do="phoneDemo" style="width:100%;margin-top:16px"><i class="ti ti-device-mobile"></i>Demo: telefon bağlandı</button>
@@ -2452,7 +2453,7 @@ const CARDS = {
       <div class="grid" style="grid-template-columns:repeat(3,1fr)">${[['always', 'Her zaman'], ['slow', '30 km/s altında'], ['off', 'Kapalı']].map(([k, l]) =>
         `<button class="btn ${S.bsMode === k ? 'on' : ''}" data-bs="${k}">${l}</button>`).join('')}</div>
       ${bsAdjustBlock()}`;
-    return `<p class="title">Araç</p><div class="controls"><div class="tabs">${tabs.map(([k, ic, l]) =>
+    return `<p class="title">Yunus</p><div class="controls"><div class="tabs">${tabs.map(([k, ic, l]) =>
       `<button class="${k === tab ? 'on' : ''}" data-tab="${k}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div><div class="tabBody">${content}</div></div>`;
   } },
 
@@ -2853,6 +2854,16 @@ function setFan(v, fromCar) {
 $('fUp').onclick = () => setFan(S.fan + 1);
 $('fDn').onclick = () => setFan(S.fan - 1);
 setFan(S.fan, true); // initial value
+// Car button: tap for the car's own settings, hold for Yunus's settings. Off the car (no
+// YunusNative) a tap opens Yunus's settings too.
+const CAR_SETTINGS = 'com.byd.carsettings/.MainActivity';
+let carHold = 0, carHeld = false;
+$('carBtn').addEventListener('pointerdown', () => { carHeld = false; carHold = setTimeout(() => { carHeld = true; openCard('controls'); }, 500); });
+['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $('carBtn').addEventListener(ev, () => clearTimeout(carHold)));
+$('carBtn').addEventListener('click', () => {
+  if (carHeld) { carHeld = false; return; }
+  if (!openCarApp(CAR_SETTINGS)) openCard('controls');
+});
 
 // Seat climate, two levels each (the Dolphin's seats have two). Tap a seat: heat 2 → 1 → off. Hold it: a panel with heating,
 // ventilation and Auto. Auto (Tesla's Auto Seat Climate) picks heat or ventilation from how far

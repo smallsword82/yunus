@@ -88,6 +88,14 @@ class MainActivity : Activity() {
                     true
                 } catch (_: Throwable) { false }
 
+                // Opens an installed app by package name; false if it is not installed.
+                @JavascriptInterface
+                fun openApp(pkg: String): Boolean = try {
+                    val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return false
+                    startActivity(launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    true
+                } catch (_: Throwable) { false }
+
                 // Commands to the car need BYD's signature permissions, which this app cannot hold.
                 @JavascriptInterface
                 fun command(json: String) {}
