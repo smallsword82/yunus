@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1920, user-scalable=no">
+<!-- Start reading the car model while the scripts are still being parsed. -->
+<link rel="preload" href="dolphin_parts.glb" as="fetch" crossorigin>
 <!-- The car's WebView is Chromium 74 (2019); it lacks CanvasRenderingContext2D.roundRect
      (shipped Chrome 99). Polyfill it before any script runs. Accepts a number or a 1-4
      element radii array [tl, tr, br, bl], matching the spec. -->
@@ -560,6 +562,20 @@ button { font-family:inherit; color:inherit; }
     <div id="fpsMeter"></div>
     <div id="limitSign" class="hide"><span id="limitVal">50</span></div>
     <div id="car3d"></div>
+    <script>
+      // The previous start's first view of the car, put up while the page is still parsing so the
+      // car shows at once; the 3D code fades it out after its first frame (see SNAP_KEY).
+      try {
+        var snap = JSON.parse(localStorage.getItem('carSnap') || 'null'), snapBox = document.getElementById('car3d');
+        if (snap && Math.abs(snap.w / snap.h - snapBox.clientWidth / snapBox.clientHeight) < 0.02) {
+          var snapImg = new Image();
+          snapImg.id = 'carSnap';
+          snapImg.src = snap.url;
+          snapImg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;transition:opacity .25s';
+          snapBox.appendChild(snapImg);
+        }
+      } catch (e) {}
+    </script>
     <div id="rearCam"><canvas id="rearCanvas" width="720" height="180"></canvas></div>
     <div id="bsCam"><canvas id="bsCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="bsArrow"></i><span id="bsTxt">Sol kamera</span></div></div>
     <button class="hot" id="hTrunk" data-act="trunk"><b>Aç</b><span>Bagaj</span></button>
@@ -685,7 +701,6 @@ button { font-family:inherit; color:inherit; }
   </footer>
 </div>
 
-<script src="vendor/maplibre/maplibre-gl.js"></script>
 <script type="module">
 import * as THREE from './vendor/three/build/three.module.js';
 import { GLTFLoader } from './vendor/three/jsm/loaders/GLTFLoader.js';
@@ -1013,6 +1028,9 @@ const PRESETS = {
 };
 const box = $('car3d');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+// Checking each shader's compile log makes the GPU driver finish compiling synchronously; on the
+// head unit that alone cost ~1.8 s before the car appeared. Keep the check for #debug only.
+renderer.debug.checkShaderErrors = location.hash === '#debug';
 // The stage is a fixed 1920x1080 canvas scaled to fit (stageScale), so rendering the 3D at
 // the device pixel ratio makes it ~1/stageScale^2 larger than the screen can show. Multiply by
 // stageScale so the WebGL buffer matches the real on-screen (physical) pixels: native, not inflated.
@@ -1020,6 +1038,13 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * stageScale * (window.visu
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.localClippingEnabled = true; // the sunshade is cut back by a clipping plane
 box.appendChild(renderer.domElement);
+// The previous start's first view of the car (put up by the inline script after #car3d) stays
+// until the 3D car draws its first frame, so the car is on screen at once instead of after the
+// model load and shader compile (~4 s on the head unit). Saved again on every start, so it
+// follows the paint colour.
+const SNAP_KEY = 'carSnap';
+let snapImg = document.getElementById('carSnap'), snapSaveAt = 0;
+if (snapImg) box.appendChild(snapImg); // keep it above the canvas
 const scene = new THREE.Scene();
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const cam = new THREE.PerspectiveCamera(30, 720 / 968, 0.05, 300);
@@ -1111,6 +1136,7 @@ const carLoader = new GLTFLoader().setDRACOLoader(draco);
 const DEV = location.hash === '#debug';
 carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
 function onCarLoaded(gltf) {
+  performance.mark('car-loaded');
   const car = gltf.scene; carObj = car;
   let b = new THREE.Box3().setFromObject(car), size = b.getSize(new THREE.Vector3());
   car.scale.setScalar(4.29 / Math.max(size.x, size.z));
@@ -1156,6 +1182,9 @@ function onCarLoaded(gltf) {
   // Performance mode only draws on demand; wake the loop so the freshly loaded car is drawn
   // (and then kept on screen) instead of staying black until the first touch.
   wake(2000);
+  if (S.gear === 'P') snapSaveAt = performance.now() + 1500; // settled default view for next start
+  // Give the car a couple of frames on screen before the map starts its own heavy work.
+  setTimeout(startMap, 300);
 }
 // ---------- tailgate ----------
 // The model's tailgate is not a separate part, so at load time the triangles in the
@@ -1815,6 +1844,11 @@ renderer.setAnimationLoop(() => {
     placeHotspots();
     renderer.render(scene, cam);
     lastDraw = now; draws++;
+    if (carObj && snapImg) { const img = snapImg; snapImg = null; img.style.opacity = 0; setTimeout(() => img.remove(), 300); }
+    if (snapSaveAt && now > snapSaveAt && !camAnim) {
+      snapSaveAt = 0; // read straight after render, while the drawing buffer still holds the frame
+      try { localStorage.setItem(SNAP_KEY, JSON.stringify({ w: box.clientWidth, h: box.clientHeight, url: renderer.domElement.toDataURL('image/webp', 0.85) })); } catch {}
+    }
   }
   if (now - fpsAt >= 1000) {
     $('fpsMeter').textContent = `${Math.round(frames * 1000 / (now - fpsAt))} fps · 3D ${Math.round(draws * 1000 / (now - fpsAt))}/sn${S.set.perf ? ' · performans' : ''}`;
@@ -2214,27 +2248,42 @@ const CENTER = [29.0275, 40.9905];
 const ROUTE = [CENTER, [29.0262, 40.9915], [29.0249, 40.9921], [29.0236, 40.993], [29.0215, 40.9935]];
 // OpenFreeMap's own dark style is too low-contrast for a car screen, so dark mode
 // inverts the clean "positron" style instead (see .dark-map in the CSS).
-try {
-  map = new maplibregl.Map({ container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: CENTER, zoom: 14.5, attributionControl: false });
-  map.on('load', () => {
-    // Satellite imagery (Esri World Imagery, no key; its terms require the credit shown on the
-    // map). Kept at the bottom of the stack so the street style's labels stay on top of it.
-    map.addSource('sat', { type: 'raster', tileSize: 256, maxzoom: 19,
-      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'] });
-    map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } }, map.getStyle().layers[0].id);
-    map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: ROUTE } } });
-    map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#4a78e8', 'line-width': 9 } });
-    setMapStyle(S.mapStyle);
-    darkMapLayers();
-  });
-  const me = document.createElement('div');
-  me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
-  new maplibregl.Marker({ element: me }).setLngLat(CENTER).addTo(map);
-  const dest = document.createElement('div');
-  dest.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
-  new maplibregl.Marker({ element: dest }).setLngLat(ROUTE[ROUTE.length - 1]).addTo(map);
-} catch (e) { console.warn('map failed', e); }
+// Started once the car is on screen (onCarLoaded): building the map at page load kept the head
+// unit's CPU busy and held the 3D car back by ~5 s. The timer is a fallback if the car fails.
+let mapStarting = false;
+function startMap() {
+  if (map || mapStarting) return;
+  mapStarting = true;
+  // MapLibre itself (800 kB) is only fetched and parsed now, not while the page starts.
+  const script = document.createElement('script');
+  script.src = 'vendor/maplibre/maplibre-gl.js';
+  script.onload = buildMap;
+  document.head.appendChild(script);
+}
+function buildMap() {
+  try {
+    map = new maplibregl.Map({ container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: CENTER, zoom: 14.5, attributionControl: false });
+    map.on('load', () => {
+      // Satellite imagery (Esri World Imagery, no key; its terms require the credit shown on the
+      // map). Kept at the bottom of the stack so the street style's labels stay on top of it.
+      map.addSource('sat', { type: 'raster', tileSize: 256, maxzoom: 19,
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'] });
+      map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } }, map.getStyle().layers[0].id);
+      map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: ROUTE } } });
+      map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#4a78e8', 'line-width': 9 } });
+      setMapStyle(S.mapStyle);
+      darkMapLayers();
+    });
+    const me = document.createElement('div');
+    me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
+    new maplibregl.Marker({ element: me }).setLngLat(CENTER).addTo(map);
+    const dest = document.createElement('div');
+    dest.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e5484d;border:4px solid #fff';
+    new maplibregl.Marker({ element: dest }).setLngLat(ROUTE[ROUTE.length - 1]).addTo(map);
+  } catch (e) { console.warn('map failed', e); }
+}
+setTimeout(startMap, 8000);
 $('recenter').onclick = () => map && map.easeTo({ center: CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
 
 // Street map or satellite. Satellite hides the street style's fills and lines (keeping its
