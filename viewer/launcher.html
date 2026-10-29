@@ -363,6 +363,17 @@ button { font-family:inherit; color:inherit; }
 #mapStyleBtn i { font-size:30px; }
 #voiceBtn { right:24px; top:232px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; font-size:30px; }
 #voiceBtn.off { color:var(--mu); }
+#chargeBtn { right:24px; top:312px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; font-size:30px; color:var(--mu); }
+#chargeBtn.on { color:#30a46c; }
+#chargeBtn.loading i { animation:chPulse 1s ease-in-out infinite alternate; }
+@keyframes chPulse { from { opacity:1; } to { opacity:.3; } }
+#stage.projecting #chargeBtn { display:none; }
+.chPop { font:18px Inter,sans-serif; color:#16181b; min-width:240px; }
+.chPop b { font-size:20px; display:block; margin-bottom:4px; }
+.chPop small { color:#6b717b; display:block; margin-bottom:8px; }
+.chPop .sk { display:inline-block; margin:0 6px 6px 0; padding:3px 9px; border-radius:10px; background:#e9f6ef; color:#1f7a4d; font-size:16px; }
+.chPop button { width:100%; margin-top:8px; height:48px; border:0; border-radius:12px; background:#3e6ae1; color:#fff; font:600 18px Inter,sans-serif; cursor:pointer; }
+.maplibregl-popup-content { border-radius:16px; padding:16px 18px; }
 #voicePop { right:100px; top:232px; width:400px; padding:18px 22px; display:none; z-index:4; color:var(--tx); }
 #voicePop.show { display:block; }
 #voicePop .row { display:flex; align-items:center; justify-content:space-between; font-size:22px; }
@@ -680,6 +691,7 @@ button { font-family:inherit; color:inherit; }
     <button class="floating" id="mapStyleBtn" aria-label="Harita görünümü"></button>
     <button class="floating" id="view3dBtn" aria-label="3B / 2B görünüm"><i class="ti ti-cube"></i></button>
     <button class="floating" id="voiceBtn" aria-label="Yönlendirme sesi"><i class="ti ti-volume"></i></button>
+    <button class="floating" id="chargeBtn" aria-label="Şarj istasyonları"><i class="ti ti-charging-pile"></i></button>
     <div class="floating" id="voicePop"></div>
     <div id="satCredit">Uydu görüntüsü: Esri, Maxar, Earthstar Geographics</div>
     <!-- Phone projection takes the map's place; the car panel and dock stay. Placeholder screens:
@@ -1773,6 +1785,10 @@ function renderMedia() {
 // The app's own icon (sent by the app) when there is one, else a matching tabler icon.
 const appIcon = (x, size) => x.icon ? `<img src="${x.icon}" alt="" style="width:${size}px;height:${size}px;border-radius:${size / 4}px;vertical-align:middle">`
   : `<i class="ti ti-${appLook(x.pkg).icon}" style="color:${appLook(x.pkg).color}"></i>`;
+// The app a "Başlat" could not start in the background (some apps can only play on screen), while
+// nothing plays: named on the card, and the title then opens it.
+const failedApp = () => { const m = liveMedia, p = m && !m.playing && m.startFailed;
+  if (!p) return ''; const a = (m.apps || []).find((x) => x.pkg === p); return a ? a.app : p; };
 function renderLiveMedia() {
   // Every app closed: the card keeps the last one (play starts it again), as in Kinex.
   const m = liveMedia.access && !liveMedia.pkg && liveMedia.last
@@ -1786,7 +1802,7 @@ function renderLiveMedia() {
     : m.access && m.icon ? `<div id="mmArt" class="art fallback"><img src="${m.icon}" alt="" style="width:56%;height:56%;border-radius:22%"></div>`
     : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`;
   $('mmTitle').textContent = !m.access ? 'Müzik kartı için bildirim erişimi ver' : m.pkg ? (m.title || m.app) : 'Çalan bir şey yok';
-  $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (m.error || m.artist || m.album || '') : '';
+  $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (failedApp() ? `${failedApp()} arka planda başlamadı · açmak için başlığa dokun` : m.error || m.artist || m.album || '') : '';
   $('mmPlay').innerHTML = `<i class="ti ti-player-${m.playing ? 'pause' : 'play'}"></i>`;
   $('mmProg').parentElement.style.visibility = m.dur > 0 ? '' : 'hidden'; // radio has no length
   if (m.dur > 0 && !mmSeeking) $('mmProg').style.width = (livePos() / m.dur * 100) + '%';
@@ -1830,7 +1846,9 @@ renderMedia();
 // control the session. Demo: as before.
 $('mmTitle').onclick = () => {
   if (!liveMedia) return openCard('music');
-  if (!liveMedia.access) YunusNative.mediaAccess(); else YunusNative.mediaOpen();
+  if (!liveMedia.access) YunusNative.mediaAccess();
+  else if (failedApp()) launchApp(liveMedia.startFailed);
+  else YunusNative.mediaOpen();
 };
 $('mmPlay').onclick = () => {
   if (liveMedia) return liveMedia.access ? YunusNative.media('toggle') : YunusNative.mediaAccess();
@@ -2453,6 +2471,7 @@ function buildMap() {
           'fill-extrusion-opacity': 0.85 } }, firstLabel && firstLabel.id);
       setMapStyle(S.mapStyle);
       darkMapLayers();
+      drawChargers(); loadChargers();
     });
     // A cube to go 3D, a flat map to lay it flat again.
     map.on('pitchend', () => { $('view3dBtn').innerHTML = `<i class="ti ti-${map.getPitch() < 20 ? 'cube' : 'map'}"></i>`; });
@@ -2771,11 +2790,106 @@ function setMapStyle(style) {
   $('mapStyleBtn').setAttribute('aria-label', sat ? 'Harita görünümü' : 'Uydu görünümü');
   if (!map || !map.getLayer('sat')) return;
   for (const layer of map.getStyle().layers) {
-    if (layer.type === 'symbol' || layer.id === 'route') continue;
+    if (layer.type === 'symbol' || layer.id === 'route' || layer.id === 'chargers') continue;
     map.setLayoutProperty(layer.id, 'visibility', layer.id === 'sat' ? (sat ? 'visible' : 'none') : (sat ? 'none' : 'visible'));
   }
 }
 $('mapStyleBtn').onclick = () => setMapStyle(S.mapStyle === 'sat' ? 'street' : 'sat');
+// ---------- charging stations (like Tesla's lightning button) ----------
+// OpenStreetMap's charging stations (amenity=charging_station, through the free Overpass API) in
+// the visible area, as green dots. Loaded when the map stops moving, from zoom 9; kept by id. A tap
+// shows the station's name, operator, sockets and power, and a route to it.
+let showChargers = false;
+try { showChargers = localStorage.getItem('chargers') === '1'; } catch {}
+const chargers = new Map(), chargerAreas = new Set();
+const SOCKETS = { type2: 'Type 2', type2_combo: 'CCS', chademo: 'CHAdeMO', type2_cable: 'Type 2 kablolu', schuko: 'Schuko', tesla_supercharger: 'Tesla' };
+function chargerLayer() {
+  if (!map || !map.getLayer('route')) return false;
+  if (!map.getSource('chargers')) {
+    map.addSource('chargers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'chargers', type: 'circle', source: 'chargers', layout: { visibility: 'none' },
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 10], 'circle-color': '#30a46c', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2.5 } });
+    map.on('click', 'chargers', (e) => chargerPopup(e.features[0]));
+    map.on('moveend', loadChargers);
+  }
+  return true;
+}
+function drawChargers() {
+  if (!chargerLayer()) return;
+  map.setLayoutProperty('chargers', 'visibility', showChargers ? 'visible' : 'none');
+  map.getSource('chargers').setData({ type: 'FeatureCollection', features: [...chargers.values()] });
+}
+// Overpass answers slowly (10–30 s) and its servers come and go, so: half-degree cells (a city in
+// one request), asked of two servers at once (the first answer wins), and kept on the device for a
+// week, so a known area shows at once, also without internet.
+const CHARGER_CELL = 0.5, CHARGER_DAYS = 7;
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+let chargerCache = {};
+try { chargerCache = JSON.parse(localStorage.getItem('chargerCache')) || {}; } catch {}
+let chargersLoading = 0;
+function addChargers(list) {
+  for (const [id, lon, lat, tags] of list)
+    chargers.set(id, { type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { id, tags: JSON.stringify(tags) } });
+}
+async function fetchChargerCell(key) {
+  const q = `[out:json][timeout:25];(node["amenity"="charging_station"](${key});way["amenity"="charging_station"](${key}););out center 1000;`;
+  const ask = (url) => fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))));
+  // The first server that answers (Promise.any is newer than the car's WebView, Chrome 74).
+  const j = await new Promise((ok, fail) => { let left = OVERPASS.length; OVERPASS.forEach((u) => ask(u).then(ok, () => { if (--left === 0) fail(new Error('Overpass yanıt vermedi')); })); });
+  // Only what the card shows, to keep the stored copy small.
+  return (j.elements || []).map((el) => {
+    const at = el.center || el, lon = at.lon, lat = at.lat, t = el.tags || {}, keep = {};
+    for (const k in t) if (/^(name|operator|brand|capacity|socket:)/.test(k)) keep[k] = t[k];
+    return [el.id, lon, lat, keep];
+  }).filter((x) => x[1] != null);
+}
+async function loadChargers() {
+  if (!showChargers || !map || map.getZoom() < 9) return;
+  const b = map.getBounds(), c = (v) => Math.floor(v / CHARGER_CELL) * CHARGER_CELL;
+  const cells = [];
+  for (let la = c(b.getSouth()); la <= b.getNorth(); la += CHARGER_CELL)
+    for (let lo = c(b.getWest()); lo <= b.getEast(); lo += CHARGER_CELL)
+      cells.push([la, lo, la + CHARGER_CELL, lo + CHARGER_CELL].map((v) => v.toFixed(1)).join(','));
+  for (const key of cells.slice(0, 4)) {
+    if (chargerAreas.has(key)) continue;
+    chargerAreas.add(key);
+    const hit = chargerCache[key];
+    if (hit && Date.now() - hit.at < CHARGER_DAYS * 864e5) { addChargers(hit.list); drawChargers(); continue; }
+    $('chargeBtn').classList.add('loading'); chargersLoading++;
+    try {
+      const list = await fetchChargerCell(key);
+      chargerCache[key] = { at: Date.now(), list };
+      try { localStorage.setItem('chargerCache', JSON.stringify(chargerCache)); } catch {}
+      addChargers(list); drawChargers();
+    } catch (e) { chargerAreas.delete(key); console.warn('chargers', e.message); }
+    if (--chargersLoading === 0) $('chargeBtn').classList.remove('loading');
+  }
+}
+function chargerPopup(f) {
+  const t = JSON.parse(f.properties.tags), at = f.geometry.coordinates.slice();
+  const name = t.name || t.operator || t.brand || 'Şarj istasyonu';
+  const sub = [t.operator && t.operator !== name ? t.operator : '', t.capacity ? t.capacity + ' nokta' : ''].filter(Boolean).join(' · ');
+  const sockets = Object.keys(SOCKETS).filter((k) => t['socket:' + k] && t['socket:' + k] !== 'no').map((k) => {
+    const kw = t['socket:' + k + ':output'];
+    return `<span class="sk">${SOCKETS[k]}${t['socket:' + k] > 1 ? ' ×' + t['socket:' + k] : ''}${kw ? ' · ' + escHtml(kw) : ''}</span>`;
+  }).join('');
+  const el = document.createElement('div');
+  el.className = 'chPop';
+  el.innerHTML = `<b>${escHtml(name)}</b>${sub ? `<small>${escHtml(sub)}</small>` : ''}${sockets}<button><i class="ti ti-route"></i> Yol tarifi</button>`;
+  const popup = new maplibregl.Popup({ closeButton: false, maxWidth: '340px', offset: 14 }).setLngLat(at).setDOMContent(el).addTo(map);
+  el.querySelector('button').onclick = () => { popup.remove(); chooseDest({ name, sub: sub || 'Şarj istasyonu', at }); };
+}
+function setChargers(on) {
+  showChargers = on;
+  try { localStorage.setItem('chargers', on ? '1' : '0'); } catch {}
+  $('chargeBtn').classList.toggle('on', on);
+  drawChargers();
+  if (on && map && map.getZoom() < 9) map.easeTo({ zoom: 12, duration: 700 }); // close enough to load them
+  loadChargers();
+}
+$('chargeBtn').classList.toggle('on', showChargers);
+$('chargeBtn').onclick = () => setChargers(!showChargers);
 // Guidance voice: the speaker opens its level (apart from the media volume) and mute.
 function renderVoicePop() {
   const on = NAV.voice && NAV.voiceVol > 0;

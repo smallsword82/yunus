@@ -196,8 +196,14 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     }
 
     // The session the user chose, else the one playing, else the most recent one.
+    // An app that starts playing takes the card over (a YouTube video after YouTube Music was
+    // picked), as the system's own media controls do; picking one in the list still follows it.
+    private var playingBefore = emptySet<String>()
     private fun pickCurrent() {
         shown()
+        val playingNow = sessions.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING }.map { it.packageName }.toSet()
+        (playingNow - playingBefore).firstOrNull()?.let { chosen = it }
+        playingBefore = playingNow
         current = sessions.firstOrNull { it.packageName == chosen }
             ?: sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
             ?: sessions.firstOrNull()
@@ -223,19 +229,19 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     fun currentPackage(): String? = current?.packageName ?: last
 
     /**
-     * Starts [pkg]'s music with nothing of it open, the way Android Auto does: connect to the app's
-     * media browser service and press play on the session it hands over (Spotify … then play in the
-     * background). An app that refuses outside clients (YouTube Music) or has no such service gets a
-     * play key instead: through the system for the last app (as the steering-wheel key does, which
-     * may restart it), else to its own receiver. Still silent after a few seconds, the app is opened
-     * when [openIfSilent] (a tap in the card), never on the car-start resume.
+     * Starts [pkg]'s music with nothing of it open, in the background (the app never comes to the
+     * front): connect to the app's media browser service and press play on the session it hands
+     * over, the way Android Auto does (Spotify …). An app that refuses outside clients (YouTube Music)
+     * or has no such service gets a play key instead: through the system for the last app (as the
+     * steering-wheel key does, which may restart it), else to its own receiver. Still silent after
+     * a few seconds, the card says so ({startFailed}); tapping its title opens the app.
      */
     private var browser: android.media.browse.MediaBrowser? = null
-    fun start(pkg: String, openIfSilent: Boolean = true) {
+    fun start(pkg: String) {
         chosen = pkg
         val pm = ctx.packageManager
         val service = pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService").setPackage(pkg), 0).firstOrNull()?.serviceInfo
-        if (service == null) return playKey(pkg, openIfSilent)
+        if (service == null) return playKey(pkg)
         browser?.disconnect()
         var b: android.media.browse.MediaBrowser? = null
         b = android.media.browse.MediaBrowser(ctx, ComponentName(service.packageName, service.name), object : android.media.browse.MediaBrowser.ConnectionCallback() {
@@ -243,15 +249,15 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
                 try { MediaController(ctx, b!!.sessionToken).transportControls.play() } catch (_: Exception) { }
                 // Stay bound a little while the app starts playing and publishes its session.
                 main.postDelayed({ if (browser === b) { b?.disconnect(); browser = null } }, 15000)
-                openIfStillSilent(pkg, openIfSilent)
+                checkStarted(pkg)
             }
-            override fun onConnectionFailed() { if (browser === b) browser = null; playKey(pkg, openIfSilent) }
+            override fun onConnectionFailed() { if (browser === b) browser = null; playKey(pkg) }
         }, null)
         browser = b
         b.connect()
     }
 
-    private fun playKey(pkg: String, openIfSilent: Boolean) {
+    private fun playKey(pkg: String) {
         val keys = intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)
             .map { android.view.KeyEvent(it, android.view.KeyEvent.KEYCODE_MEDIA_PLAY) }
         if (pkg == last) keys.forEach { ctx.getSystemService(android.media.AudioManager::class.java).dispatchMediaKeyEvent(it) }
@@ -263,18 +269,15 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
                 keys.forEach { ctx.sendBroadcast(android.content.Intent(receiver).putExtra(android.content.Intent.EXTRA_KEY_EVENT, it)) }
             }
         }
-        openIfStillSilent(pkg, openIfSilent)
+        checkStarted(pkg)
     }
 
-    private fun openIfStillSilent(pkg: String, openIfSilent: Boolean) {
-        if (!openIfSilent) return
+    private var startFailed: String? = null
+    private fun checkStarted(pkg: String) {
+        startFailed = null
         main.postDelayed({
-            if (all.none { it.packageName == pkg && it.playbackState?.state == PlaybackState.STATE_PLAYING }) open(pkg)
-        }, 4000)
-    }
-
-    private fun open(pkg: String) {
-        ctx.packageManager.getLaunchIntentForPackage(pkg)?.let { ctx.startActivity(it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            if (all.none { it.packageName == pkg && it.playbackState?.state == PlaybackState.STATE_PLAYING }) { startFailed = pkg; send() }
+        }, 6000)
     }
 
     private fun send() {
@@ -283,6 +286,8 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         if (sessions.filter { !isBluetoothApp(it.packageName) }.any { seen.add(it.packageName) }) { prefs.edit().putStringSet("seen2", HashSet(seen)).apply(); apps = null }
         val out = JSONObject().put("access", true)
         // Nothing open: the last app. Always: the installed music apps, to start one from.
+        if (startFailed != null && sessions.any { it.playbackState?.state == PlaybackState.STATE_PLAYING }) startFailed = null
+        startFailed?.let { out.put("startFailed", it) }
         if (c == null) last?.let { out.put("last", JSONObject().put("pkg", it).put("app", label(it)).put("icon", icon(it) ?: JSONObject.NULL)) }
         out.put("apps", apps ?: mediaApps(ctx, seen).also { apps = it })
         out.put("sessions", JSONArray().apply {
