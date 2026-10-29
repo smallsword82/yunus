@@ -414,7 +414,13 @@ button { font-family:inherit; color:inherit; }
 .bsLbl { position:absolute; top:8px; left:8px; display:flex; align-items:center; gap:5px; background:rgba(0,0,0,.55); color:#fff; padding:4px 8px; border-radius:7px; font-size:14px; }
 .bsLbl i { color:#2fd06a; font-size:17px; animation:blink .7s steps(1) infinite; }
 #bsCam.right .bsLbl { left:auto; right:8px; }
-#bsCam.edgeMode { display:none; } /* the trial's edge pane shows instead */
+#bsCam.edgeMode { display:none; }
+/* Charging, as in Tesla: the battery level large over the car, power and time under it. */
+#chargeInfo { position:absolute; left:0; right:0; top:110px; z-index:3; text-align:center; pointer-events:none; opacity:0; transition:opacity .3s; }
+#chargeInfo.show { opacity:1; }
+#chargeInfo b { display:block; font-size:72px; font-weight:300; color:var(--ok); line-height:1; }
+#chargeInfo span { display:block; margin-top:10px; font-size:22px; color:var(--mu); }
+#stage.driving #chargeInfo { display:none; } /* the trial's edge pane shows instead */
 #sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:#000;
   box-shadow:0 16px 48px rgba(0,0,0,.55); transform:translateX(-110%); transition:transform .35s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
 #sigPane.right { left:auto; right:0; transform:translateX(110%); }
@@ -754,6 +760,7 @@ button { font-family:inherit; color:inherit; }
     <div class="glassDot" data-dot="RR" aria-label="Sağ arka cam"></div>
     <div class="glassDot" data-dot="shade" aria-label="Tavan perdesi"></div>
     <button class="hot" id="hCharge" data-act="charge"><i class="ti ti-bolt" style="font-size:30px"></i><span style="display:block">Şarj portu</span></button>
+    <div id="chargeInfo"><b id="ciPct">78%</b><span id="ciLine">Şarj ediliyor</span></div>
     <!-- No lock button on the car: Yunus can neither lock the car nor read the lock (BYD HAL, signature-only). -->
     <div id="carCards">
       <div id="ccGrab"></div>
@@ -773,7 +780,8 @@ button { font-family:inherit; color:inherit; }
         <div class="cc"><h4>Lastik basıncı <b id="tyreState">Normal</b></h4><div class="ccTyres" id="ccTyres"></div></div>
         <div class="cc"><h4>Yolculuk <b>Son şarjdan beri</b></h4>
           <div class="trip"><div id="trDist">0,0<span>km</span></div><div id="trKwh">0,00<span>kWh</span></div>
-            <div id="trAvg">—<span>Wh/km ortalama</span></div><div id="trTime">0:00<span>süre</span></div></div></div>
+            <div id="trAvg">—<span>Wh/km ortalama</span></div><div id="trTime">0:00<span>süre</span></div></div>
+          <div id="odoTxt" style="font-size:16px;color:var(--mu);margin-top:6px"></div></div>
       </div>
       <div id="ccDots"><i class="on"></i><i></i><i></i><i></i></div>
     </div>
@@ -1751,6 +1759,36 @@ function applyPaint() {
 // Sunshade: above the middle of the glass roof, shown whenever the roof is in view from above.
 const HOT = { hTrunk: new THREE.Vector3(0, 1.25, -2.45), hCharge: new THREE.Vector3(-0.95, 1.02, 1.12),
   hShade: new THREE.Vector3(0, 1.75, -0.4) };
+// ---------- charging, as in Tesla: a cable in the charge flap, its plug glowing green ----------
+const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(chargeGear);
+{
+  const port = HOT.hCharge;
+  // From the flap out and down to the ground, then along it towards the front.
+  const path = new THREE.CatmullRomCurve3([
+    port.clone().add(new THREE.Vector3(-0.08, -0.02, 0)), new THREE.Vector3(port.x - 0.35, port.y - 0.08, port.z + 0.05),
+    new THREE.Vector3(port.x - 0.7, 0.45, port.z + 0.2), new THREE.Vector3(port.x - 0.85, 0.03, port.z + 0.5),
+    new THREE.Vector3(port.x - 1.0, 0.03, port.z + 1.6)]);
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x25282d, roughness: 0.6 });
+  chargeGear.add(new THREE.Mesh(new THREE.TubeGeometry(path, 60, 0.032, 10, false), cableMat));
+  // The plug body at the flap, pointing out of the car (−x is the car's right).
+  const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.18, 20), cableMat);
+  plug.rotation.z = Math.PI / 2; plug.position.copy(port).add(new THREE.Vector3(-0.07, 0, 0));
+  chargeGear.add(plug);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x35e07a, transparent: true, opacity: 0.9 });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.014, 10, 32), glowMat);
+  ring.rotation.y = Math.PI / 2; ring.position.copy(port).add(new THREE.Vector3(-0.005, 0, 0));
+  chargeGear.add(ring);
+  const glow = new THREE.PointLight(0x35e07a, 1.2, 1.4); glow.position.copy(port).add(new THREE.Vector3(-0.25, 0, 0));
+  chargeGear.add(glow);
+  chargeGear.userData = { glowMat, glow };
+}
+// The glow breathes while charging (steady once full).
+function stepChargeGlow(now) {
+  if (!chargeGear.visible) return;
+  const k = S.chargeState === 2 ? 1 : 0.55 + 0.45 * Math.sin(now / 420);
+  chargeGear.userData.glowMat.opacity = 0.35 + 0.6 * k;
+  chargeGear.userData.glow.intensity = 0.4 + 1.2 * k;
+}
 function placeHotspots() {
   const w = box.clientWidth, h = box.clientHeight;
   for (const [id, p] of Object.entries(HOT)) {
@@ -2200,6 +2238,7 @@ renderer.setAnimationLoop(() => {
   moving.trunk.forEach((o) => { o.visible = gateAngle > 0.02; });
   animateParts();
   updateLamps(performance.now());
+  stepChargeGlow(performance.now());
   // The car column and the map change width (divider and side window drags), so follow them every frame.
   if ((box.clientWidth !== lastBox.w || box.clientHeight !== lastBox.h) && box.clientWidth > 10) {
     lastBox.w = box.clientWidth; lastBox.h = box.clientHeight;
@@ -2213,7 +2252,7 @@ renderer.setAnimationLoop(() => {
   // easing open or shut, blinking lamps, the road while driving), at most 30 times a second.
   // Parked and untouched, the last frame just stays on screen.
   frames++;
-  let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || S.signal || S.hazard || now < awakeUntil;
+  let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || S.signal || S.hazard || chargeGear.visible || now < awakeUntil;
   if (draw && S.set.perf && now - lastDraw < 32) draw = false;
   if (draw) {
     controls.update();
@@ -2298,9 +2337,34 @@ function setTrunk(v, fromCar) {
   else if (S.gear === 'P') camTo('default'); // back to the usual view once the tailgate closes
   refreshCard();
 }
+// The large level and the line under it while charging.
+function updateChargeInfo() {
+  $('ciPct').textContent = $('socTxt').textContent;
+  const kw = S.chargeKw > 0 ? `${(+S.chargeKw).toFixed(1).replace('.', ',')} kW` : '';
+  const h = Math.floor((S.chargeMin || 0) / 60), mn = Math.round((S.chargeMin || 0) % 60);
+  const left = S.chargeMin > 0 ? `${h ? h + ' sa ' : ''}${mn} dk kaldı` : '';
+  $('ciLine').textContent = [S.chargeState === 13 ? 'Şarj duraklatıldı' : S.chargeState === 2 ? 'Şarj tamamlandı' : 'Şarj ediliyor', kw, left].filter(Boolean).join(' · ');
+}
+// The car's charging state on the charge-port hotspot: charging (power, time left), paused, done.
+function showCharging() {
+  const st = S.chargeState, on = st === 1 || st === 13;
+  if (on !== S.charging) setCharge(on, true);
+  const span = $('hCharge').querySelector('span');
+  if (on) {
+    const kw = S.chargeKw > 0 ? ` · ${(+S.chargeKw).toFixed(1).replace('.', ',')} kW` : '';
+    const h = Math.floor((S.chargeMin || 0) / 60), mn = Math.round((S.chargeMin || 0) % 60);
+    const left = S.chargeMin > 0 ? ` · ${h ? h + ' sa ' : ''}${mn} dk kaldı` : '';
+    span.textContent = st === 13 ? 'Şarj duraklatıldı' : 'Şarj ediliyor'; // the details are in the large panel above
+  } else if (st === 2) span.textContent = 'Şarj tamamlandı';
+  updateChargeInfo();
+}
 function setCharge(v, fromCar) {
   if (S.live && !fromCar) return carCmd(v ? 'chargePortOpen' : 'chargePortClose');
   S.charging = v;
+  chargeGear.visible = v;
+  $('chargeInfo').classList.toggle('show', v);
+  updateChargeInfo();
+  wake(1500);
   $('hCharge').style.color = v ? 'var(--ok)' : '';
   $('hCharge').querySelector('span').textContent = v ? 'Şarj ediliyor' : 'Şarj portu';
   if (v) camTo('right');
@@ -4111,7 +4175,7 @@ const carCmd = (cmd, args = {}) => {
 // Opens one of the car's own screens ("package/.Activity").
 const openCarApp = (component) => window.YunusNative && YunusNative.open(component);
 function setBattery(soc, range) {
-  if (soc != null) { $('socTxt').textContent = Math.round(soc) + '%'; $('socBar').style.width = soc + '%'; }
+  if (soc != null) { $('socTxt').textContent = Math.round(soc) + '%'; $('socBar').style.width = soc + '%'; if (S.charging) updateChargeInfo(); }
   if (range != null) { S.rangeKm = range; $('rangeTxt').textContent = Math.round(range) + ' km'; }
 }
 const seatsSent = {};
@@ -4179,13 +4243,29 @@ const CAR_HAL_MAP = {
   'Tyre 0x99000127': (v) => ({ tyreState: { FR: v } }),
   'Tyre 0x9900012B': (v) => ({ tyreState: { RL: v } }),
   'Tyre 0x9900012F': (v) => ({ tyreState: { RR: v } }),
+  // Driving: the Speed device is signature-locked, so speed comes from the front motor's rpm
+  // (ENGINE_FRONT_MOTOR_SPEED) times km/h per rpm, from the Dolphin's tyre and reduction ratio,
+  // to be calibrated against the cluster on a drive. ENGINE_POWER: kW, -100..300 (regen below 0).
+  'Engine 0x44100008': (v) => ({ speed: Math.round(Math.abs(v) * KMH_PER_RPM) }),
+  'Engine 0x14400020': (v) => ({ powerKw: v }),
+  'Statistic 0x4A502010': (v) => ({ odo: v }), // STATISTIC_TOTAL_MILEAGE, km
+  // Charging: CHARGING_BATTERY_STATE_* (1 charging, 2 finished, 13 paused, …), the gun
+  // (CHARGING_GUN_STATE_CONNECTED_*: 1 none, 2 AC, 3 DC), power in kW and minutes left.
+  'Charging 0x34400018': (v) => ({ chargeState: v }),
+  'Charging 0x34400032': (v) => ({ gun: v }),
+  'Charging 0x32300018': (v) => ({ chargeKw: v }),
+  'Charging 0x32300038': (v) => ({ chargeMin: v }),
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
 };
 // Values that change slowly are kept across restarts: most events only arrive when they change,
 // so after a cold start the car would otherwise not say its battery, range or settings for a while.
-const CAR_HAL_KEEP = ['Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
+// km/h per front-motor rpm: wheel 0.632 m (205/55 R16), reduction ~11 → π·0.632/11·60/1000.
+// Kept in localStorage 'kmhPerRpm' once calibrated on a drive.
+let KMH_PER_RPM = 0.0108;
+try { KMH_PER_RPM = +localStorage.getItem('kmhPerRpm') || KMH_PER_RPM; } catch {}
+const CAR_HAL_KEEP = ['Statistic 0x4A502010', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
   'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C'];
 let autoPlayDone = false, playingPkg = null;
 window.yunusCar = (m) => {
@@ -4238,17 +4318,18 @@ window.yunusCar = (m) => {
     data[m.carHal.dev + ' ' + m.carHal.type] = m.carHal;
     if (window.__dbg) console.log('carHal', m.carHal);
     const key = m.carHal.dev + ' ' + m.carHal.type, map = CAR_HAL_MAP[key];
-    if (map && m.carHal.int != null) {
-      window.yunusCar(map(m.carHal.int));
+    const val = m.carHal.int != null ? m.carHal.int : m.carHal.float != null ? m.carHal.float : m.carHal.double;
+    if (map && val != null) {
+      window.yunusCar(map(val));
       if (CAR_HAL_KEEP.includes(key)) {
-        try { const kept = JSON.parse(localStorage.getItem('carHalKept') || '{}'); kept[key] = m.carHal.int; localStorage.setItem('carHalKept', JSON.stringify(kept)); } catch {}
+        try { const kept = JSON.parse(localStorage.getItem('carHalKept') || '{}'); kept[key] = val; localStorage.setItem('carHalKept', JSON.stringify(kept)); } catch {}
       }
     }
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
     'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
-    'wheelHeat', 'regen', 'steer'];
+    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
@@ -4261,6 +4342,11 @@ window.yunusCar = (m) => {
   if (m.chargePort != null && m.chargePort !== S.charging) setCharge(m.chargePort, true);
   if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
   if (m.tyres) Object.assign(S.tyres, m.tyres);
+  if (m.odo != null) { S.odo = m.odo; $('odoTxt').textContent = `Toplam ${Math.round(m.odo).toLocaleString('tr-TR')} km`; }
+  if (m.chargeState != null || m.gun != null || m.chargeKw != null || m.chargeMin != null) {
+    Object.assign(S, Object.fromEntries(['chargeState', 'gun', 'chargeKw', 'chargeMin'].filter((k) => m[k] != null).map((k) => [k, m[k]])));
+    showCharging();
+  }
   if (m.tyreState) Object.assign(S.tyreState, m.tyreState);
   if ('signal' in m && m.signal !== S.signal) setSignal(m.signal, true);
   if (m.hazard != null) S.hazard = m.hazard;
