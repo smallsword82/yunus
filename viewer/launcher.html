@@ -1864,7 +1864,13 @@ $('srcPop').onclick = (e) => {
   const p = e.target.closest('[data-pkg]');
   if (p) { YunusNative.mediaChoose(p.dataset.pkg); $('srcPop').classList.remove('show'); return; }
   const st = e.target.closest('[data-start]');
-  if (st) { YunusNative.mediaStart(st.dataset.start); $('srcPop').classList.remove('show'); return; }
+  if (st) {
+    $('srcPop').classList.remove('show');
+    // A video app has nothing to resume on its own: it opens in the third window to pick a video.
+    const a = (liveMedia.apps || []).find((x) => x.pkg === st.dataset.start);
+    if (a && a.video) openInSide(a.pkg); else YunusNative.mediaStart(st.dataset.start);
+    return;
+  }
   const b = e.target.closest('[data-src]'); if (!b) return;
   S.src = b.dataset.src;
   try { localStorage.setItem('src', S.src); } catch {}
@@ -1879,7 +1885,7 @@ renderMedia();
 $('mmTitle').onclick = () => {
   if (!liveMedia) return openCard('music');
   if (!liveMedia.access) YunusNative.mediaAccess();
-  else if (failedApp()) launchApp(liveMedia.startFailed);
+  else if (failedApp()) openInSide(liveMedia.startFailed);
   else YunusNative.mediaOpen();
 };
 $('mmPlay').onclick = () => {
@@ -3169,6 +3175,12 @@ function embedSide() {
   const r = $('sideApp').getBoundingClientRect();
   if (r.width < 80) return YunusNative.embedVisible('side', false);
   YunusNative.embedApp('side', sidePkg, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
+}
+// Opens an app in the third window, opening the window first when it is closed.
+function openInSide(pkg) {
+  if (!sideW) setSideW(sideSnaps()[1], true);
+  fillSideApps();
+  setTimeout(() => openSidePkg(pkg), 450); // once the window has its size
 }
 function openSidePkg(pkg) {
   const a = (deviceApps() || []).find((x) => x.pkg === pkg);

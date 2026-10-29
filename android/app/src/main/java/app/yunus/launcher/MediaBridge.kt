@@ -73,6 +73,14 @@ fun isMediaApp(ctx: Context, pkg: String): Boolean {
     return MEDIA_NAME.containsMatchIn(name) && !NOT_MEDIA.containsMatchIn(name)
 }
 
+/** A video app (YouTube, SmartTube, …): it plays a video the driver picks on its screen, so it
+ *  cannot be started in the background from nothing. */
+fun isVideoApp(ctx: Context, pkg: String): Boolean {
+    val info = try { ctx.packageManager.getApplicationInfo(pkg, 0) } catch (_: Exception) { return false }
+    if (info.category == android.content.pm.ApplicationInfo.CATEGORY_VIDEO) return true
+    return Regex("tube|video", RegexOption.IGNORE_CASE).containsMatchIn("$pkg ${appLabel(ctx, pkg)}") && !Regex("music", RegexOption.IGNORE_CASE).containsMatchIn(pkg)
+}
+
 fun isBluetoothApp(pkg: String) = pkg == "com.android.bluetooth" || pkg == "com.google.android.bluetooth"
 
 /**
@@ -93,7 +101,8 @@ fun mediaApps(ctx: Context, seen: Set<String> = emptySet()): JSONArray {
     val bluetooth = browsers.filter(::isBluetoothApp)
     val pkgs = (launchable.filter(::isMedia) + bluetooth).distinct().filter { it != ctx.packageName }
     return JSONArray().apply {
-        pkgs.forEach { put(JSONObject().put("pkg", it).put("app", if (it in bluetooth) "Bluetooth" else appLabel(ctx, it)).put("icon", appIconData(ctx, it) ?: JSONObject.NULL)) }
+        pkgs.forEach { put(JSONObject().put("pkg", it).put("app", if (it in bluetooth) "Bluetooth" else appLabel(ctx, it)).put("icon", appIconData(ctx, it) ?: JSONObject.NULL)
+            .put("video", isVideoApp(ctx, it))) }
     }
 }
 
