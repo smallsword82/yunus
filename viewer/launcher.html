@@ -175,13 +175,11 @@ button { font-family:inherit; color:inherit; }
 #stage.car-wide #enChart { height:130px !important; }
 #stage.car-wide .ccTyres { height:180px; } #stage.car-wide .ccTyres img { height:176px; }
 #stage.car-wide .trip div { font-size:34px; }
-#stage.car-wide #lockBtn { bottom:290px; }
 /* Dragged down, the cards slide away leaving only their grab bar; dragged up they come back. */
 #carCards { transition:transform .3s cubic-bezier(.2,.8,.2,1); touch-action:none; overflow:clip; } /* clip: focusing a button can't scroll the track */
 #ccGrab { position:absolute; top:7px; left:50%; width:56px; height:5px; margin-left:-28px; border-radius:3px; background:var(--cd2); z-index:2; pointer-events:none; }
 #stage.cc-off #carCards { transform:translateY(calc(100% - 22px)); cursor:pointer; }
 #stage.cc-off #ccTrack, #stage.cc-off #ccDots { opacity:0; pointer-events:none; }
-#stage.cc-off #lockBtn { bottom:70px; }
 #ccTrack { display:flex; height:100%; transition:transform .3s cubic-bezier(.2,.8,.2,1); }
 /* min-width:0: a long track title must not widen the card past the strip (flex items default to their content width). */
 .cc { flex:0 0 100%; min-width:0; padding:12px 22px 22px; box-sizing:border-box; position:relative; }
@@ -226,6 +224,12 @@ button { font-family:inherit; color:inherit; }
 #telltales { position:absolute; left:30px; top:78px; z-index:2; max-height:372px; display:flex; flex-flow:column wrap; align-content:flex-start; gap:8px 10px; transition:top .4s; }
 #stage.driving #telltales { top:300px; }
 #status .batt { margin-left:auto; }
+#netStat { display:flex; align-items:center; }
+#netStat > * + * { margin-left:12px; }
+#netStat .hide { display:none; }
+#netStat i { font-size:24px; }
+#netStat small { font-size:13px; font-weight:600; margin-left:2px; letter-spacing:.02em; }
+#netStat .off { opacity:.4; } /* joined but no internet */
 #telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Inter,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
 #telltales .more.red { color:#ff3b30; background:rgba(255,59,48,.14); }
 .tt { width:40px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; }
@@ -289,7 +293,8 @@ button { font-family:inherit; color:inherit; }
 .rng input { width:260px; accent-color:var(--ac); }
 .rng b { min-width:64px; text-align:right; font-weight:500; }
 #bsCam.warn { box-shadow:0 0 0 6px #e5484d, 0 10px 30px rgba(0,0,0,.5); }
-#outTemp { position:absolute; top:84px; right:36px; font-size:22px; color:var(--mu); z-index:2; }
+#topRight { position:absolute; top:84px; right:36px; display:flex; align-items:center; font-size:22px; color:var(--mu); z-index:2; }
+#outTemp { margin-left:16px; }
 #car3d { position:absolute; top:0; right:0; bottom:0; left:0; }
 #fpsMeter { position:absolute; top:84px; left:36px; z-index:5; font:500 18px/1.3 ui-monospace,monospace; color:var(--mu); background:var(--cd); padding:6px 10px; border-radius:8px; pointer-events:none; display:none; }
 #fpsMeter.show { display:block; }
@@ -303,8 +308,6 @@ button { font-family:inherit; color:inherit; }
 .glassDot:active { cursor:grabbing; } .glassDot:active::after { transform:scale(1.3); }
 .hot b { display:block; font-size:22px; font-weight:500; }
 .hot span { color:var(--mu); font-size:18px; }
-#lockBtn { position:absolute; left:50%; bottom:250px; transform:translateX(-50%); z-index:3; width:72px; height:72px; border-radius:50%; border:0; background:var(--cd); font-size:34px; cursor:pointer; }
-#lockBtn.open { color:var(--dn); }
 
 /* turn signals + blind-spot camera */
 #sig { display:flex; gap:18px; margin-left:28px; }
@@ -590,7 +593,13 @@ button { font-family:inherit; color:inherit; }
       <div id="powerKw">0 kW</div>
     </div>
     <div id="powerBar"><div class="regen"></div><div class="power"></div><div class="zero"></div></div>
-    <div id="outTemp">Dış 18°</div>
+    <div id="topRight">
+      <!-- Like Tesla's status line: time, mobile bars with "LTE", Wi-Fi, then the outside temperature
+           (the car's own status bar is hidden while Yunus runs full screen). An icon shows only when
+           there is that link. -->
+      <div id="netStat"><span id="clockTxt"></span><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i><small>LTE</small></span><i id="wifiInd" class="ti ti-wifi hide"></i></div>
+      <div id="outTemp">Dış 18°</div>
+    </div>
     <div id="fpsMeter"></div>
     <div id="limitSign" class="hide"><span id="limitVal">50</span></div>
     <div id="car3d"></div>
@@ -618,7 +627,7 @@ button { font-family:inherit; color:inherit; }
     <div class="glassDot" data-dot="RR" aria-label="Sağ arka cam"></div>
     <div class="glassDot" data-dot="shade" aria-label="Tavan perdesi"></div>
     <button class="hot" id="hCharge" data-act="charge"><i class="ti ti-bolt" style="font-size:30px"></i><span style="display:block">Şarj portu</span></button>
-    <button id="lockBtn" aria-label="Kilit"><i class="ti ti-lock"></i></button>
+    <!-- No lock button on the car: Yunus can neither lock the car nor read the lock (BYD HAL, signature-only). -->
     <div id="carCards">
       <div id="ccGrab"></div>
       <div id="ccTrack">
@@ -2050,8 +2059,6 @@ function darkMapLayers() {
 function setLock(v, fromCar) {
   if (S.live && !fromCar) return carCmd(v ? 'lock' : 'unlock');
   S.locked = v;
-  $('lockBtn').innerHTML = `<i class="ti ti-lock${v ? '' : '-open'}"></i>`;
-  $('lockBtn').classList.toggle('open', !v);
   refreshCard();
 }
 function setTrunk(v, fromCar) {
@@ -2076,7 +2083,6 @@ function setShade(p) {
   $('hShade').innerHTML = S.sunshade > 0 ? `<b>Kapat</b><span>Perde %${S.sunshade}</span>` : '<b>Aç</b><span>Tavan perdesi</span>';
   refreshCard();
 }
-$('lockBtn').onclick = () => setLock(!S.locked);
 $('hTrunk').onclick = () => setTrunk(!S.trunk);
 $('hCharge').onclick = () => setCharge(!S.charging);
 $('hShade').onclick = () => setShade(S.sunshade > 0 ? 0 : 100);
@@ -2193,7 +2199,6 @@ function setGear(g) {
   stage.classList.toggle('driving', driving);
   road.visible = driving; ground.visible = !driving;
   $('speedBox').style.opacity = driving ? 1 : 0;
-  $('lockBtn').style.display = driving ? 'none' : '';
   // While driving the view stays behind the car: no orbiting, only a limited zoom range
   // so the road ahead stays in frame.
   controls.enableRotate = !driving;
@@ -3460,6 +3465,19 @@ addEventListener('pointermove', (e) => { if (volDrag) volAt(e); });
 addEventListener('pointerup', () => { if (volDrag) { volDrag = false; setVol(S.vol); } });
 volIcon();
 if (window.YunusNative && YunusNative.volumeRefresh) YunusNative.volumeRefresh(); // the system level
+if (window.YunusNative && YunusNative.statusRefresh) YunusNative.statusRefresh(); // Wi-Fi and mobile signal
+
+// ---------- top line: time, mobile and Wi-Fi (from the app's StatusBridge) ----------
+function tickClock() { $('clockTxt').textContent = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); }
+tickClock(); setInterval(tickClock, 10000);
+// Levels 0–4, -1: none. Wi-Fi has four Tabler steps, mobile five bars.
+function renderNet(n) {
+  const wifi = $('wifiInd'), mob = $('mobInd');
+  wifi.className = 'ti ' + (n.wifi < 0 ? 'hide' : ['ti-wifi-0', 'ti-wifi-0', 'ti-wifi-1', 'ti-wifi-2', 'ti-wifi'][n.wifi]) + (n.wifi >= 0 && !n.online ? ' off' : '');
+  mob.classList.toggle('hide', n.mobile < 0);
+  if (n.mobile >= 0) mob.firstElementChild.className = 'ti ti-antenna-bars-' + (n.mobile + 1);
+  mob.classList.toggle('off', n.mobile >= 0 && !n.online && n.wifi < 0);
+}
 // Slide a finger along a dock control to change it continuously; a tap still steps it once.
 // [stepPx]: page pixels per step; [onSlide]: called once when a slide starts.
 function dockSlider(el, stepPx, get, set, onSlide) {
@@ -3575,6 +3593,7 @@ window.yunusCar = (m) => {
     renderMedia(); return;
   }
   if (m.volume) { systemVolume(m.volume); return; }
+  if (m.net) { renderNet(m.net); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;

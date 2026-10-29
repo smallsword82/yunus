@@ -6,6 +6,9 @@
     <!-- The map follows the car's GPS. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Wi-Fi and mobile signal for Yunus's top bar (normal permissions, granted at install). -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- BYDAuto HAL _COMMON permissions (protectionLevel=dangerous, source package "android",
          so grantable to any app once the user approves — the same set BYD Road Computer and the

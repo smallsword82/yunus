@@ -54,6 +54,7 @@ class MainActivity : Activity() {
     private lateinit var embed: AppEmbed
     private lateinit var media: MediaBridge
     private lateinit var volume: VolumeBridge
+    private lateinit var status: StatusBridge
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -171,6 +172,11 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun volumeRefresh() = runOnUiThread { volume.send() }
 
+                // Wi-Fi and mobile signal for the top bar: the page asks once it is ready, then
+                // {net:{…}} follows every change.
+                @JavascriptInterface
+                fun statusRefresh() = runOnUiThread { status.send(true) }
+
                 @JavascriptInterface
                 fun volumeSet(level: Int) = runOnUiThread { volume.set(level) }
 
@@ -201,6 +207,7 @@ class MainActivity : Activity() {
         embed = AppEmbed(this, root, shell)
         media = MediaBridge(this, ::postToPage)
         volume = VolumeBridge(this, ::postToPage)
+        status = StatusBridge(this, ::postToPage).also { it.start() }
         setContentView(root)
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)
@@ -279,7 +286,7 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
     override fun onPause() { web.onPause(); super.onPause() }
-    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); volume.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     private fun postToPage(message: String) {
         runOnUiThread {
