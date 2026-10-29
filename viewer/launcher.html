@@ -434,10 +434,11 @@ button { font-family:inherit; color:inherit; }
 .aaMedia { margin-top:auto; background:#303134; border-radius:20px; padding:20px 24px; display:flex; align-items:center; gap:18px; font-size:34px; max-width:560px; }
 .aaMedia div { flex:1; } .aaMedia b { display:block; font-size:24px; } .aaMedia span { font-size:18px; color:#9aa0a6; }
 .floating { position:absolute; background:var(--pn); border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.35); }
-#search { top:72px; left:24px; width:520px; height:72px; display:flex; align-items:center; gap:16px; padding:0 24px; font-size:24px; color:var(--mu); }
-#navCard { top:158px; left:24px; width:520px; padding:18px 24px; font-size:20px; }
+/* Map overlays stay left of the map buttons and narrow with the window (Chrome 74: no min()). */
+#search { top:72px; left:24px; right:112px; max-width:520px; box-sizing:border-box; height:72px; display:flex; align-items:center; gap:16px; padding:0 24px; font-size:24px; color:var(--mu); white-space:nowrap; overflow:hidden; }
+#navCard { top:158px; left:24px; right:112px; max-width:520px; box-sizing:border-box; padding:18px 24px; font-size:20px; }
 /* Navigation on Yunus's own map: the search / route panel and, while navigating, the turn banner. */
-#navPanel { top:72px; left:24px; width:580px; max-height:calc(100% - 198px); overflow:auto; padding:16px; z-index:3; color:var(--tx); }
+#navPanel { top:72px; left:24px; right:112px; max-width:580px; box-sizing:border-box; max-height:calc(100% - 198px); overflow:auto; padding:16px; z-index:3; color:var(--tx); }
 #navPanel input { width:100%; height:66px; border:0; border-radius:14px; padding:0 22px; background:var(--cd2); color:var(--tx); font:400 24px Inter,sans-serif; outline:none; }
 #navPanel .acts { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
 #navPanel .acts > * { margin:0 10px 0 0; }
@@ -449,7 +450,7 @@ button { font-family:inherit; color:inherit; }
 #navPanel .row i { font-size:28px; color:var(--mu); }
 #navPanel .row small { display:block; font-size:16px; color:var(--mu); margin-top:2px; }
 #navPanel .warn { color:#ffb020; font-size:18px; margin:4px 10px; }
-#navBanner { top:72px; left:24px; width:720px; padding:18px 20px 18px 24px; display:flex; align-items:center; gap:20px; background:#1d6b42; color:#fff; z-index:3; }
+#navBanner { top:72px; left:24px; right:112px; max-width:720px; box-sizing:border-box; padding:18px 20px 18px 24px; display:flex; align-items:center; gap:20px; background:#1d6b42; color:#fff; z-index:3; }
 #navBanner > * + * { margin-left:20px; }
 #navBanner > i { font-size:70px; }
 #navBanner b { display:block; font-size:40px; font-weight:600; }
