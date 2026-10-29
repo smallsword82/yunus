@@ -482,6 +482,9 @@ button { font-family:inherit; color:inherit; }
 .apps { grid-template-columns:repeat(8,1fr); gap:30px 10px; }
 .app { display:flex; flex-direction:column; align-items:center; gap:10px; font-size:18px; background:none; border:0; cursor:pointer; }
 .app div { width:84px; height:84px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:44px; color:#fff; }
+.app div.real { background:none; color:var(--mu); }
+.app div.real img { width:84px; height:84px; border-radius:20px; }
+.app span { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } /* long app names */
 
 /* dock */
 #dock { grid-column:1 / 4; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
@@ -2896,10 +2899,24 @@ const CARDS = {
       <svg viewBox="0 0 400 300" style="position:absolute;top:0;left:0;width:100%;height:100%"><path d="M90 300 L170 120 M310 300 L230 120" stroke="#f5c542" stroke-width="4" fill="none"/><path d="M120 240 H280 M145 180 H255" stroke="#e5484d" stroke-width="3"/></svg>
       Kamera görüntüsü (araçta BYD kamera servisinden gelecek)</div>` },
 
-  apps: { tall: true, render: () => `<p class="title">Uygulamalar</p><div class="grid apps">${APPS.map(([n, i, c]) =>
-      `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('')}</div>` },
+  apps: { tall: true, render: () => {
+    const real = deviceApps();
+    return `<p class="title">Uygulamalar</p><div class="grid apps">${real
+      ? real.map((a) => `<button class="app" data-app="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('')
+      : APPS.map(([n, i, c]) => `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('')}</div>`;
+  } },
 };
-// Installed apps (on the car: read from the package manager).
+// The device's launchable apps from the app (by name, with their own icons), read when the card
+// opens and kept for half a minute; APPS below is the desktop preview's stand-in.
+let appsCache = null, appsAt = 0;
+function deviceApps() {
+  if (!(window.YunusNative && YunusNative.apps)) return null;
+  if (!appsCache || performance.now() - appsAt > 30000) {
+    try { appsCache = JSON.parse(YunusNative.apps()); } catch { appsCache = []; }
+    appsAt = performance.now();
+  }
+  return appsCache;
+}
 const APPS = [
   ['Spotify', 'music', '#1db954'], ['Haritalar', 'map-2', '#4285f4'], ['Waze', 'navigation', '#33ccff'], ['YouTube', 'brand-youtube', '#e5484d'],
   ['Telefon', 'phone', '#30a46c'], ['Mesajlar', 'message', '#639922'], ['Radyo', 'radio', '#d85a30'], ['Podcast', 'microphone', '#7f77dd'],
@@ -3138,6 +3155,7 @@ body.addEventListener('click', (e) => {
     else { $('bsCam').classList.remove('show'); updateBlindSpot(); }
   }
   if (t.dataset.light) S.lights = t.dataset.light;
+  if (t.dataset.app) { if (window.YunusNative) YunusNative.openApp(t.dataset.app); closeCard(); return; }
   // The card covers the map area: close it so the chosen map shows at once.
   if (t.dataset.nav) { S.set.navApp = t.dataset.nav; saveSettings(); startMapArea(); closeCard(); }
   if (t.dataset.fault) { S.faults[t.dataset.fault] = !S.faults[t.dataset.fault]; updateTelltales(); }

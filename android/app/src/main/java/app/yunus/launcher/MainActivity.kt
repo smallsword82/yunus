@@ -176,6 +176,10 @@ class MainActivity : Activity() {
                     if (target.resolveActivity(packageManager) == null) false else { startActivity(target); true }
                 } catch (_: Throwable) { false }
 
+                // Every launchable app [{pkg,app,icon}] for the apps card.
+                @JavascriptInterface
+                fun apps(): String = launcherApps(this@MainActivity)
+
                 // Installed navigation apps [{pkg,app,icon}] for the map-area choice.
                 @JavascriptInterface
                 fun navApps(): String = navigationApps(this@MainActivity)

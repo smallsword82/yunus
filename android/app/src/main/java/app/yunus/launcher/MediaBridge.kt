@@ -30,6 +30,22 @@ fun appLabel(ctx: Context, pkg: String): String = try {
 } catch (_: Exception) { pkg }
 
 /**
+ * Every launchable app on the device for the apps card, by name: [{pkg,app,icon}] (Yunus itself
+ * left out). Called from the page's JavaScript thread, so the icons don't hold up the screen.
+ */
+fun launcherApps(ctx: Context): String {
+    val pm = ctx.packageManager
+    val pkgs = pm.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN)
+        .addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0).map { it.activityInfo.packageName }
+        .distinct().filter { it != ctx.packageName }
+    val collator = java.text.Collator.getInstance(java.util.Locale("tr"))
+    return JSONArray().apply {
+        pkgs.map { it to appLabel(ctx, it) }.sortedWith { a, b -> collator.compare(a.second, b.second) }
+            .forEach { (pkg, label) -> put(JSONObject().put("pkg", pkg).put("app", label).put("icon", appIconData(ctx, pkg) ?: JSONObject.NULL)) }
+    }.toString()
+}
+
+/**
  * Installed navigation apps for the map area: those that open a place or a route (geo: and
  * google.navigation: links) or call themselves a maps app, and can be launched. JSON for the page.
  */
