@@ -4276,7 +4276,7 @@ const CAR_SETTINGS = 'com.byd.carsettings/.MainActivity';
 // up from the bottom edge opens the recent apps.
 (function edgeSwipe() {
   let y0 = null;
-  addEventListener('pointerdown', (e) => { const sy = (e.clientY - stage.getBoundingClientRect().top) / stageScale; y0 = sy > (DOCK_ONLY ? 112 : PORTRAIT ? 1920 : 1080) - 24 ? e.clientY : null; });
+  addEventListener('pointerdown', (e) => { const sy = (e.clientY - stage.getBoundingClientRect().top) / stageScale; y0 = sy > (DOCK_ONLY ? 112 : PORTRAIT ? 1920 : 1080) - 56 ? e.clientY : null; // the dock's lower half: easy to hit });
   addEventListener('pointermove', (e) => {
     if (y0 === null || (y0 - e.clientY) / stageScale < 36) return;
     y0 = null;
