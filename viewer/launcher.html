@@ -1174,6 +1174,9 @@ const ttHtml = (t) => `<div class="tt ${ttColor(t)}${halTT[t.id] && halTT[t.id].
 // The status bar shows only active warnings (amber and red), and the park brake while it is on.
 // Always-on information lights (OK, drive mode, AVH standby, ...) stay in the Warnings list.
 const isWarning = (t) => ['amber', 'red'].includes(ttColor(t));
+// Everyday red lights (cable plugged in, park brake, an unbuckled belt) stay in the status bar
+// without the fault pop-up.
+const NO_BANNER = ['plug', 'epb', 'belt'];
 let dismissedAlert = null;
 function updateTelltales() {
   // Red ones first, two columns of nine at most; beyond that the last ones fold into a "+N"
@@ -1191,7 +1194,7 @@ function updateTelltales() {
   }
   // A red fault also pops up a notification with the manual's advice; a tap hides it until
   // a different red fault appears.
-  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !['plug', 'epb'].includes(t.id) && ttFault(t));
+  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !NO_BANNER.includes(t.id) && ttFault(t));
   if (!red) dismissedAlert = null;
   $('warnBanner').classList.toggle('show', !!red && red.id !== dismissedAlert);
   if (red) placeWarnBanner();
@@ -1215,7 +1218,7 @@ $('telltales').onclick = (e) => {
   if (current !== 'controls') openCard('controls'); else refreshCard();
 };
 $('warnBanner').onclick = () => {
-  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !['plug', 'epb'].includes(t.id) && ttFault(t)); // as in updateTelltales
+  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !NO_BANNER.includes(t.id) && ttFault(t)); // as in updateTelltales
   dismissedAlert = red ? red.id : null;
   updateTelltales();
 };
