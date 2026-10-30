@@ -703,6 +703,20 @@ button { font-family:inherit; color:inherit; }
 .clim .ico { display:block; width:80px; height:80px; /* the PNGs carry their own padding */ background:currentColor;
   -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
 .clim:not(.lit):not(.heat):not(.vent) .ico { opacity:.78; }
+/* A working key's icon carries a moving light: rising through the heaters and demisters (warm
+   air going up), across recirculation and seat cooling (air going round). Only the masked
+   background moves; the icon pops once when switched on. */
+@keyframes shineUp { from { background-position:0 0; } to { background-position:0 100%; } }
+@keyframes shineAcross { from { background-position:100% 0; } to { background-position:0 0; } }
+.clim.lit .ico, .clim.heat .ico {
+  background:linear-gradient(0deg, currentColor 0%, currentColor 45%, rgba(255,255,255,.8) 50%, currentColor 55%, currentColor 100%);
+  background-size:100% 300%; animation:shineUp 1.8s linear infinite; }
+#recirc.lit .ico, .clim.vent .ico {
+  background:linear-gradient(90deg, currentColor 0%, currentColor 45%, rgba(255,255,255,.8) 50%, currentColor 55%, currentColor 100%);
+  background-size:300% 100%; animation:shineAcross 1.6s linear infinite; }
+.clim:not(.seatDk).lit .ico { animation-name:shineUp, keyPop; animation-duration:1.8s, .4s; animation-timing-function:linear, ease-out; animation-iteration-count:infinite, 1; }
+#recirc.lit .ico { animation-name:shineAcross, keyPop; animation-duration:1.6s, .4s; }
+@media (prefers-reduced-motion: reduce) { .clim .ico { animation:none !important; } }
 #airFlow .on { color:#3e6ae1; }
 #airFlow path[class]:not(.on) { opacity:.4; } /* the unused directions stay faint, as on Tesla */
 /* Working keys move: warm air rises in the heat waves, the recirculation arrow turns, the air
