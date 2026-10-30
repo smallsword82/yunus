@@ -335,7 +335,7 @@ private object CarWatch {
         // The charge events only arrive on change, so a car already plugged in when Yunus started
         // never sends them; read the gun (2 = connected → show the cable) and the state.
         "charging.BYDAutoChargingDevice" to listOf(Get("chgGun", "getChargingGunState"), Get("chgState", "getChargingState"),
-            Get("chgPower", "getChargingPower"))) // kW (double); rest hour/minute arrive as events
+            Get("chgPower", "getChargingPower"), Get("restMin", "getChargingRestTime"))) // getChargingRestTime: [hour, minute]
     private class Poll(val dev: Any, val cls: Class<*>, val get: Get) { var dead = false }
     private val polls = ArrayList<Poll>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
@@ -343,9 +343,15 @@ private object CarWatch {
     private fun poll() {
         for (p in polls) if (!p.dead) try {
             val m = if (p.get.arg == null) p.cls.getMethod(p.get.method) else p.cls.getMethod(p.get.method, Integer.TYPE)
-            val v = (if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)) as? Number ?: continue
-            if (v.toDouble() in invalid) continue
-            val line = "ev Get ${p.get.key} d ${v.toDouble()}"
+            val raw = if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)
+            // getChargingRestTime returns [hour, minute]; everything else a single number.
+            val dv = when (raw) {
+                is Number -> raw.toDouble()
+                is IntArray -> if (raw.size >= 2) (raw[0] * 60 + raw[1]).toDouble() else if (raw.isNotEmpty()) raw[0].toDouble() else continue
+                else -> continue
+            }
+            if (dv in invalid) continue
+            val line = "ev Get ${p.get.key} d $dv"
             val same = synchronized(last) { last.put("Get ${p.get.key}", line) == line }
             if (!same) send(line)
         } catch (t: Throwable) { p.dead = true; System.err.println("watch ${p.get.method}: ${t.cause ?: t}") }

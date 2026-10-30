@@ -189,8 +189,11 @@ button { font-family:inherit; color:inherit; }
 #gears span { color:var(--mu); }
 #gears span.on { color:var(--tx); }
 .batt { margin-left:auto; display:flex; align-items:center; gap:10px; white-space:nowrap; }
-.batt .cell { width:44px; height:20px; border:2px solid var(--mu); border-radius:5px; padding:2px; }
-.batt .cell div { height:100%; background:var(--ok); border-radius:2px; }
+.batt .cell { width:44px; height:20px; border:2px solid var(--mu); border-radius:5px; padding:2px; position:relative; }
+.batt .cell > div { height:100%; background:var(--ok); border-radius:2px; }
+#battBolt { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:16px; color:#fff; display:none; text-shadow:0 0 3px rgba(0,0,0,.7); }
+.batt.charging .cell { border-color:var(--ok); }
+.batt.charging #battBolt { display:block; }
 #speedBox { position:absolute; top:80px; left:36px; z-index:2; transition:opacity .4s; }
 /* As on Tesla: big speed, the unit right under it, the power meter under that */
 .spdRow { display:flex; flex-direction:column; }
@@ -432,16 +435,18 @@ button { font-family:inherit; color:inherit; }
 #bsCam.right .bsLbl { left:auto; right:8px; }
 #bsCam.edgeMode { display:none; }
 /* Charging, as in Tesla: the battery level large over the car, power and time under it. */
-/* Charging read-out: a clean card in the top-left of the car area, clear of the 3D model. */
-#chargeInfo { position:absolute; left:36px; top:84px; z-index:3; pointer-events:none; opacity:0; transition:opacity .3s;
-  background:var(--pn); border-radius:20px; padding:16px 24px 18px; box-shadow:0 12px 40px rgba(0,0,0,.26); }
+/* Charging read-out: a clean card in the top-right of the car area, clear of the 3D model. The
+   percent is in the status bar's battery (which goes to its charging look), so here it's the draw. */
+#chargeInfo { position:absolute; right:36px; top:84px; z-index:3; pointer-events:none; opacity:0; transition:opacity .3s;
+  background:var(--pn); border-radius:20px; padding:14px 24px 18px; box-shadow:0 12px 40px rgba(0,0,0,.26); text-align:right;
+  width:230px; box-sizing:border-box; } /* fixed width so the time line's length doesn't resize it */
 #chargeInfo.show { opacity:1; }
-#chargeInfo .ciTop { display:flex; align-items:center; gap:8px; }
-#chargeInfo .ciTop i { font-size:30px; color:var(--ok); }
+#chargeInfo .ciLine { display:block; font-size:22px; font-weight:500; color:var(--tx); white-space:nowrap; }
+#chargeInfo .ciTop { display:flex; align-items:baseline; justify-content:flex-end; gap:6px; margin-top:4px; }
+#chargeInfo .ciTop i { font-size:28px; color:var(--ok); align-self:center; }
 #chargeInfo b { font-size:52px; font-weight:300; color:var(--ok); line-height:1; }
-#chargeInfo .ciLine { display:block; margin-top:8px; font-size:23px; font-weight:500; color:var(--tx); }
-#chargeInfo .ciMeta { display:block; margin-top:3px; font-size:20px; color:var(--mu); }
-#chargeInfo .ciMeta:empty { display:none; }
+#chargeInfo .ciUnit { font-size:24px; color:var(--ok); font-weight:400; }
+#chargeInfo .ciMeta { display:block; margin-top:4px; font-size:20px; color:var(--mu); white-space:nowrap; min-height:24px; }
 #stage.driving #chargeInfo { display:none; } /* the trial's edge pane shows instead */
 #sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:#000;
   box-shadow:0 16px 48px rgba(0,0,0,.55); transform:translateX(-110%); transition:transform .35s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
@@ -749,7 +754,7 @@ button { font-family:inherit; color:inherit; }
         <svg id="indLow" viewBox="0 0 40 28" aria-label="Kısa far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6 3 10M14 12 3 16M14 18 3 22"/></svg>
         <svg id="indHigh" viewBox="0 0 40 28" aria-label="Uzun far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6H2M14 11H2M14 17H2M14 22H2"/></svg>
       </div>
-      <div class="batt"><span style="color:var(--mu)" id="rangeTxt">312 km</span><div class="cell"><div style="width:78%" id="socBar"></div></div><span id="socTxt">78%</span></div>
+      <div class="batt" id="battBox"><span style="color:var(--mu)" id="rangeTxt">312 km</span><div class="cell"><div style="width:78%" id="socBar"></div><i class="ti ti-bolt" id="battBolt"></i></div><span id="socTxt">78%</span></div>
     </div>
     <div id="telltales"></div>
     <div id="speedBox" style="opacity:0">
@@ -784,7 +789,7 @@ button { font-family:inherit; color:inherit; }
     <div class="glassDot" data-dot="RR" aria-label="Sağ arka cam"></div>
     <div class="glassDot" data-dot="shade" aria-label="Tavan perdesi"></div>
     <button class="hot" id="hCharge" data-act="charge"><i class="ti ti-bolt" style="font-size:30px"></i><span style="display:block">Şarj portu</span></button>
-    <div id="chargeInfo"><div class="ciTop"><i class="ti ti-bolt"></i><b id="ciPct">78%</b></div><span class="ciLine" id="ciLine">Şarj ediliyor</span><span class="ciMeta" id="ciMeta"></span></div>
+    <div id="chargeInfo"><span class="ciLine" id="ciLine">Şarj ediliyor</span><div class="ciTop"><i class="ti ti-bolt"></i><b id="ciKw">—</b><span class="ciUnit">kW</span></div><span class="ciMeta" id="ciMeta"></span></div>
     <!-- No lock button on the car: Yunus can neither lock the car nor read the lock (BYD HAL, signature-only). -->
     <div id="carCards">
       <div id="ccGrab"></div>
@@ -2449,12 +2454,10 @@ function setTrunk(v, fromCar) {
 }
 // The large level and the line under it while charging.
 function updateChargeInfo() {
-  $('ciPct').textContent = $('socTxt').textContent;
   $('ciLine').textContent = S.chargeState === 13 ? 'Şarj duraklatıldı' : S.chargeState === 2 ? 'Şarj tamamlandı' : 'Şarj ediliyor';
-  const kw = S.chargeKw > 0 ? `${(+S.chargeKw).toFixed(1).replace('.', ',')} kW` : '';
+  $('ciKw').textContent = S.chargeKw > 0 ? (+S.chargeKw).toFixed(1).replace('.', ',') : '—';
   const h = Math.floor((S.chargeMin || 0) / 60), mn = Math.round((S.chargeMin || 0) % 60);
-  const left = S.chargeMin > 0 ? `${h ? h + ' sa ' : ''}${mn} dk kaldı` : '';
-  $('ciMeta').textContent = [kw, left].filter(Boolean).join(' · ');
+  $('ciMeta').textContent = S.chargeMin > 0 ? `${h ? h + ' sa ' : ''}${mn} dk kaldı` : '';
 }
 // The car's charging state on the charge-port hotspot: charging (power, time left), paused, done.
 function showCharging() {
@@ -2468,6 +2471,7 @@ function setCharge(v, fromCar) {
   if (S.live && !fromCar) return carCmd(v ? 'chargePortOpen' : 'chargePortClose');
   S.charging = v;
   chargeGear.visible = v;
+  $('battBox').classList.toggle('charging', v); // the status bar's battery shows its charging look
   $('chargeInfo').classList.toggle('show', v);
   updateChargeInfo();
   wake(1500);
@@ -4442,9 +4446,11 @@ const CAR_HAL_MAP = {
   'Charging 0x34400032': (v) => ({ gun: v }),
   'Charging 0x32300018': (v) => ({ chargeKw: v }),
   'Charging 0x32300038': (v) => ({ chargeMin: v }),
-  // This head unit instead sends the time to full as hour + minute and the power as current × volt.
-  'Charging 0x44500018': (v) => ({ restH: v }), // CHARGING_FULL_REST_HOUR
-  'Charging 0x44500020': (v) => ({ restM: v }), // CHARGING_FULL_REST_MINUTE
+  // This head unit reports the draw as the pack's current and voltage (getChargingPower reads 0
+  // here). The battery current is offset-encoded (5000 = 0 A, 0.1 A per step, below 5000 = charging);
+  // kW = amps × volts, calibrated to the cluster's reading (4928 raw, 423 V → 3.0 kW).
+  'Statistic 0x44A00020': (v) => ({ battCurrent: v }), // STATISTIC_INSTANTANEOUS_CURRENT (offset 5000, 0.1 A)
+  'Charging 0x44400008': (v) => ({ battVolt: v }), // CHARGING_CHARGE_BATTERY_VOLT (V)
   // Windows and sunshade, in % open (BODYWORK_*_PERCENT). The Bodywork device is signature-locked,
   // so these arrive only if this head unit lets its listener through (to be seen on the car).
   'Bodywork 0x38800018': (v) => ({ windows: { FL: v } }),
@@ -4471,6 +4477,7 @@ const CAR_HAL_MAP = {
   // when the car was already plugged in before Yunus started (the charge events only fire on change).
   'Get chgGun': (v) => ({ chargePort: v === 2 }),
   'Get chgPower': (v) => (v > 0 ? { chargeKw: v } : {}), // getChargingPower, kW
+  'Get restMin': (v) => ({ chargeMin: v }), // getChargingRestTime [hour, minute] → total minutes, always current
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
@@ -4482,7 +4489,7 @@ const CAR_HAL_MAP = {
 let KMH_PER_RPM = 0.0108, realSpeed = false;
 try { KMH_PER_RPM = +localStorage.getItem('kmhPerRpm') || KMH_PER_RPM; } catch {}
 const CAR_HAL_KEEP = ['Statistic 0x4A502010', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
-  'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C',
+  'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C', 'Charging 0x44400008',
   // The light knob and the lamps: the car reports them only when they change, so a start shows
   // them as they were last reported (lamps off with the car are reported too).
   'Light 0x13300023', 'Light 0x38A0000A', 'Light 0x38A00008', 'Light 0x38A0000C'];
@@ -4554,7 +4561,7 @@ window.yunusCar = (m) => {
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
     'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
-    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'restH', 'restM', 'sunshade', 'steerAngle'];
+    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
@@ -4570,10 +4577,16 @@ window.yunusCar = (m) => {
   if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
   if (m.tyres) Object.assign(S.tyres, m.tyres);
   if (m.odo != null) { S.odo = m.odo; $('odoTxt').textContent = `Toplam ${Math.round(m.odo).toLocaleString('tr-TR')} km`; }
-  if (m.restH != null) S.restH = m.restH;
-  if (m.chargeState != null || m.gun != null || m.chargeKw != null || m.chargeMin != null || m.restM != null) {
-    ['chargeState', 'gun', 'chargeKw', 'chargeMin'].filter((k) => m[k] != null).forEach((k) => { S[k] = m[k]; });
-    if (m.restM != null) S.chargeMin = (S.restH || 0) * 60 + m.restM; // time to full as hour + minute
+  if (m.battCurrent != null) S.battCurrent = m.battCurrent;
+  if (m.battVolt != null) S.battVolt = m.battVolt;
+  if (m.chargeState != null || m.gun != null || m.chargeKw != null || m.chargeMin != null || m.battCurrent != null || m.battVolt != null) {
+    ['chargeState', 'gun', 'chargeMin'].filter((k) => m[k] != null).forEach((k) => { S[k] = m[k]; });
+    // Draw: either sent directly, or derived from the pack current and voltage (current offset-encoded).
+    if (m.chargeKw != null) S.chargeKw = m.chargeKw;
+    else if (S.battCurrent != null) {
+      const amps = Math.max(0, (5000 - S.battCurrent) * 0.1);
+      S.chargeKw = Math.round(amps * (S.battVolt || 420) / 100) / 10; // nominal pack V until the car reports one
+    }
     showCharging();
   }
   if (m.tyreState) Object.assign(S.tyreState, m.tyreState);
