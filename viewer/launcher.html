@@ -301,7 +301,11 @@ button { font-family:inherit; color:inherit; }
 #netStat .hide { display:none; }
 #netStat i { font-size:24px; }
 #topBar #clockTxt, #topBar #outTemp, #netStat i { cursor:pointer; padding:8px 4px; } /* shortcuts */
-#netStat .off { opacity:.4; } /* joined but no internet */
+#netStat .off { opacity:.4; }
+#bellInd { position:relative; cursor:pointer; }
+#bellCount { position:absolute; top:2px; right:-6px; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--dn); color:#fff;
+  font-size:12px; font-weight:700; line-height:18px; text-align:center; }
+#bellCount:empty { display:none; } /* joined but no internet */
 #telltales .more { flex:none; height:30px; padding:0 9px; border-radius:15px; display:flex; align-items:center; font:600 17px Inter,sans-serif; color:#ffb020; background:rgba(255,176,32,.14); cursor:pointer; }
 #telltales .more.red { color:#ff3b30; background:rgba(255,59,48,.14); }
 .tt { width:40px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; }
@@ -371,6 +375,9 @@ button { font-family:inherit; color:inherit; }
 #topBar { position:absolute; top:0; left:0; right:0; height:48px; display:flex; align-items:center; padding:0 28px; font-size:22px; font-weight:500; background:var(--pn); color:var(--tx); z-index:4; }
 #topBar > * + * { margin-left:26px; }
 #topBar #outTemp { color:var(--tx); }
+#lockInd { font-size:26px; cursor:pointer; padding:8px 2px; }
+#lockInd.off { opacity:.35; } /* state not known yet */
+#lockInd.open { color:var(--dn); }
 #profile { display:flex; align-items:center; cursor:pointer; }
 #profile:empty, #profile.hide { display:none; }
 #profPic { width:30px; height:30px; border-radius:50%; background:var(--ac) center/cover no-repeat; color:#fff; font-size:15px; font-weight:600;
@@ -796,13 +803,15 @@ button { font-family:inherit; color:inherit; }
 
   <section id="mapWrap">
     <div id="topBar">
+      <!-- The lock, as on Tesla's status bar: the car's lock state (read from the car). -->
+      <i id="lockInd" class="ti ti-lock off" title="Kilit"></i>
       <span id="clockTxt"></span>
       <div id="outTemp">18°C</div>
       <!-- The driver, as the car's own status bar shows the signed-in user: photo (or initial) and name. -->
       <div id="profile"><span id="profPic"></span><span id="profName"></span></div>
       <!-- An icon shows only when there is that link (the car's own status bar is hidden while
            Yunus runs full screen). -->
-      <div id="netStat"><i id="locInd" class="ti ti-location-filled hide"></i><i id="btInd" class="ti ti-bluetooth hide"></i><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span></div>
+      <div id="netStat"><i id="locInd" class="ti ti-location-filled hide"></i><i id="btInd" class="ti ti-bluetooth hide"></i><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span><span id="bellInd"><i class="ti ti-bell"></i><b id="bellCount"></b></span></div>
     </div>
     <div id="map"></div>
     <div class="floating" id="search"><i class="ti ti-search"></i>Nereye gidiyoruz?</div>
@@ -2386,6 +2395,9 @@ function darkMapLayers() {
 function setLock(v, fromCar) {
   if (S.live && !fromCar) return carCmd(v ? 'lock' : 'unlock');
   S.locked = v;
+  if (fromCar) lockKnown = true;
+  $('lockInd').className = `ti ti-lock${v ? '' : '-open open'}${lockKnown || !DEVICE ? '' : ' off'}`;
+  $('lockInd').title = v ? 'Kilitli' : 'Kilit açık';
   refreshCard();
 }
 function setTrunk(v, fromCar) {
@@ -4167,6 +4179,10 @@ volIcon();
 if (window.YunusNative && YunusNative.volumeRefresh) YunusNative.volumeRefresh(); // the system level
 if (window.YunusNative && YunusNative.statusRefresh) YunusNative.statusRefresh(); // Wi-Fi and mobile signal
 
+// The status bar's lock: on the device it shows the car's state (Yunus can't lock the car: that
+// needs BYD's signature); in the preview a tap toggles it, as before.
+let lockKnown = false;
+$('lockInd').onclick = () => { if (!DEVICE) setLock(!S.locked); };
 // ---------- driver in the status bar ----------
 // The car's signed-in user (name and photo, from the app when it can read the car's account) or the
 // name set in Yunus › Ekran; without a photo, the name's first letter on a round badge.
@@ -4194,6 +4210,8 @@ function openSetting(which) {
 }
 $('wifiInd').onclick = $('mobInd').onclick = () => openSetting('wifi');
 $('btInd').onclick = () => openSetting('bluetooth');
+// The bell: the number of notifications; a tap pulls down the system's notification shade.
+$('bellInd').onclick = () => { if (window.YunusNative && YunusNative.openNotifications) YunusNative.openNotifications(); };
 $('locInd').onclick = () => openSetting('location');
 $('clockTxt').onclick = () => openSetting('date');
 function tickClock() { $('clockTxt').textContent = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); }
@@ -4345,6 +4363,7 @@ const CAR_HAL_MAP = {
   'Bodywork 0x41A00010': (v) => ({ sunshade: v }),
   // Through the shell helper's getters (as Kinex reads them), when this car allows it:
   'Get speed': (v) => { realSpeed = true; return { speed: Math.round(v) }; },
+  'Get lock': (v) => (v === 1 || v === 2 ? { locked: v === 2 } : {}), // DOOR_LOCK_STATE_UNLOCK 1, LOCK 2
   'Get gear': (v) => (({ 1: 'P', 2: 'R', 3: 'N', 4: 'D', 6: 'D' })[v] ? { gear: ({ 1: 'P', 2: 'R', 3: 'N', 4: 'D', 6: 'D' })[v] } : {}),
   'Get soc': (v) => ({ soc: v }),
   'Get range': (v) => ({ range: v }),
@@ -4395,7 +4414,8 @@ window.yunusCar = (m) => {
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.net) { renderNet(m.net); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
-  if (m.user) { carUser = m.user; renderProfile(); return; } // {name, photo} from the car's account
+  if (m.user) { carUser = m.user; renderProfile(); return; }
+  if (m.notifCount != null) { $('bellCount').textContent = m.notifCount > 0 ? (m.notifCount > 9 ? '9+' : m.notifCount) : ''; return; } // {name, photo} from the car's account
   if (m.tt) {
     for (const id in m.tt) {
       const v = m.tt[id];
@@ -4436,7 +4456,7 @@ window.yunusCar = (m) => {
   if (m.speed != null) S.speed = m.speed;
   if (m.powerKw != null) S.powerKw = m.powerKw;
   if (m.gear && m.gear !== S.gear) { setGear(m.gear); updateBlindSpot(); }
-  if (m.locked != null && m.locked !== S.locked) setLock(m.locked, true);
+  if (m.locked != null && (m.locked !== S.locked || !lockKnown)) setLock(m.locked, true);
   if (m.doors) Object.assign(S.doors, m.doors);
   if (m.trunk != null && m.trunk !== S.trunk) setTrunk(m.trunk, true);
   if (m.windows) Object.assign(S.windows, m.windows);

@@ -205,7 +205,19 @@ class MainActivity : Activity() {
                 // Wi-Fi and mobile signal for the top bar: the page asks once it is ready, then
                 // {net:{…}} follows every change.
                 @JavascriptInterface
-                fun statusRefresh() = runOnUiThread { status.send(true) }
+                fun statusRefresh() = runOnUiThread {
+                    status.send(true)
+                    MediaListener.instance?.let { postToPage(JSONObject().put("notifCount", it.count()).toString()) }
+                }
+
+                // The bell: pulls down the system's notification shade over Yunus.
+                @JavascriptInterface
+                fun openNotifications() = runOnUiThread {
+                    try {
+                        val sb = getSystemService("statusbar")
+                        sb.javaClass.getMethod("expandNotificationsPanel").invoke(sb)
+                    } catch (_: Throwable) { }
+                }
 
                 @JavascriptInterface
                 fun volumeSet(level: Int) = runOnUiThread { volume.set(level) }
@@ -249,6 +261,8 @@ class MainActivity : Activity() {
         media = MediaBridge(this, ::postToPage)
         volume = VolumeBridge(this, ::postToPage)
         status = StatusBridge(this, ::postToPage).also { it.start() }
+        // The bell's count from the notification listener (only the number, never the content).
+        MediaListener.onCount = { n -> postToPage(JSONObject().put("notifCount", n).toString()) }
         setContentView(root)
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)

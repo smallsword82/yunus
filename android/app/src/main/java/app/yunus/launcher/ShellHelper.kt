@@ -266,6 +266,7 @@ private object CarWatch {
     private val GETTERS = listOf(
         "speed.BYDAutoSpeedDevice" to listOf(Get("speed", "getCurrentSpeed")),
         "gearbox.BYDAutoGearboxDevice" to listOf(Get("gear", "getCurrentGear")),
+        "doorlock.BYDAutoDoorLockDevice" to listOf(Get("lock", "getDoorLockStatus", 1)), // driver's door: 1 unlocked, 2 locked
         "statistic.BYDAutoStatisticDevice" to listOf(Get("soc", "getElecPercentageValue"), Get("range", "getElecDrivingRangeValue"),
             Get("odo", "getTotalMileageValue")),
         "bodywork.BYDAutoBodyworkDevice" to listOf(Get("steer", "getSteeringWheelValue", 1), // BODYWORK_CMD_STEERING_WHEEL_ANGEL

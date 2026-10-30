@@ -133,10 +133,27 @@ class VolumeBridge(private val ctx: Context, private val emit: (String) -> Unit)
 }
 
 /**
- * Exists only so Yunus may read the media sessions (Android hands them to an enabled notification
- * listener). It reads no notifications. The owner enables it once in notification access.
+ * Lets Yunus read the media sessions (Android hands them to an enabled notification listener), and
+ * count the notifications for the status bar's bell: only how many there are (dismissable ones, not
+ * Yunus's own), never their content. The owner enables it once in notification access.
  */
-class MediaListener : NotificationListenerService()
+class MediaListener : NotificationListenerService() {
+    companion object {
+        /** Set by the activity; called with the count whenever it may have changed. */
+        @Volatile var onCount: ((Int) -> Unit)? = null
+        @Volatile var instance: MediaListener? = null
+    }
+
+    fun count(): Int = try {
+        activeNotifications.orEmpty().count { it.isClearable && it.packageName != packageName }
+    } catch (_: Exception) { 0 }
+
+    private fun report() { onCount?.invoke(count()) }
+    override fun onListenerConnected() { instance = this; report() }
+    override fun onListenerDisconnected() { if (instance === this) instance = null }
+    override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification?) = report()
+    override fun onNotificationRemoved(sbn: android.service.notification.StatusBarNotification?) = report()
+}
 
 /**
  * Now playing for the music card, from the apps' media sessions (Spotify, YouTube Music, the car's

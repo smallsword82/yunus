@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Bluetooth on / connected for the status bar (normal permission up to Android 11). -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <!-- The bell in the status bar pulls down the notification shade (normal permission). -->
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
 
     <!-- BYDAuto HAL _COMMON permissions (protectionLevel=dangerous, source package "android",
          so grantable to any app once the user approves — the same set BYD Road Computer and the
