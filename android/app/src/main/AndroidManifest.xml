@@ -11,10 +11,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Bluetooth on / connected for the status bar (normal permission up to Android 11). -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <!-- The controls panel: Bluetooth on/off (normal up to Android 11), screen brightness and
-         rotation lock (system settings: an app-op Yunus gives itself over ADB, see fixPermissions). -->
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <!-- The bell in the status bar pulls down the notification shade (normal permission). -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
 

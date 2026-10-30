@@ -85,13 +85,10 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   kendi çubuğunu açıyordu. Artık cihazda sistemden gelen değişiklikte yalnız dock'taki ses tuşu
   güncelleniyor (`setVol`, launcher.html). Yunus'un dock tuşlarında yalnız Yunus'un çubuğu çıkıyor
   (araçta ekran görüntüsüyle doğrulandı). Kullanıcıya direksiyon tuşuyla denetmesini söyle.
-- **Yunus kontrol paneli — bitti, araçta denendi (30.10):** durum şeridinden aşağı çekince açılıyor
-  (`openQs`/`closeQs`/`renderQs`, launcher.html; gömülü pencereler tepsi gibi gizleniyor). Parlaklık
-  ve ses kaydırıcıları; Wi-Fi (dokununca Wi-Fi ayarı), Bluetooth, sessiz, döndürme kilidi, otomatik
-  parlaklık; araç: klima, araç ayarları, 360° kamera, Yunus ayarları. Araçta sessiz aç/kapa gerçek
-  çalıştı (dumpsys audio), dışarı dokununca kapanıyor. Not: en üst kenardan çekince BYD'nin kendi
-  çubukları da bir an kayıyor (Android tam ekran davranışı, kendiliğinden gizleniyor).
-  Kullanıcı görmedi: parlaklık kaydırıcısı ve döndürme kilidi araçta elle denenmedi.
+- **Yunus kontrol paneli: yapıldı, araçta denendi, kullanıcı istemedi — kaldırıldı (30.10).**
+  Android düğmelerinden (parlaklık, BT, sessiz…) oluşan kendi paneli "aracın kendi kısayolları
+  değil" diye beğenmedi. Aynı fikri tekrar önerme; istenen, aracın kendi kısayolları
+  (BYD SystemUI `BydQSBar`, araç düğmeleri BYD imzası istiyor).
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
