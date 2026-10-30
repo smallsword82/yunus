@@ -4296,11 +4296,11 @@ function renderDefrost() {
   renderAirFlow();
 }
 // Air direction: a seated figure with an arrow to the face, the feet and the windscreen; the
-// arrows in use are lit. Each tap steps face → face + feet → feet → feet + windscreen.
+// arrows in use are lit. Each tap steps to the next of the car's seven modes (see FLOW_STEPS).
 // AC_WINDMODE_*: 1 face, 2 face+feet, 3 feet, 4 feet+screen, 5 screen, 6 all three, 7 face+screen.
 const flowMode = (f) => (f.face ? (f.foot ? (f.defrost ? 6 : 2) : f.defrost ? 7 : 1) : f.foot ? (f.defrost ? 4 : 3) : 5);
-const FLOW_STEPS = [{ face: true, foot: false, defrost: false }, { face: true, foot: true, defrost: false },
-  { face: false, foot: true, defrost: false }, { face: false, foot: true, defrost: true }];
+// Each tap steps the car's own seven modes in its order (AC_WINDMODE_* 1..7).
+const FLOW_STEPS = [1, 2, 3, 4, 5, 6, 7].map((m) => ({ face: [1, 2, 6, 7].includes(m), foot: [2, 3, 4, 6].includes(m), defrost: [4, 5, 6, 7].includes(m) }));
 function renderAirFlow() {
   const f = S.flow, on = (k) => (f[k] ? 'on' : '');
   // The bar's own air-direction icon cut into its parts (img/byd/wind_part_*): the seated figure,
