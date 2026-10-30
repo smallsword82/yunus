@@ -17,7 +17,7 @@ Kinex'in jar'ı, kullanılmayan fontlar/görseller ve Draco çözücü APK'dan �
 | Hız, güç çubuğu (gaz/rejen), toplam km | ⚠️ eşlendi; hız motor devrinden (katsayı sürüşte ayarlanacak) |
 | Şarj durumu + Tesla tarzı şarj görünümü | ⚠️ eşlendi, emülatörde taklitle doğrulandı |
 | Uyarı lambaları (20), lastik basınçları | ⚠️ gösterge verisinden eşlendi, araçta görülecek |
-| Camlar, perde, direksiyon açısı, kilit durumu, park halinde SOC | ❌ araçta denendi (30.10): kabuk + sistem bağlamı da reddedildi (BODYWORK/DOOR_LOCK/SPEED/GEARBOX/STATISTIC izinleri yok). Cam yüzdesi 0x38800018 yalnız BYD imzalı uygulamalara gidiyor. Tekrar deneme. |
+| Camlar, perde, kilit durumu | ⚠️ KİNEX okuyup komut veriyor (araçta kanıtlandı 30.10, aşağıya bak). Düz Bodywork kurmak reddedilir; Kinex bağlamı sarıp istemci izin denetimini aşıyor. Yunus'a eklenecek. Direksiyon açısı/park SOC hâlâ `_GET` imzalı. |
 | Kilitleme (komut), kör nokta, gerçek yan kamera | ❌ BYD imzası / BYD uygulaması gerekiyor (plan aşağıda) |
 | Harita alanı: Google Maps / Yunus Harita, 3B binalar, şarj istasyonları, navigasyon | ✅ |
 | 3 pencere, sürükleyerek boyut, 3. pencerede gerçek uygulamalar, kapatma | ✅ emülatörde |
@@ -112,6 +112,19 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   Son düğme ve lamba değerleri `CAR_HAL_KEEP` ile saklanıp açılışta geri yükleniyor (araçta
   denendi: açık ve kapalı kayıtla doğru açıldı); hiç kayıt yoksa "otomatik" gece modunu izliyor.
   Not: `lowLamp`/`sideLamp` önceden `telemetryKeys`'te olmadığı için hiç işlenmiyordu, düzeltildi.
+- **Camlar/perde/kilit — KİNEX YAPIYOR, araçta canlı kanıtlandı (30.10). Eski "imza şart" sonucu bu
+  nokta için YANLIŞ.** Kinex `kinex_hal_api_service.jar`'ı `app_process` ile shell (uid 2000)
+  çalıştırıyor (bizim ShellHelper gibi) ama Bodywork aygıtını DÜZ kurmuyor: araç bağlamını, istemci
+  tarafı izin denetimini etkisiz kılan bir `ContextWrapper` alt sınıfıyla (jar'da `Lb/W;`:
+  `enforceCallingOrSelfPermission`→void, `checkSelfPermission`→0) sarıp öyle kuruyor. Böylece imza
+  izni olmadan Bodywork + DoorLock kuruluyor; cam %'si/perde/kilit `onWindowOpenPercentChanged`,
+  `HalDoorLockListener` ile okunuyor, bodywork olayı `0x48E00037` / `setAllWindowState` ile komut
+  veriliyor. **Canlı doğrulama:** Kinex ekranında "Kilitle"→ pid 4642 logu `48e00037 value=1`,
+  `HalDoorLockListener d5 state=2` (kilitlendi); "Kilidi aç"→ `state=1`, `value=0`. Araç gerçekten
+  kilitlenip açıldı (geri alındı). Bodywork id'leri: cam yüzdesi `0x38800018` (4 cam 0–100), kilit
+  `0x48E00037`, perde/moonroof olayları da aynı cihazda. Sürükleme noktaları/perde düğmesi şimdilik
+  eski halinde (revert b23c075 geri alındı). YAPILACAK: Yunus'a bağlam-sarıcı yöntemini ekleyip
+  Bodywork/DoorLock oku+komut (kullanıcı istedi).
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
