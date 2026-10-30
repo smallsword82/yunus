@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 105.000000 60.000000">
+<path d="M26.5,24.5m-12.38,0a12.38,12.38 0,1 1,24.75 0a12.38,12.38 0,1 1,-24.75 0" fill="none" stroke="#000" stroke-width="2.250000" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M21.25,24.5L31.75,24.5" fill="none" stroke="#000" stroke-width="2.250000" stroke-linecap="1" stroke-linejoin="1"/>
+<path d="M43.75,41.75m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" fill="none" stroke="#000" stroke-width="1.500000" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M41.5,41.75L46,41.75" fill="none" stroke="#000" stroke-width="1.500000" stroke-linecap="1" stroke-linejoin="1"/>
+<path d="M59.95,43l1.81,0l0,-14.31l-1.81,0z" fill="#000" fill-opacity="1" stroke="#000" stroke-width="1.000000" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M70.95,43.25C74.54,43.25 77.05,40.39 77.05,35.8C77.05,31.22 74.54,28.43 70.95,28.43C67.36,28.43 64.84,31.22 64.84,35.8C64.84,40.39 67.36,43.25 70.95,43.25ZM70.95,41.67C68.37,41.67 66.7,39.37 66.7,35.8C66.7,32.22 68.37,30.01 70.95,30.01C73.5,30.01 75.2,32.22 75.2,35.8C75.2,39.37 73.5,41.67 70.95,41.67Z" fill="#000" fill-opacity="1" stroke="#000" stroke-width="1.000000" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M80.13,43L81.85,43L81.85,35.49C81.85,33.99 81.71,32.47 81.63,31.03L81.71,31.03L83.25,33.97L88.46,43L90.31,43L90.31,28.69L88.6,28.69L88.6,36.14C88.6,37.62 88.73,39.22 88.83,40.66L88.73,40.66L87.21,37.72L82,28.69L80.13,28.69L80.13,43Z" fill="#000" fill-opacity="1" stroke="#000" stroke-width="1.000000" stroke-linecap="butt" stroke-linejoin="miter"/>
+</svg>

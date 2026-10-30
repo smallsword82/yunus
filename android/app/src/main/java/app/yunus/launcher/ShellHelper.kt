@@ -456,7 +456,7 @@ private object CarWatch {
      * Sunshade: {cmd:sunshade, open:0|100} → setSunshadeState(SUNROOF_CLOSE|SUNROOF_OPEN).
      */
     fun command(json: String) = main.post {
-        if (json.contains("\"cmd\":\"ac") || json.contains("\"cmd\":\"wheelHeat")) return@post acCommand(json)
+        if (json.contains("\"cmd\":\"ac") || json.contains("\"cmd\":\"wheelHeat") || json.contains("\"cmd\":\"seat\"")) return@post acCommand(json)
         val dev = bodyworkDev ?: run { System.err.println("cmd: no bodywork device"); return@post }
         try {
             val o = org.json.JSONObject(json)
@@ -527,6 +527,23 @@ private object CarWatch {
      */
     private fun acCommand(json: String) {
         val o0 = try { org.json.JSONObject(json) } catch (_: Throwable) { return }
+        if (o0.optString("cmd") == "seat") {
+            // {seat: driver|pass, heat 0..2, vent 0..2} → setSeatHeatingState / setSeatVentilatingState
+            // (area 1 driver, 2 passenger; level 1 off, 2 low, 3 high). Heat and vent exclude each
+            // other, so the one switched off goes first.
+            val sd = settingDev ?: run { System.err.println("cmd: no setting device"); return }
+            try {
+                val area = if (o0.optString("seat") == "pass") 2 else 1
+                val heat = o0.optInt("heat", 0).coerceIn(0, 2) + 1
+                val vent = o0.optInt("vent", 0).coerceIn(0, 2) + 1
+                val c = sd.javaClass
+                val h = c.getMethod("setSeatHeatingState", Integer.TYPE, Integer.TYPE)
+                val v = c.getMethod("setSeatVentilatingState", Integer.TYPE, Integer.TYPE)
+                val r = if (heat > 1) listOf(v.invoke(sd, area, vent), h.invoke(sd, area, heat)) else listOf(h.invoke(sd, area, heat), v.invoke(sd, area, vent))
+                System.err.println("cmd seat $area heat=$heat vent=$vent = $r")
+            } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
+            return
+        }
         if (o0.optString("cmd") == "wheelHeat") {
             val sd = settingDev ?: run { System.err.println("cmd: no setting device"); return }
             try {

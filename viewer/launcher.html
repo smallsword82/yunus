@@ -749,13 +749,20 @@ button { font-family:inherit; color:inherit; }
   opacity:0; transform:translateY(12px); pointer-events:none; transition:opacity .2s, transform .2s; }
 #seatPop.show { opacity:1; transform:none; pointer-events:auto; }
 #seatPop h5 { margin:0 0 16px; font-size:24px; font-weight:500; display:flex; justify-content:space-between; align-items:center; }
-#seatPop .row { display:grid; grid-template-columns:110px repeat(3, 1fr); gap:8px; align-items:center; margin-bottom:12px; font-size:19px; color:var(--mu); }
+#seatPop .row { display:grid; grid-template-columns:76px repeat(3, 1fr); gap:8px; align-items:center; margin-bottom:12px; font-size:19px; color:var(--mu); }
+#seatPop .row > .ico { width:76px; height:76px; background:var(--tx); opacity:.8; -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
+#seatPop .row.heat > .ico { background:#e8442e; opacity:1; }
+#seatPop .row.vent > .ico { background:#3e6ae1; opacity:1; }
+#seatPop .bars { display:inline-flex; align-items:flex-end; gap:5px; height:22px; }
+#seatPop .bars i { width:8px; border-radius:3px; background:currentColor; }
+#seatPop .bars i:nth-child(1) { height:12px; } #seatPop .bars i:nth-child(2) { height:22px; }
+#seatPop .row button .ti { font-size:24px; color:var(--mu); }
 #seatPop .row button { height:58px; border:0; border-radius:12px; background:var(--cd2); color:var(--tx); font-size:20px; cursor:pointer; }
-#seatPop .row.heat button.on { background:#ef7a3c; color:#fff; }
-#seatPop .row.vent button.on { background:#4aa3ff; color:#fff; }
+#seatPop .row.heat button.on { background:#e8442e; color:#fff; }
+#seatPop .row.vent button.on { background:#3e6ae1; color:#fff; }
+#seatPop .row button.on .ti { color:#fff; }
 #seatPop .auto { width:100%; height:62px; border:0; border-radius:12px; background:var(--cd2); color:var(--tx); font-size:21px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; margin-top:4px; }
 #seatPop .auto.on { background:var(--tx); color:var(--bg); }
-#seatPop p { margin:12px 0 0; font-size:17px; color:var(--mu); line-height:1.35; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -951,7 +958,7 @@ button { font-family:inherit; color:inherit; }
     <button class="dk clim" id="defRear" aria-label="Arka cam ve ayna ısıtma"><i class="ico" style="--ico:url(img/byd/sys_navi_bar_electric_defrost.png)"></i></button>
     <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><i class="ico" style="--ico:url(img/byd/sys_navi_bar_wheel_heat.png)"></i></button>
     <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
-    <button class="dk clim" id="recirc" aria-label="İç hava sirkülasyonu"><i class="ico" style="--ico:url(img/byd/sys_navi_bar_recycle.png)"></i></button>
+    <button class="dk clim" id="recirc" aria-label="Dış hava"><i class="ico" style="--ico:url(img/byd/ac_out_cycle_mode_had.svg)"></i></button>
     <div class="sep sepBreak"></div>
     <div id="dockApps"></div>
     <button class="dk dkApp" id="dockAdd" aria-label="Uygulama ekle"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-plus"></i></div></button>
@@ -4197,15 +4204,14 @@ function renderSeatDock() {
   if (seatPopFor) renderSeatPop();
 }
 let seatPopFor = null;
-function renderSeatPop() {
-  const k = seatPopFor, st = S.seats[k];
-  const row = (kind, label) => `<div class="row ${kind}"><span>${label}</span>${[['0', 'Kapalı'], ['1', '1'], ['2', '2']].map(([v, l]) =>
-    `<button data-kind="${kind}" data-lv="${v}" class="${!st.auto && v !== '0' && st[kind] === +v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-  const a = autoLevel(), now = a.heat ? `ısıtma ${a.heat}` : a.vent ? `havalandırma ${a.vent}` : 'kapalı';
+function renderSeatPop() { // as on Tesla: the car's seat icons and level bars, no words
+  const k = seatPopFor, st = S.seats[k], side = k === 'pass' ? 'deputy' : 'main';
+  const bars = (n) => n ? `<span class="bars">${'<i></i>'.repeat(n)}</span>` : '<i class="ti ti-power"></i>';
+  const row = (kind, file) => `<div class="row ${kind}"><i class="ico" style="--ico:url(img/byd/sys_navi_bar_${side}_seat_${file}.png)"></i>${[0, 1, 2].map((v) =>
+    `<button data-kind="${kind}" data-lv="${v}" class="${!st.auto && st[kind] === v && (v || !st.heat && !st.vent) ? 'on' : ''}" aria-label="${v ? v : 'kapalı'}">${bars(v)}</button>`).join('')}</div>`;
   $('seatPop').innerHTML = `<h5>${SEAT_NAME[k]}<i class="ti ti-x" data-close style="cursor:pointer;color:var(--mu)"></i></h5>
-    ${row('heat', 'Isıtma')}${row('vent', 'Soğutma')}
-    <button class="auto ${st.auto ? 'on' : ''}" data-auto><i class="ti ti-wand"></i>Oto</button>
-    <p>Oto, dış sıcaklık (${S.outside}°) ile kabin ayarına (${S.temp.toFixed(1)}°) bakarak koltuğu kendisi ısıtır ya da soğutur. Şu an: ${now}.</p>`;
+    ${row('heat', 'heat')}${row('vent', 'ventilation')}
+    <button class="auto ${st.auto ? 'on' : ''}" data-auto><i class="ti ti-wand"></i>Oto</button>`;
 }
 function openSeatPop(k, btn) {
   seatPopFor = k;
@@ -4213,8 +4219,16 @@ function openSeatPop(k, btn) {
   const r = btn.getBoundingClientRect(), s = stage.getBoundingClientRect();
   $('seatPop').style.left = THREE.MathUtils.clamp((r.left - s.left) / stageScale + 42 - 215, 16, (PORTRAIT ? 1080 : 1920) - 430 - 16) + 'px';
   $('seatPop').classList.add('show');
+  // Maps and the third-window app are drawn above the page; out of the way while it is open.
+  if (mapEmbedded) YunusNative.embedVisible('map', false);
+  if (sidePkg) YunusNative.embedVisible('side', false);
 }
-function closeSeatPop() { seatPopFor = null; $('seatPop').classList.remove('show'); }
+function closeSeatPop() {
+  if (!seatPopFor) return;
+  seatPopFor = null; $('seatPop').classList.remove('show');
+  if (mapEmbedded && !current && !trayOpen) YunusNative.embedVisible('map', true);
+  if (sidePkg) embedSide(); // as the tray does
+}
 $('seatPop').addEventListener('click', (e) => {
   const t = e.target.closest('[data-lv],[data-auto],[data-close]'); if (!t) return;
   const st = S.seats[seatPopFor];
@@ -4265,6 +4279,9 @@ function renderDefrost() {
   $('defRear').classList.toggle('lit', S.rearDefrost);
   $('wheelHeat').classList.toggle('lit', !!S.wheelHeat);
   $('recirc').classList.toggle('lit', !!S.recirc);
+  // Outside air / inside air: the climate app's own pair (BYD AirConditioning vectors, decoded).
+  $('recirc').firstElementChild.style.setProperty('--ico', `url(img/byd/ac_${S.recirc ? 'internal' : 'out'}_cycle_mode_had.svg)`);
+  $('recirc').setAttribute('aria-label', S.recirc ? 'İç hava sirkülasyonu' : 'Dış hava');
   renderAirFlow();
 }
 // Air direction: a seated figure with an arrow to the face, the feet and the windscreen; the
@@ -4512,7 +4529,11 @@ const CAR_HAL_MAP = {
   'Setting 0x4290000E': (v) => (v ? { wheelHeat: v === 2 } : {}), // SET_STEERING_WHEEL_HEAT_STATE: 1 off, 2 on
   'Setting 0x34100022': (v) => ({ regen: v === 3 ? 'high' : 'std' }), // SET_DR_ENERGY_FB: 2 standard, 3 high
   'Setting 0x24C00010': (v) => ({ steer: v === 2 ? 'sport' : 'comfort' }), // steering assist: 1 comfort, 2 sport
-  'Setting 0x4FA0000B': (v) => ({ seats: { driver: { heat: Math.max(0, v - 1), vent: 0, auto: false } } }), // driver seat heat: 1 off, 2/3 levels
+  // Seat heat and ventilation, each its own value: 1 off, 2 low, 3 high (0 unknown).
+  'Setting 0x4FA0000B': (v) => (v ? { seats: { driver: { heat: v - 1 } } } : {}), // SET_DRIVER_SEAT_HEATING_STATE
+  'Setting 0x4FA00008': (v) => (v ? { seats: { driver: { vent: v - 1 } } } : {}), // SET_DRIVER_SEAT_VENTILATING_STATE
+  'Setting 0x4FA00013': (v) => (v ? { seats: { pass: { heat: v - 1 } } } : {}), // SET_PASSENGER_SEAT_HEATING_STATE
+  'Setting 0x4FA00010': (v) => (v ? { seats: { pass: { vent: v - 1 } } } : {}), // SET_PASSENGER_SEAT_VENTILATING_STATE
   // Warning lights, INSTRUMENT_2IN1_FAULT_* (FAULT_INDICATOR_*: 0 unknown, 1 lit, 2 off, 3-7 flashing).
   'Instrument 0x2960000E': (v) => ({ tt: { main: v } }), // MAIN_ALARM_INDICATOR
   'Instrument 0x29600026': (v) => ({ tt: { key: v } }), // SMART_KEY_SYS_WARN_LIGHT
