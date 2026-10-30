@@ -4282,11 +4282,10 @@ $('defFront').onclick = () => {
   renderDefrost();
   if (current === 'climate') refreshCard();
 };
-// Heated steering wheel. On the car Yunus can read it but not switch it (that needs BYD's own
-// signature), so a tap opens the car's climate screen where it is switched.
+// Heated steering wheel, switched through the shell helper (CarWatch.acCommand).
 $('wheelHeat').onclick = () => {
-  if (S.live) return openCarApp('com.byd.airconditioning/.mainactivity.FullScreenMainActivity');
   S.wheelHeat = !S.wheelHeat;
+  if (S.live) carCmd('wheelHeat', { on: S.wheelHeat }); // the car reports it back (Setting 0x4290000E)
   renderDefrost();
 };
 // Inside-air recirculation (the car's AC_CYCLE_MODE).

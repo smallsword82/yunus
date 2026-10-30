@@ -265,6 +265,7 @@ private object CarWatch {
     private var started = false
     @Volatile private var bodyworkDev: Any? = null // for commands (windows, sunshade), set in listen()
     @Volatile private var acDev: Any? = null // for the climate commands, set in start()
+    @Volatile private var settingDev: Any? = null // heated steering wheel, set in start()
     private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)
 
     /** A context whose permission checks all pass, so the HAL devices' own check does not refuse this
@@ -329,6 +330,8 @@ private object CarWatch {
         } catch (t: Throwable) { System.err.println("watch getters $name: ${t.cause ?: t}") }
         try {
             acDev = Class.forName("android.hardware.bydauto.ac.BYDAutoAcDevice")
+                .getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx)
+            settingDev = Class.forName("android.hardware.bydauto.setting.BYDAutoSettingDevice")
                 .getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx)
         } catch (t: Throwable) { System.err.println("watch ac: ${t.cause ?: t}") }
         try {
@@ -453,7 +456,7 @@ private object CarWatch {
      * Sunshade: {cmd:sunshade, open:0|100} → setSunshadeState(SUNROOF_CLOSE|SUNROOF_OPEN).
      */
     fun command(json: String) = main.post {
-        if (json.contains("\"cmd\":\"ac")) return@post acCommand(json)
+        if (json.contains("\"cmd\":\"ac") || json.contains("\"cmd\":\"wheelHeat")) return@post acCommand(json)
         val dev = bodyworkDev ?: run { System.err.println("cmd: no bodywork device"); return@post }
         try {
             val o = org.json.JSONObject(json)
@@ -520,11 +523,21 @@ private object CarWatch {
      * acFan {level 1..7} → setAcWindLevel; acFlow {mode} → setAcWindMode (1 face, 2 face+feet,
      * 3 feet, 4 feet+screen, 5 screen); acDefrost {area 1 front / 2 rear, on} → setAcDefrostState;
      * acCycle {inside} → setAcCycleMode (1 inside air); acAuto {on} → setAcControlMode (0 auto).
+     * wheelHeat {on} → the Setting device's setSteeringWheelHeatingState (1 off, 2 on).
      */
     private fun acCommand(json: String) {
+        val o0 = try { org.json.JSONObject(json) } catch (_: Throwable) { return }
+        if (o0.optString("cmd") == "wheelHeat") {
+            val sd = settingDev ?: run { System.err.println("cmd: no setting device"); return }
+            try {
+                val r = sd.javaClass.getMethod("setSteeringWheelHeatingState", Integer.TYPE).invoke(sd, if (o0.optBoolean("on")) 2 else 1)
+                System.err.println("cmd wheelHeat ${o0.optBoolean("on")} = $r")
+            } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
+            return
+        }
         val dev = acDev ?: run { System.err.println("cmd: no ac device"); return }
         try {
-            val o = org.json.JSONObject(json)
+            val o = o0
             val c = dev.javaClass
             val i = Integer.TYPE
             val call = { name: String, args: Array<Int> ->
