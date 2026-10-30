@@ -331,7 +331,10 @@ private object CarWatch {
         "bodywork.BYDAutoBodyworkDevice" to listOf(Get("steer", "getSteeringWheelValue", 1), // BODYWORK_CMD_STEERING_WHEEL_ANGEL
             Get("winFL", "getWindowOpenPercent", 1), Get("winFR", "getWindowOpenPercent", 2),
             Get("winRL", "getWindowOpenPercent", 3), Get("winRR", "getWindowOpenPercent", 4),
-            Get("shade", "getSunroofWindowblindPosition")))
+            Get("shade", "getSunroofWindowblindPosition")),
+        // The charge events only arrive on change, so a car already plugged in when Yunus started
+        // never sends them; read the gun (2 = connected → show the cable) and the state.
+        "charging.BYDAutoChargingDevice" to listOf(Get("chgGun", "getChargingGunState"), Get("chgState", "getChargingState")))
     private class Poll(val dev: Any, val cls: Class<*>, val get: Get) { var dead = false }
     private val polls = ArrayList<Poll>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())

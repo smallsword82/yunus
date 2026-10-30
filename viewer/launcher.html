@@ -1447,6 +1447,9 @@ function onCarLoaded(gltf) {
   car.traverse((o) => { if (o.isMesh && /^Trunk/.test(o.name)) moving.trunk.push(o); });
   setupLamps(car);
   setupSunshade(car);
+  // Move the charge cable to the model's real charge socket (its geometry centre in world space).
+  const chargeSocket = car.getObjectByName('ChargeSocket') || car.getObjectByName('ChargeFlap');
+  if (chargeSocket) { new THREE.Box3().setFromObject(chargeSocket).getCenter(HOT.hCharge); buildChargeGear(); }
   if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, get map() { return map; } };
   placePlates(car);
   controls.target.copy(target);
@@ -1806,7 +1809,10 @@ const HOT = { hTrunk: new THREE.Vector3(0, 1.25, -2.45), hCharge: new THREE.Vect
   hShade: new THREE.Vector3(0, 1.75, -0.4) };
 // ---------- charging, as in Tesla: a cable in the charge flap, its plug glowing green ----------
 const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(chargeGear);
-{
+// Built once at init with the default port, and again once the car has loaded from the real charge
+// socket's place in the model (so the cable meets the actual port, not a guessed spot).
+function buildChargeGear() {
+  chargeGear.clear();
   const port = HOT.hCharge;
   // From the flap straight out from the side (clear of the front wheel), down to the ground well
   // outside the car, then along the ground back towards the rear, inside the view.
@@ -1863,6 +1869,7 @@ const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(char
   }
   Object.assign(chargeGear.userData, { glowMat, glow, path, pulses });
 }
+buildChargeGear();
 // The glow breathes while charging (steady once full).
 function stepChargeGlow(now) {
   if (!chargeGear.visible) return;
@@ -4454,6 +4461,9 @@ const CAR_HAL_MAP = {
   // getSunroofWindowblindPosition is a position code, not a percent: 1 full open, 2 full closed,
   // 3 half; 4 stopped part-way and 0 invalid keep the last known value. (setSunshadeState takes a percent.)
   'Get shade': (v) => (v === 1 ? { sunshade: 100 } : v === 2 ? { sunshade: 0 } : v === 3 ? { sunshade: 50 } : {}),
+  // The charge gun (2 = connected): the cable is plugged in, so show the charging animation even
+  // when the car was already plugged in before Yunus started (the charge events only fire on change).
+  'Get chgGun': (v) => ({ chargePort: v === 2 }),
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
