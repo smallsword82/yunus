@@ -1770,11 +1770,14 @@ const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(char
   const port = HOT.hCharge;
   // From the flap straight out from the side (clear of the front wheel), down to the ground well
   // outside the car, then along the ground back towards the rear, inside the view.
+  // From the flap out and back over the front wheel arch (not hanging across the wheel), down to
+  // the ground between the wheels, along the ground to the station behind the car and up into it.
+  // Centripetal: no overshoot, so the part on the ground never dips into it.
   const path = new THREE.CatmullRomCurve3([
-    port.clone().add(new THREE.Vector3(-0.08, -0.02, 0)), new THREE.Vector3(port.x - 0.4, port.y - 0.04, port.z - 0.03),
-    new THREE.Vector3(port.x - 0.6, 0.5, port.z - 0.1), new THREE.Vector3(port.x - 0.62, 0.035, port.z - 0.45),
-    new THREE.Vector3(port.x - 0.55, 0.035, port.z - 1.6), new THREE.Vector3(port.x - 0.6, 0.035, port.z - 3.0),
-    new THREE.Vector3(port.x - 0.66, 0.2, port.z - 3.62), new THREE.Vector3(port.x - 0.68, 0.42, port.z - 3.76)]);
+    port.clone().add(new THREE.Vector3(-0.08, -0.02, 0)), new THREE.Vector3(port.x - 0.32, port.y - 0.02, port.z - 0.18),
+    new THREE.Vector3(port.x - 0.5, 0.6, port.z - 0.55), new THREE.Vector3(port.x - 0.58, 0.06, port.z - 0.85),
+    new THREE.Vector3(port.x - 0.58, 0.05, port.z - 1.8), new THREE.Vector3(port.x - 0.62, 0.05, port.z - 3.0),
+    new THREE.Vector3(port.x - 0.66, 0.2, port.z - 3.62), new THREE.Vector3(port.x - 0.68, 0.42, port.z - 3.76)], false, 'centripetal');
   const cableMat = new THREE.MeshStandardMaterial({ color: 0x25282d, roughness: 0.6 });
   chargeGear.add(new THREE.Mesh(new THREE.TubeGeometry(path, 60, 0.032, 10, false), cableMat));
   // The charging station the cable comes from: a pedestal behind the car's right side, its front
