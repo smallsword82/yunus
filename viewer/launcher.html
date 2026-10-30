@@ -2508,18 +2508,20 @@ box.addEventListener('pointerdown', (e) => {
   if (g) beginGlassDrag(g);
 }, true);
 function beginGlassDrag(g) {
-  controls.enabled = false; // the finger moves the glass, not the camera
+  controls.enabled = false; // the finger moves the glass (preview) or the dot (car), not the camera
   const p = g.point;
   if (g.kind === 'window') {
     const node = moving.windows[g.k];
     g.plane = new THREE.Plane(new THREE.Vector3(1, 0, 0), -p.x);
     g.drop = WINDOW_DROP * node.parent.getWorldScale(new THREE.Vector3()).y; // world metres for 100 %
     g.from = S.windows[g.k];
+    g.topClosedY = p.y + g.drop * g.from / 100; // the window-top world Y when fully closed, for the dot
   } else {
     g.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -p.y);
     g.from = S.sunshade;
   }
   g.start = p.clone();
+  g.target = g.from; // where the dot has been dragged to (percent)
   glassDrag = g;
 }
 // Grab dots: one on the top edge of each side window and one on the sunshade's edge, shown on
@@ -2530,7 +2532,16 @@ function placeGlassDots() {
   document.querySelectorAll('[data-dot]').forEach((el) => {
     const k = el.dataset.dot;
     let p = null, facing = false;
-    if (k === 'shade' && SHADE.node) {
+    // On the car, while a dot is being dragged it follows the finger (the drag target), on its
+    // own, while the glass stays on the real car position and catches up as the car moves it.
+    const dragging = S.live && glassDrag && glassDrag.target != null &&
+      ((glassDrag.kind === 'window' && glassDrag.k === k) || (glassDrag.kind === 'shade' && k === 'shade'));
+    if (dragging) {
+      p = k === 'shade'
+        ? new THREE.Vector3(0, SHADE.top, SHADE.front + (SHADE.rear - SHADE.front) * glassDrag.target / 100)
+        : new THREE.Vector3(glassDrag.start.x, glassDrag.topClosedY - glassDrag.drop * glassDrag.target / 100, glassDrag.start.z);
+      facing = true;
+    } else if (k === 'shade' && SHADE.node) {
       const z = THREE.MathUtils.clamp(SHADE.plane.constant, SHADE.rear + 0.06, SHADE.front - 0.06);
       p = new THREE.Vector3(0, SHADE.top, z);
       facing = cam.position.clone().sub(p).normalize().y > 0.25;
@@ -2541,7 +2552,7 @@ function placeGlassDots() {
       const toCam = cam.position.clone().sub(p).normalize();
       facing = k[1] === 'L' ? toCam.x > 0.35 : toCam.x < -0.35;
     }
-    const show = !!p && facing && S.gear === 'P';
+    const show = dragging || (!!p && facing && S.gear === 'P');
     el.style.opacity = show ? 1 : 0;
     el.style.pointerEvents = show ? 'auto' : 'none';
     if (!p) return;
@@ -2565,17 +2576,22 @@ addEventListener('pointermove', (e) => {
   const p = rayAt(e).intersectPlane(glassDrag.plane, new THREE.Vector3());
   if (!p) return;
   const g = glassDrag;
-  if (g.kind === 'window') {
-    S.windows[g.k] = Math.round(THREE.MathUtils.clamp(g.from + (g.start.y - p.y) / g.drop * 100, 0, 100));
-    moving.anim.windows[g.k] = S.windows[g.k] / 100; // follow the finger without easing
-  } else {
-    setShade(g.from + (g.start.z - p.z) / (SHADE.front - SHADE.rear) * 100);
-    moving.anim.shade = S.sunshade / 100;
-  }
+  const pct = g.kind === 'window'
+    ? Math.round(THREE.MathUtils.clamp(g.from + (g.start.y - p.y) / g.drop * 100, 0, 100))
+    : Math.round(THREE.MathUtils.clamp(g.from + (g.start.z - p.z) / (SHADE.front - SHADE.rear) * 100, 0, 100));
+  g.target = pct;
+  // On the car, moving the finger moves only the dot (placed from g.target); the glass follows the
+  // real car position reported back after the command. In the preview the glass follows the finger.
+  if (S.live) return;
+  if (g.kind === 'window') { S.windows[g.k] = pct; moving.anim.windows[g.k] = pct / 100; }
+  else { setShade(pct); moving.anim.shade = pct / 100; }
 });
 window.addEventListener('pointerup', () => {
   if (!glassDrag) return;
-  if (S.live) glassDrag.kind === 'window' ? carCmd('window', { pos: glassDrag.k, open: S.windows[glassDrag.k] }) : carCmd('sunshade', { open: S.sunshade });
+  const g = glassDrag;
+  // On the car the command goes to where the dot was dragged (g.target); the glass then animates to
+  // whatever the car reports. In the preview the glass already moved with the finger.
+  if (S.live) g.kind === 'window' ? carCmd('window', { pos: g.k, open: g.target }) : carCmd('sunshade', { open: g.target });
   glassDrag = null;
   controls.enabled = true;
   refreshCard();
