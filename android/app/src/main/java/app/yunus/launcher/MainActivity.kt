@@ -70,7 +70,7 @@ class MainActivity : Activity() {
         // Lets a PC inspect the page over ADB (chrome://inspect) while testing.
         WebView.setWebContentsDebuggingEnabled(true)
         web = WebView(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Color.TRANSPARENT) // see-through where the page is, over the map under it
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true // settings, plate, paint are kept in localStorage
             settings.mediaPlaybackRequiresUserGesture = false
@@ -151,6 +151,10 @@ class MainActivity : Activity() {
                 // Hides a slot while a Yunus card covers its area, and shows it again after.
                 @JavascriptInterface
                 fun embedVisible(slot: String, visible: Boolean) = runOnUiThread { embed.setVisible(slot, visible) }
+
+                // Whether a touch on the map area goes to Maps (false while a Yunus pop-up is open over it).
+                @JavascriptInterface
+                fun mapTouch(on: Boolean) { embed.mapTouch = on }
 
                 // Closes the app running in a slot (the third window's close button).
                 @JavascriptInterface
@@ -441,6 +445,9 @@ class MainActivity : Activity() {
         postToPage(JSONObject().put("carHal", o).toString())
     }
 
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean =
+        (::embed.isInitialized && embed.passTouch(ev)) || super.dispatchTouchEvent(ev)
+
     private fun postToPage(message: String) {
         runOnUiThread {
             if (::web.isInitialized && !isFinishing) {
@@ -471,7 +478,9 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val launch = packages.firstNotNullOfOrNull { activity.packageManager.getLaunchIntentForPackage(it)?.component } ?: return onReady(-1)
         val slot = slots.getOrPut(name) {
             Slot(android.view.TextureView(activity)).also { s ->
-                root.addView(s.view)
+                // The map lies under the page (see-through over the map area), so Yunus's pop-ups
+                // show over live Maps; its touches come through passTouch(). Others are on top.
+                if (name == "map") root.addView(s.view, 0) else root.addView(s.view)
                 s.view.setOnTouchListener { _, ev -> shell.send(touchLine(s.displayId, ev)); true }
             }
         }
@@ -528,6 +537,34 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (slot.displayId > 0) shell.send("close ${slot.displayId}")
         slot.component = null
         slot.view.visibility = android.view.View.GONE
+    }
+
+    // Touches on the map area go to Maps under the page, unless the page has a pop-up open there.
+    @Volatile var mapTouch = true
+    private var routing: android.view.View? = null
+    /** Called first with every touch on the activity: true if Maps took it. */
+    fun passTouch(ev: android.view.MotionEvent): Boolean {
+        val v = slots["map"]?.view
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+            routing = null
+            if (mapTouch && v != null && v.visibility == android.view.View.VISIBLE &&
+                ev.x >= v.left && ev.x < v.right && ev.y >= v.top && ev.y < v.bottom && !coveredAt(ev.x, ev.y)) routing = v
+        }
+        val target = routing ?: return false
+        val e = android.view.MotionEvent.obtain(ev).apply { offsetLocation(-target.left.toFloat(), -target.top.toFloat()) }
+        target.dispatchTouchEvent(e); e.recycle()
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_UP || ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL) routing = null
+        return true
+    }
+
+    // A view of our own above the page there (the volume overlay, the third window) takes it instead.
+    private fun coveredAt(x: Float, y: Float): Boolean {
+        for (i in root.childCount - 1 downTo 0) {
+            val c = root.getChildAt(i)
+            if (c is android.webkit.WebView) return false
+            if (c.visibility == android.view.View.VISIBLE && x >= c.left && x < c.right && y >= c.top && y < c.bottom) return true
+        }
+        return false
     }
 
     fun setVisible(name: String, visible: Boolean) {

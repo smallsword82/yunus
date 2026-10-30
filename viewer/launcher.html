@@ -505,6 +505,11 @@ button { font-family:inherit; color:inherit; }
 /* clip, not hidden: a hidden overflow box can still be scrolled by focus, which pulled the
    parked card (below the bottom edge) into view */
 #mapWrap { position:relative; overflow:clip; }
+/* With the car's Maps in the map area, Yunus's own map controls (search, recent place, buttons)
+   are not shown: they would only appear while Maps steps aside for a pop-up. */
+#stage.mapsIn #mapWrap > .floating { display:none !important; }
+/* …and the page is see-through there: Maps lies under the page (so pop-ups show over it live). */
+html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.mapsIn #map { background:transparent; }
 #carPanel { overflow:clip; }
 #map { position:absolute; top:56px; right:0; bottom:0; left:0; background:#1a1c20; }
 #stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
@@ -3035,20 +3040,21 @@ setTimeout(() => { if (!mapEmbedded && !(window.YunusNative && YunusNative.embed
 // display (see AppEmbed/ShellHelper in the app); Yunus's own map is the fallback and the desktop
 // preview's map. A Yunus card over the area hides Maps while it is open.
 let mapEmbedded = false, mapAreaStarted = false, helperWait = 0;
+function mapsIn(on) { stage.classList.toggle('mapsIn', on); document.documentElement.classList.toggle('mapsIn', on); }
 function startMapArea() {
   mapAreaStarted = true;
   if (!(window.YunusNative && YunusNative.embedApp)) return startMap();
   if (S.set.navApp === 'yunus') { // Yunus's own map with its navigation, chosen in the settings
-    if (mapEmbedded) { mapEmbedded = false; YunusNative.embedVisible('map', false); }
+    if (mapEmbedded) { mapEmbedded = false; mapsIn(false); YunusNative.embedVisible('map', false); }
     return startMap();
   }
   const [x, y, w, h] = screenRect($('map'));
-  mapEmbedded = true;
+  mapEmbedded = true; mapsIn(true);
   YunusNative.embedApp('map', navPackages().join(','), x, y, w, h);
 }
 function mapEmbedFailed() {
   if (!mapEmbedded) return;
-  mapEmbedded = false;
+  mapEmbedded = false; mapsIn(false);
   YunusNative.embedVisible('map', false);
   startMap();
 }
@@ -4277,15 +4283,12 @@ function openSeatPop(k, btn) {
   const r = btn.getBoundingClientRect(), s = stage.getBoundingClientRect();
   $('seatPop').style.left = THREE.MathUtils.clamp((r.left - s.left + r.width / 2) / stageScale - 52, 16, (PORTRAIT ? 1080 : 1920) - 104 - 16) + 'px';
   $('seatPop').classList.add('show');
-  // Maps and the third-window app are drawn above the page; out of the way while it is open.
-  if (mapEmbedded) YunusNative.embedVisible('map', false);
-  if (sidePkg) YunusNative.embedVisible('side', false);
+  popTouch(true);
 }
 function closeSeatPop() {
   if (!seatPopFor) return;
   seatPopFor = null; $('seatPop').classList.remove('show');
-  if (mapEmbedded && !current && !trayOpen) YunusNative.embedVisible('map', true);
-  if (sidePkg) embedSide(); // as the tray does
+  popTouch(false);
 }
 $('seatPop').addEventListener('click', (e) => {
   const t = e.target.closest('[data-pk]'); if (!t) return;
@@ -4502,14 +4505,17 @@ function openNetPop(kind) {
   if (kind === 'bt' && window.YunusNative && YunusNative.btReport) YunusNative.btReport();
   renderNetPop();
   $('netPop').classList.add('show');
-  if (mapEmbedded) YunusNative.embedVisible('map', false); // Maps is drawn above the page
-  if (sidePkg) YunusNative.embedVisible('side', false);
+  popTouch(true);
+}
+// A pop-up over live Maps (it lies under the page): touches stay with the page while one is open.
+function popTouch(open) {
+  if (window.YunusNative && YunusNative.mapTouch) YunusNative.mapTouch(!open && !netPopKind && !seatPopFor);
+  if (sidePkg) { if (open) YunusNative.embedVisible('side', false); else if (!netPopKind && !seatPopFor) embedSide(); } // the third window is still on top
 }
 function closeNetPop() {
   if (!netPopKind) return;
   netPopKind = null; $('netPop').classList.remove('show');
-  if (mapEmbedded && !current && !trayOpen) YunusNative.embedVisible('map', true);
-  if (sidePkg) embedSide();
+  popTouch(false);
 }
 function renderNetPop() {
   if (netPopKind === 'bt') return renderBtPop();
