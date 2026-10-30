@@ -687,9 +687,10 @@ button { font-family:inherit; color:inherit; }
   transition:transform .12s, color .25s, background .2s; }
 .clim:hover { background:var(--cd); }
 .clim:active { transform:scale(.9); background:var(--cd); }
-.clim svg { width:48px; height:48px; color:inherit; }
-.clim.heat, .clim.lit { color:#ff7a2f; }
-.clim.vent { color:#3e9bff; }
+.clim svg { width:44px; height:44px; color:inherit; stroke-width:1.5; }
+/* Tesla's colours: blue for air, glass and recirculation; red for the heaters. */
+.clim.lit, .clim.vent { color:#3e6ae1; }
+.clim.heat, #wheelHeat.lit { color:#e8442e; }
 /* The level bars sit below the icon without pushing it up, so every dock icon shares one centre line. */
 .seatDk { touch-action:none; }
 .seatDk svg { margin-top:-8px; }
@@ -698,7 +699,7 @@ button { font-family:inherit; color:inherit; }
 .seatDk .lv span.on { background:currentColor; }
 .seatDk em { position:absolute; top:6px; right:9px; font-style:normal; font-size:14px; font-weight:700; color:inherit; }
 .seatDk[data-seatdk="pass"] svg { transform:scaleX(-1); }
-#airFlow .on { color:#3e9bff; }
+#airFlow .on { color:#3e6ae1; }
 #airFlow path[class]:not(.on) { opacity:.4; } /* the unused directions stay faint, as on Tesla */
 /* Working keys move: warm air rises in the heat waves, the recirculation arrow turns, the air
    direction arrows flow, the fan turns with its speed. Only stroke offsets and opacity animate. */
@@ -710,8 +711,7 @@ button { font-family:inherit; color:inherit; }
 .clim.vent .wv { stroke-dasharray:2.5 1.5; animation-duration:.8s; }
 #airFlow .ln.on { stroke-dasharray:2 1.6; animation:wvFlow .9s linear infinite; }
 .clim:not(.seatDk).lit svg { animation:keyPop .4s ease-out; }
-#recirc.lit { color:#2fc48d; }
-#fVal i.spin { animation:rcTurn var(--fanT, 1.5s) linear infinite; color:#5cb2ff; }
+#fVal i.spin { animation:rcTurn var(--fanT, 1.5s) linear infinite; color:#3e6ae1; }
 @media (prefers-reduced-motion: reduce) { .clim *, #fVal i { animation:none !important; } }
 .seatIco { width:30px; height:30px; }
 /* Volume: level bar on the dock key; a slider pops up above it while changing. */
@@ -929,11 +929,11 @@ button { font-family:inherit; color:inherit; }
       <button class="dk" id="fUp" aria-label="Fanı artır"><i class="ti ti-chevron-right"></i></button>
     </div>
     <button class="dk clim seatDk" data-seatdk="driver" aria-label="Sürücü koltuğu (basılı tut: tüm seçenekler)"></button>
-    <button class="dk clim" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 7.4Q12 3.4 21.6 7.4L19.8 18.8Q12 17 4.2 18.8Z"/><path class="wv" style="stroke-width:1.7" d="M8.2 16 c0.9 -0.74 0.9 -1.73 0 -2.47 c-0.9 -0.74 -0.9 -1.73 0 -2.47 c0.9 -0.74 0.9 -1.73 0 -2.47"/><path style="stroke-width:1.7" d="M6.7 9.2L8.2 7.6L9.7 9.2"/><path class="wv" style="stroke-width:1.7" d="M12 15.6 c0.9 -0.76 0.9 -1.77 0 -2.53 c-0.9 -0.76 -0.9 -1.77 0 -2.53 c0.9 -0.76 0.9 -1.77 0 -2.53"/><path style="stroke-width:1.7" d="M10.5 8.6L12 7L13.5 8.6"/><path class="wv" style="stroke-width:1.7" d="M15.8 16 c0.9 -0.74 0.9 -1.73 0 -2.47 c-0.9 -0.74 -0.9 -1.73 0 -2.47 c0.9 -0.74 0.9 -1.73 0 -2.47"/><path style="stroke-width:1.7" d="M14.3 9.2L15.8 7.6L17.3 9.2"/></svg></button>
-    <button class="dk clim" id="defRear" aria-label="Arka cam ve ayna ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5.8" y="2.8" width="12.4" height="12.4" rx="1.6"/><path class="wv" style="stroke-width:1.7" d="M9 13.4 c0.9 -0.72 0.9 -1.68 0 -2.40 c-0.9 -0.72 -0.9 -1.68 0 -2.40 c0.9 -0.72 0.9 -1.68 0 -2.40"/><path style="stroke-width:1.7" d="M7.5 6.8L9 5.2L10.5 6.8"/><path class="wv" style="stroke-width:1.7" d="M12 13.4 c0.9 -0.72 0.9 -1.68 0 -2.40 c-0.9 -0.72 -0.9 -1.68 0 -2.40 c0.9 -0.72 0.9 -1.68 0 -2.40"/><path style="stroke-width:1.7" d="M10.5 6.8L12 5.2L13.5 6.8"/><path class="wv" style="stroke-width:1.7" d="M15 13.4 c0.9 -0.72 0.9 -1.68 0 -2.40 c-0.9 -0.72 -0.9 -1.68 0 -2.40 c0.9 -0.72 0.9 -1.68 0 -2.40"/><path style="stroke-width:1.7" d="M13.5 6.8L15 5.2L16.5 6.8"/><path d="M1 8.8h3.2v7H2.8A1.8 1.8 0 0 1 1 14zM23 8.8h-3.2v7h1.4A1.8 1.8 0 0 0 23 14z"/><path d="M7.6 19.8h8.8"/></svg></button>
-    <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="14" r="7.4"/><path d="M2.8 13c2.4-.8 4.6-.8 5.4.4M17.2 13c-2.4-.8-4.6-.8-5.4.4M10 16v5"/><circle cx="10" cy="14" r="2" fill="currentColor" stroke="none"/><path class="wv" style="stroke-width:1.7" d="M19.2 10.4 c0.9 -0.78 0.9 -1.82 0 -2.60 c-0.9 -0.78 -0.9 -1.82 0 -2.60 c0.9 -0.78 0.9 -1.82 0 -2.60"/><path style="stroke-width:1.7" d="M17.7 3.2L19.2 1.6L20.7 3.2"/></svg></button>
+    <button class="dk clim" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 7.4Q12 3.4 21.6 7.4L19.8 18.8Q12 17 4.2 18.8Z"/><path class="wv"  d="M8.2 16 c0.9 -0.74 0.9 -1.73 0 -2.47 c-0.9 -0.74 -0.9 -1.73 0 -2.47 c0.9 -0.74 0.9 -1.73 0 -2.47"/><path  d="M6.7 9.2L8.2 7.6L9.7 9.2"/><path class="wv"  d="M12 15.6 c0.9 -0.76 0.9 -1.77 0 -2.53 c-0.9 -0.76 -0.9 -1.77 0 -2.53 c0.9 -0.76 0.9 -1.77 0 -2.53"/><path  d="M10.5 8.6L12 7L13.5 8.6"/><path class="wv"  d="M15.8 16 c0.9 -0.74 0.9 -1.73 0 -2.47 c-0.9 -0.74 -0.9 -1.73 0 -2.47 c0.9 -0.74 0.9 -1.73 0 -2.47"/><path  d="M14.3 9.2L15.8 7.6L17.3 9.2"/></svg></button>
+    <button class="dk clim" id="defRear" aria-label="Arka cam ve ayna ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5.8" y="2.8" width="12.4" height="12.4" rx="1.6"/><path class="wv"  d="M9 13.4 c0.9 -0.72 0.9 -1.68 0 -2.40 c-0.9 -0.72 -0.9 -1.68 0 -2.40 c0.9 -0.72 0.9 -1.68 0 -2.40"/><path  d="M7.5 6.8L9 5.2L10.5 6.8"/><path class="wv"  d="M12 13.4 c0.9 -0.72 0.9 -1.68 0 -2.40 c-0.9 -0.72 -0.9 -1.68 0 -2.40 c0.9 -0.72 0.9 -1.68 0 -2.40"/><path  d="M10.5 6.8L12 5.2L13.5 6.8"/><path class="wv"  d="M15 13.4 c0.9 -0.72 0.9 -1.68 0 -2.40 c-0.9 -0.72 -0.9 -1.68 0 -2.40 c0.9 -0.72 0.9 -1.68 0 -2.40"/><path  d="M13.5 6.8L15 5.2L16.5 6.8"/><path d="M1 8.8h3.2v7H2.8A1.8 1.8 0 0 1 1 14zM23 8.8h-3.2v7h1.4A1.8 1.8 0 0 0 23 14z"/><path d="M7.6 19.8h8.8"/></svg></button>
+    <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="14" r="7.4"/><path d="M2.8 13c2.4-.8 4.6-.8 5.4.4M17.2 13c-2.4-.8-4.6-.8-5.4.4M10 16v5"/><circle cx="10" cy="14" r="2" fill="currentColor" stroke="none"/><path class="wv"  d="M19.2 10.4 c0.9 -0.78 0.9 -1.82 0 -2.60 c-0.9 -0.78 -0.9 -1.82 0 -2.60 c0.9 -0.78 0.9 -1.82 0 -2.60"/><path  d="M17.7 3.2L19.2 1.6L20.7 3.2"/></svg></button>
     <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
-    <button class="dk clim" id="recirc" aria-label="İç hava sirkülasyonu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 16v-3l2.3-5.6A2.2 2.2 0 0 1 6.1 6h11.8a2.2 2.2 0 0 1 2 1.4l2.3 5.6v3a1.4 1.4 0 0 1-1.4 1.4H3.2A1.4 1.4 0 0 1 1.8 16z"/><circle cx="6.4" cy="19" r="1.9" fill="currentColor" stroke="none"/><circle cx="17.6" cy="19" r="1.9" fill="currentColor" stroke="none"/><path class="wv" style="stroke-width:1.8" d="M15.2 14V12a3.2 3.2 0 0 0-6.4 0v1"/><path style="stroke-width:1.8" d="M7 12.4l1.8 2 1.8-2"/></svg></button>
+    <button class="dk clim" id="recirc" aria-label="İç hava sirkülasyonu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 16v-3l2.3-5.6A2.2 2.2 0 0 1 6.1 6h11.8a2.2 2.2 0 0 1 2 1.4l2.3 5.6v3a1.4 1.4 0 0 1-1.4 1.4H3.2A1.4 1.4 0 0 1 1.8 16z"/><circle cx="6.4" cy="18.8" r="1.6"/><circle cx="17.6" cy="18.8" r="1.6"/><path class="wv"  d="M15.2 14V12a3.2 3.2 0 0 0-6.4 0v1"/><path  d="M7 12.4l1.8 2 1.8-2"/></svg></button>
     <div class="sep sepBreak"></div>
     <div id="dockApps"></div>
     <button class="dk dkApp" id="dockAdd" aria-label="Uygulama ekle"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-plus"></i></div></button>
@@ -4162,10 +4162,10 @@ function seatAuto() {
 // Car seat in side view (headrest, raked backrest, cushion on its rail), facing left; heat adds
 // rising waves in front of the backrest, ventilation airflow lines.
 function seatSvg(kind, cls = '') { // filled seat; heat: rising wavy arrows, vent: air arrows
-  const extra = kind === 'heat' ? '<path class="wv" style="stroke-width:1.7" d="M3.6 13.4 c0.9 -0.80 0.9 -1.87 0 -2.67 c-0.9 -0.80 -0.9 -1.87 0 -2.67 c0.9 -0.80 0.9 -1.87 0 -2.67"/><path style="stroke-width:1.7" d="M2.1 6L3.6 4.4L5.1 6"/><path class="wv" style="stroke-width:1.7" d="M8 12.4 c0.9 -0.80 0.9 -1.87 0 -2.67 c-0.9 -0.80 -0.9 -1.87 0 -2.67 c0.9 -0.80 0.9 -1.87 0 -2.67"/><path style="stroke-width:1.7" d="M6.5 5L8 3.4L9.5 5"/>'
-    : kind === 'vent' ? '<path class="wv" style="stroke-width:1.7" d="M1.5 7h6M1.5 11h7M1.5 15h6"/>' : '';
+  const extra = kind === 'heat' ? '<path class="wv"  d="M3.6 13.4 c0.9 -0.80 0.9 -1.87 0 -2.67 c-0.9 -0.80 -0.9 -1.87 0 -2.67 c0.9 -0.80 0.9 -1.87 0 -2.67"/><path  d="M2.1 6L3.6 4.4L5.1 6"/><path class="wv"  d="M8 12.4 c0.9 -0.80 0.9 -1.87 0 -2.67 c-0.9 -0.80 -0.9 -1.87 0 -2.67 c0.9 -0.80 0.9 -1.87 0 -2.67"/><path  d="M6.5 5L8 3.4L9.5 5"/>'
+    : kind === 'vent' ? '<path class="wv"  d="M1.5 7h6M1.5 11h7M1.5 15h6"/>' : '';
   return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <g fill="currentColor" stroke="none"><path d="M15 2.8h3.2a1.4 1.4 0 0 1 1.3 1.8l-3.2 11.2h-3.6z"/><path d="M7.8 15.8h11.4a1.6 1.6 0 0 1 0 3.2H9a2.4 2.4 0 0 1-2.4-2.4c0-.5.5-.8 1.2-.8z"/><rect x="10" y="19" width="1.8" height="3" rx=".6"/><rect x="16" y="19" width="1.8" height="3" rx=".6"/></g>${extra}</svg>`;
+    <g><path d="M15 2.8h3.2a1.4 1.4 0 0 1 1.3 1.8l-3.2 11.2h-3.6z"/><path d="M7.8 15.8h11.4a1.6 1.6 0 0 1 0 3.2H9a2.4 2.4 0 0 1-2.4-2.4c0-.5.5-.8 1.2-.8z"/><rect x="10" y="19" width="1.8" height="3" rx=".6"/><rect x="16" y="19" width="1.8" height="3" rx=".6"/></g>${extra}</svg>`;
 }
 function renderSeatDock() {
   document.querySelectorAll('[data-seatdk]').forEach((el) => {
@@ -4256,7 +4256,7 @@ const FLOW_STEPS = [{ face: true, foot: false, defrost: false }, { face: true, f
 function renderAirFlow() {
   const f = S.flow, on = (k) => (f[k] ? 'on' : '');
   $('airFlow').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <g fill="currentColor" stroke="none"><circle cx="16.6" cy="5.4" r="2.2"/><path d="M14.4 8.6h2.8a1.6 1.6 0 0 1 1.5 2.1l-1.5 4.5h2.6a1.6 1.6 0 0 1 1.5 1.1l1.4 4.6a1.3 1.3 0 0 1-2.5.8l-1.1-3.6h-5.4a2.2 2.2 0 0 1-2.1-2.8z"/></g>
+    <g><circle cx="16.6" cy="5.4" r="2.2"/><path d="M14.4 8.6h2.8a1.6 1.6 0 0 1 1.5 2.1l-1.5 4.5h2.6a1.6 1.6 0 0 1 1.5 1.1l1.4 4.6a1.3 1.3 0 0 1-2.5.8l-1.1-3.6h-5.4a2.2 2.2 0 0 1-2.1-2.8z"/></g>
     <path class="ln ${on('defrost')}" d="M2 3H8.5"/><path class="${on('defrost')}" d="M6.6 1.2L8.6 3l-2 1.8"/>
     <path class="ln ${on('face')}" d="M2 9.6H9.6"/><path class="${on('face')}" d="M7.6 7.6l2 2-2 2"/>
     <path class="ln ${on('foot')}" d="M2 18.6H9.6"/><path class="${on('foot')}" d="M7.6 16.6l2 2-2 2"/></svg>`;
