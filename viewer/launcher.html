@@ -927,6 +927,7 @@ button { font-family:inherit; color:inherit; }
     <button class="dk clim" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
     <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="14" r="7.5"/><circle cx="10.5" cy="14" r="2"/><path d="M3 13h5.5M12.5 13H18M10.5 16v5.5"/><path d="M17 2.5c-.8 1 .8 2 0 3s.8 2 0 3M20.5 2.5c-.8 1 .8 2 0 3s.8 2 0 3"/></svg></button>
     <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
+    <button class="dk clim" id="recirc" aria-label="İç hava sirkülasyonu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5h18M5 17.5l1.6-5.2A2.5 2.5 0 0 1 9 10.5h6a2.5 2.5 0 0 1 2.4 1.8l1.6 5.2"/><path d="M8 7.5a5 5 0 0 1 8.5 0"/><path d="M16.8 4.6l-.3 2.9-2.8-.6"/><circle cx="7.5" cy="20" r="1.2"/><circle cx="16.5" cy="20" r="1.2"/></svg></button>
     <div class="sep sepBreak"></div>
     <div id="dockApps"></div>
     <button class="dk dkApp" id="dockAdd" aria-label="Uygulama ekle"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-plus"></i></div></button>
@@ -3999,7 +4000,7 @@ body.addEventListener('click', (e) => {
   if (act === 'tup') setTemp(S.temp + (S.live ? 1 : 0.5));
   if (act === 'tdn') setTemp(S.temp - (S.live ? 1 : 0.5));
   if (act === 'ac') { if (S.live) return carCmd('acPower', { on: !S.ac }); S.ac = !S.ac; }
-  if (act === 'recirc') { S.recirc = !S.recirc; if (S.live) carCmd('acCycle', { inside: S.recirc }); }
+  if (act === 'recirc') { S.recirc = !S.recirc; if (S.live) carCmd('acCycle', { inside: S.recirc }); renderDefrost(); }
   if (act === 'lock') return setLock(!S.locked);
   if (act === 'trunk') return setTrunk(!S.trunk);
   if (act === 'charge') return setCharge(!S.charging);
@@ -4236,6 +4237,7 @@ function renderDefrost() {
   $('defFront').classList.toggle('lit', S.defrost);
   $('defRear').classList.toggle('lit', S.rearDefrost);
   $('wheelHeat').classList.toggle('lit', !!S.wheelHeat);
+  $('recirc').classList.toggle('lit', !!S.recirc);
   renderAirFlow();
 }
 // Air direction: a seated figure with an arrow to the face, the feet and the windscreen; the
@@ -4274,6 +4276,13 @@ $('wheelHeat').onclick = () => {
   if (S.live) return openCarApp('com.byd.airconditioning/.mainactivity.FullScreenMainActivity');
   S.wheelHeat = !S.wheelHeat;
   renderDefrost();
+};
+// Inside-air recirculation (the car's AC_CYCLE_MODE).
+$('recirc').onclick = () => {
+  S.recirc = !S.recirc;
+  if (S.live) carCmd('acCycle', { inside: S.recirc });
+  renderDefrost();
+  if (current === 'climate') refreshCard();
 };
 $('defRear').onclick = () => {
   S.rearDefrost = !S.rearDefrost;
