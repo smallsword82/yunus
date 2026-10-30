@@ -148,6 +148,14 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaChoose(pkg: String) = runOnUiThread { media.choose(pkg) }
 
+                // The controls panel (Yunus's version of the car's quick panel): the Android
+                // switches Yunus can really work, {qs:{…}} back after each change.
+                @JavascriptInterface
+                fun qsState() = runOnUiThread { sendQs() }
+
+                @JavascriptInterface
+                fun qsSet(key: String, value: Int) = runOnUiThread { setQs(key, value); sendQs() }
+
                 // Permission status for Yunus › Sistem, and the "İzinleri tazele" button.
                 @JavascriptInterface
                 fun permissions() = runOnUiThread { sendPermissions() }
@@ -336,6 +344,48 @@ class MainActivity : Activity() {
         sendPermissions()
     }
 
+    // ---------- controls panel ----------
+    private fun canWriteSettings() = android.provider.Settings.System.canWrite(this)
+
+    @Suppress("DEPRECATION")
+    private fun qsJson(): JSONObject {
+        val audio = getSystemService(android.media.AudioManager::class.java)
+        val bt = (getSystemService(BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
+        val wifi = applicationContext.getSystemService(android.net.wifi.WifiManager::class.java)
+        val sys = { k: String, d: Int -> try { android.provider.Settings.System.getInt(contentResolver, k) } catch (_: Exception) { d } }
+        return JSONObject()
+            .put("wifi", try { wifi.isWifiEnabled } catch (_: Exception) { false })
+            .put("bt", try { bt?.isEnabled == true } catch (_: Exception) { false })
+            .put("mute", audio.isStreamMute(android.media.AudioManager.STREAM_MUSIC))
+            .put("brightness", sys(android.provider.Settings.System.SCREEN_BRIGHTNESS, 128))
+            .put("autoBrightness", sys(android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == 1)
+            .put("rotationLocked", sys(android.provider.Settings.System.ACCELEROMETER_ROTATION, 0) == 0)
+            .put("write", canWriteSettings())
+    }
+
+    private fun sendQs() = postToPage(JSONObject().put("qs", qsJson()).toString())
+
+    @Suppress("DEPRECATION")
+    private fun setQs(key: String, value: Int) {
+        try {
+            when (key) {
+                "bt" -> (getSystemService(BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter?.let { if (value == 1) it.enable() else it.disable() }
+                "mute" -> getSystemService(android.media.AudioManager::class.java).adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC,
+                    if (value == 1) android.media.AudioManager.ADJUST_MUTE else android.media.AudioManager.ADJUST_UNMUTE, 0)
+                "brightness" -> if (canWriteSettings()) {
+                    android.provider.Settings.System.putInt(contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, 0)
+                    android.provider.Settings.System.putInt(contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS, value.coerceIn(5, 255))
+                }
+                "autoBrightness" -> if (canWriteSettings())
+                    android.provider.Settings.System.putInt(contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, value)
+                "rotationLocked" -> if (canWriteSettings())
+                    android.provider.Settings.System.putInt(contentResolver, android.provider.Settings.System.ACCELEROMETER_ROTATION, if (value == 1) 0 else 1)
+            }
+        } catch (_: Throwable) { }
+        // Bluetooth turns on or off over a moment: report again once it has.
+        if (key == "bt") web.postDelayed({ sendQs() }, 1500)
+    }
+
     // ---------- permissions: what Yunus needs, and putting it right in one go ----------
     private val listenerComponent get() = android.content.ComponentName(this, MediaListener::class.java).flattenToString()
 
@@ -346,6 +396,7 @@ class MainActivity : Activity() {
             .put("location", granted(android.Manifest.permission.ACCESS_FINE_LOCATION))
             .put("media", media.hasAccess())
             .put("adb", shellReady)
+            .put("write", canWriteSettings())
     }
 
     private fun sendPermissions() = postToPage(JSONObject().put("perms", permissionState()).toString())
@@ -358,15 +409,17 @@ class MainActivity : Activity() {
      */
     private fun fixPermissions() {
         requestCarPermissions()
-        if (!media.hasAccess()) Thread({
+        if (!media.hasAccess() || !canWriteSettings()) Thread({
             val ok = try {
                 DirectAdb("127.0.0.1", 5555, filesDir).use {
                     it.connect()
-                    it.shell("cmd notification allow_listener $listenerComponent", 3)
+                    if (!media.hasAccess()) it.shell("cmd notification allow_listener $listenerComponent", 3)
+                    // Brightness and rotation in the controls panel: Yunus's own WRITE_SETTINGS app-op.
+                    if (!canWriteSettings()) it.shell("appops set $packageName WRITE_SETTINGS allow", 3)
                 }
                 true
             } catch (t: Throwable) { false }
-            runOnUiThread { if (ok) media.refresh(); sendPermissions() }
+            runOnUiThread { if (ok) media.refresh(); sendPermissions(); sendQs() }
         }, "yunus-perms").apply { isDaemon = true }.start()
         else sendPermissions()
     }

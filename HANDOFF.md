@@ -24,7 +24,7 @@ Kinex'in jar'ı, kullanılmayan fontlar/görseller ve Draco çözücü APK'dan �
 | Dikey mod (alt alta pencereler, 2 sıra alt bar, üstte durum şeridi) | ✅ emülatörde |
 | Durum şeridi: kilit, saat, sıcaklık, sürücü, konum, BT, Wi-Fi, şebeke, zil | ✅ (sürücü adı şimdilik ayarlardan) |
 | Müzik kartı (Android tarzı), son kullanılan uygulamalar, tepsi | ✅ emülatörde |
-| Ses çubuğu (pencerelerin üstünde, yerel çizim) | ✅ emülatörde |
+| Ses çubuğu (pencerelerin üstünde, yerel çizim; direksiyon tuşunda yalnız BYD'ninki) | ✅ araçta |
 
 ## Bilinmesi gerekenler
 
@@ -77,6 +77,30 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
 - **Bildirim erişimi:** BYD ayar ekranı "UnsupportActivity"; Yunus ADB ile kendine veriyor.
 
 ## Sıradaki işler
+
+**Yeni pencerede buradan başla (30.10.2026, araçtaydık):**
+
+- **Çift ses popup'ı (düzeltildi, araca kuruldu, kullanıcı görmedi):** direksiyon tuşları/aracın
+  çubuğu BYD'nin kendi ses diyaloğunu açıyor; Yunus da `systemVolume()` → `setVol(v, true)` ile
+  kendi çubuğunu açıyordu. Artık cihazda sistemden gelen değişiklikte yalnız dock'taki ses tuşu
+  güncelleniyor (`setVol`, launcher.html). Yunus'un dock tuşlarında yalnız Yunus'un çubuğu çıkıyor
+  (araçta ekran görüntüsüyle doğrulandı). Kullanıcıya direksiyon tuşuyla denetmesini söyle.
+- **Yunus kontrol paneli (kullanıcı onayladı: "Evet, yap") — yerel kısım bitti, sayfa yok:**
+  - Hazır (MainActivity.kt): JS `qsState()` → sayfaya `{qs:{wifi, bt, mute, brightness (0–255),
+    autoBrightness, rotationLocked, write}}`; `qsSet(key, value)` anahtarlar bt / mute /
+    brightness / autoBrightness / rotationLocked (0/1). Parlaklık ve döndürme WRITE_SETTINGS
+    ister: `fixPermissions()` bunu ADB'den `appops set app.yunus.launcher WRITE_SETTINGS allow`
+    ile veriyor; `perms.write` de izin listesinde.
+  - Yapılacak (launcher.html): durum şeridinden aşağı çekince tüm pencerelerin üstünde açılan
+    panel (uygulama tepsisi gibi, gömülü pencereler `trayOpen` gibi gizlenir). Parlaklık ve ses
+    kaydırıcıları; Wi-Fi (durum, dokununca `com.byd.carsettings` Wi-Fi ekranı — Android 10'da
+    uygulama Wi-Fi'yi açıp kapatamaz), Bluetooth, sessiz, döndürme kilidi, otomatik parlaklık
+    düğmeleri; araç kısayolları: klima (AC ekranı), araç ayarları
+    (`com.byd.carsettings/.MainActivity`), 360° kamera (`com.byd.avc/.AutoVideoActivity`).
+    `m.qs` işleyicisi ve `permBlock()`'a "Sistem ayarları (parlaklık)" satırı (`perms.write`).
+    Aracın kendi paneli SystemUI `BydQSBar`; içindeki "kapı" düğmesi kabin lambası, kilit komutu yok.
+  - Sonra: araca kur, CDP ile dene, commit, `release/`'e kopyala.
+- Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
    `watch` gönderir; yardımcı sistem bağlamıyla Bodywork/Speed'i dinler ve her saniye hız, vites,
