@@ -4199,7 +4199,17 @@ function autoLevel() {
 }
 function seatAuto() {
   for (const st of Object.values(S.seats)) if (st.auto) Object.assign(st, autoLevel());
+  noteSeatMode();
+  // Auto is Yunus's own rule (the car has none), so it is remembered here across restarts.
+  try { localStorage.setItem('seatAuto', JSON.stringify({ driver: !!S.seats.driver.auto, pass: !!S.seats.pass.auto })); } catch {}
   renderSeatDock();
+}
+try { const a = JSON.parse(localStorage.getItem('seatAuto')) || {}; S.seats.driver.auto = !!a.driver; S.seats.pass.auto = !!a.pass; } catch {}
+// The mode a seat key shows and steps while off: the one last used on that seat (heat or vent).
+try { const l = JSON.parse(localStorage.getItem('seatLast')) || {}; S.seats.driver.last = l.driver || 'heat'; S.seats.pass.last = l.pass || 'heat'; } catch {}
+function noteSeatMode() {
+  for (const st of Object.values(S.seats)) if (st.heat) st.last = 'heat'; else if (st.vent) st.last = 'vent';
+  try { localStorage.setItem('seatLast', JSON.stringify({ driver: S.seats.driver.last, pass: S.seats.pass.last })); } catch {}
 }
 // Car seat in side view (headrest, raked backrest, cushion on its rail), facing left; heat adds
 // rising waves in front of the backrest, ventilation airflow lines.
@@ -4213,8 +4223,9 @@ function renderSeatDock() {
   document.querySelectorAll('[data-seatdk]').forEach((el) => {
     const st = S.seats[el.dataset.seatdk], kind = st.heat ? 'heat' : st.vent ? 'vent' : '', n = st.heat || st.vent;
     el.className = `dk clim seatDk ${kind}`;
+    const shown = kind || st.last || 'heat'; // off: the mode used last
     const side = el.dataset.seatdk === 'pass' ? 'deputy' : 'main';
-    const icon = `<i class="ico" style="--ico:url(img/byd/sys_navi_bar_${side}_seat_${kind === 'vent' ? 'ventilation' : 'heat'}.png)"></i>`;
+    const icon = `<i class="ico" style="--ico:url(img/byd/sys_navi_bar_${side}_seat_${shown === 'vent' ? 'ventilation' : 'heat'}.png)"></i>`;
     el.innerHTML = `${st.auto ? '<em>A</em>' : ''}${icon}<div class="lv">${[1, 2].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
   });
   pushSeats();
@@ -4267,9 +4278,11 @@ document.querySelectorAll('[data-seatdk]').forEach((el) => {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
   el.addEventListener('click', () => {
     if (seatHeld) { seatHeld = false; return; }
-    const st = S.seats[el.dataset.seatdk];
-    st.heat = st.heat ? st.heat - 1 : st.vent || st.auto ? 0 : 2;
-    st.vent = 0; st.auto = false;
+    // A tap steps the key's mode (the one shown): 2 → 1 → off; on from off at 2.
+    const st = S.seats[el.dataset.seatdk], mode = st.heat ? 'heat' : st.vent ? 'vent' : st.last || 'heat';
+    const other = mode === 'heat' ? 'vent' : 'heat';
+    st[mode] = st[mode] ? st[mode] - 1 : st.auto ? 0 : 2;
+    st[other] = 0; st.auto = false;
     seatAuto();
     if (current === 'climate') refreshCard();
   });
@@ -4648,7 +4661,7 @@ const CAR_HAL_MAP = {
 let KMH_PER_RPM = 0.0108, realSpeed = false;
 try { KMH_PER_RPM = +localStorage.getItem('kmhPerRpm') || KMH_PER_RPM; } catch {}
 const CAR_HAL_KEEP = ['Ota 0x40700008', 'Statistic 0x4A502010', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
-  'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C', 'Charging 0x44400008',
+  'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400038', 'Ac 0x40400010', 'Ac 0x4040001C', 'Charging 0x44400008',
   // The light knob and the lamps: the car reports them only when they change, so a start shows
   // them as they were last reported (lamps off with the car are reported too).
   'Light 0x13300023', 'Light 0x38A0000A', 'Light 0x38A00008', 'Light 0x38A0000C'];
@@ -4779,8 +4792,13 @@ window.yunusCar = (m) => {
   }
   if (m.outside != null) { S.outside = Math.round(m.outside); $('outTemp').textContent = `${S.outside}°C`; seatAuto(); }
   if (m.seats) {
-    for (const [k, v] of Object.entries(m.seats)) { Object.assign(S.seats[k], v); seatsSent[k] = `${S.seats[k].heat}/${S.seats[k].vent}`; }
-    renderSeatDock();
+    for (const [k, v] of Object.entries(m.seats)) {
+      const st = S.seats[k], want = autoLevel();
+      // A level set on the car's own keys that Auto would not have chosen: the driver took over.
+      if (st.auto && Object.keys(v).some((f) => v[f] !== want[f]) && `${st.heat}/${st.vent}` === seatsSent[k]) st.auto = false;
+      Object.assign(st, v); seatsSent[k] = `${st.heat}/${st.vent}`;
+    }
+    seatAuto();
   }
   if (m.faults) { Object.assign(S.faults, m.faults); updateTelltales(); }
   if (m.wheelHeat != null) { S.wheelHeat = m.wheelHeat; renderDefrost(); }
