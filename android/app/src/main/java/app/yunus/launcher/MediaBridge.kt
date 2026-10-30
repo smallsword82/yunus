@@ -361,10 +361,12 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         return out
     }
 
-    // The cover as a small JPEG data URL, encoded once per track.
+    // The cover as a small JPEG data URL, encoded once per track. Apps (YouTube Music especially)
+    // often send the new title first and the album-art bitmap in a later metadata update, so a miss
+    // (artData still null for this key) must be retried on the next event, not treated as cached.
     private fun art(pkg: String, title: String, md: MediaMetadata?): String? {
         val key = "$pkg|$title"
-        if (key == artKey) return artData
+        if (key == artKey && artData != null) return artData
         val bmp = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: md?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
         artKey = key
