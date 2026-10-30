@@ -1119,7 +1119,7 @@ const ICONS = {
 };
 const TELLTALES = [
   { id: 'turn', name: 'Sinyal', color: 'green', status: true, auto: () => !!S.signal || S.hazard, desc: 'Sinyal veya dörtlü açık (üst çubukta gösterilir).' },
-  { id: 'pos', name: 'Park lambası', color: 'green', auto: () => S.lights !== 'off', desc: 'Park/konum lambaları yanıyor.' },
+  { id: 'pos', name: 'Park lambası', color: 'green', auto: () => lightState().park, desc: 'Park/konum lambaları yanıyor.' },
   { id: 'high', name: 'Uzun far', color: 'blue', status: true, auto: () => lightState().high, desc: 'Uzun far açık (üst çubukta gösterilir).' },
   { id: 'mode', name: 'Sürüş modu', color: 'green', text: () => ({ eco: 'ECO', normal: 'NORMAL', sport: 'SPORT' })[S.set.mode], auto: () => true, desc: 'Seçili sürüş modu.' },
   { id: 'ok', name: 'OK (sürüşe hazır)', color: 'green', text: () => 'OK', auto: () => true, desc: 'Araç sürüşe hazır.' },
@@ -1617,9 +1617,11 @@ function facingCamera(h) {
   return THREE.MathUtils.smoothstep(toCam.dot(h.userData.facing), 0.05, 0.35);
 }
 // Which lights are on. "auto" stands in for the light sensor and reads as night in the demo.
+// From the lamps when the car has reported them (lowLamp / sideLamp), else from the knob.
 function lightState() {
-  const low = S.lights === 'on' || S.lights === 'auto';
-  return { low, high: low && S.highBeam, park: low || S.lights === 'park' };
+  const low = S.lowLamp != null ? S.lowLamp : S.lights === 'on' || S.lights === 'auto';
+  const park = low || (S.sideLamp != null ? S.sideLamp : S.lights === 'park');
+  return { low, high: low && S.highBeam, park };
 }
 function updateLamps(now) {
   const L = lightState();
@@ -4338,6 +4340,9 @@ const CAR_HAL_MAP = {
   // LIGHT_KNOB_CURRENT_GEAR: 1 off, 2 parking lights, 3 auto, 4 low beam.
   'Light 0x13300023': (v) => ({ lights: ['off', 'park', 'auto', 'on'][v - 1] }),
   'Light 0x38A0000C': (v) => ({ highBeam: v === 1 }), // LIGHT_HIGH_BEAM_LIGHT
+  // The lamps themselves (1 on, 0 off): with the knob on auto the low beams are off in daylight.
+  'Light 0x38A0000A': (v) => ({ lowLamp: v === 1 }), // LIGHT_LOW_BEAM_LIGHT
+  'Light 0x38A00008': (v) => ({ sideLamp: v === 1 }), // LIGHT_SIDE_LIGHT
   // LIGHT_TURN_SIGNAL_LIGHT: 1 off, 2/3 left, 4/5 right, 6-9 hazard and emergency flashing.
   'Light 0x38A0002C': (v) => ({ signal: v === 2 || v === 3 ? 'left' : v === 4 || v === 5 ? 'right' : null, hazard: v >= 6 }),
   // GEARBOX_AUTOMATIC_GEAR (GEARBOX_AUTO_MODE_*): 1 P, 2 R, 3 N, 4 D, 6 S.
@@ -4514,6 +4519,8 @@ window.yunusCar = (m) => {
   if (m.hazard != null) S.hazard = m.hazard;
   if (m.lights) S.lights = m.lights;
   if (m.highBeam != null) S.highBeam = m.highBeam;
+  if (m.lowLamp != null) S.lowLamp = m.lowLamp;
+  if (m.sideLamp != null) S.sideLamp = m.sideLamp;
   if (m.fog != null) S.fog = m.fog;
   if (m.acOn != null) { S.ac = m.acOn; renderTemp(); }
   if (m.acTemp != null) setTemp(m.acTemp, true);
