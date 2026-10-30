@@ -1,9 +1,30 @@
 # Devir notu — Yunus (BYD Dolphin, DiLink 3)
 
-Tarih: 30.10.2026 (üçüncü oturum sonu) · Dal: `claude/live-vehicle-data` · **PR: smallsword82/yunus#1** (push'lu)
-APK: `release/yunus-0.1-test.apk` · Son commit: `1c80e5e`
+Tarih: 30.10.2026 (dördüncü oturum sonu) · Dal: `claude/live-vehicle-data` · **PR: smallsword82/yunus#1**
+APK: `release/yunus-0.1-test.apk` · Son commit: dalın ucu (`git log`). **Bu oturumun commit'leri push'lanmadı** (kullanıcı "şimdilik kalsın").
 
-## EN SON DURUM (yeni pencere buradan başlasın)
+## 4. OTURUM (30.10 akşam) — hepsi commit'li, araçta doğrulandı
+
+- **Varsayılan launcher Yunus.** `wm overscan 0,-84,0,-90`: iki BYD çubuğu ekran dışında. Üstten çekme doğrudan BYD hızlı
+  panelini (BydQSBar) açar (yardımcı ekran dışındaki çubuğu y=-42'den çeker). Yunus › Sistem › Ana ekran: Yunus ↔ BYD launcher
+  (yardımcı `home yunus|byd`). Ayrıntı: memory `byd-navbar-overscan`.
+- **Başka uygulama öndeyken** (`EdgeHome.kt`): alt kenarda görünmez şerit; 1. yukarı kaydırma Yunus dock'u (`launcher.html#dock`,
+  overlay WebView), dock'ta 2. kaydırma son uygulamalar. Yunus'ta araç simgesi = ana sayfa, alt kenardan kaydırma = son uygulamalar.
+- **Klima dock'u:** BYD'nin kendi simgeleri (`viewer/img/byd/`), koltuk ısıtma/soğutma pop-up'ı (kapalı→1→2→kapalı, oto yok),
+  direksiyon ısıtma, hava yönü (3 yön birden), iç/dış hava, arka buz+ayna, fana basılı tut = oto.
+- **Durum çubuğu:** Wi-Fi / BT / bildirim pop-up'ları (IWifiManager, `BtBridge.kt`), tema aracın gece moduna uyar.
+  Pop-up açıkken Maps sayfanın ALTINA iner (`YunusNative.mapUnder` → `web.translationZ`) ve canlı kalır — apps penceresi de
+  artık böyle (önceden Maps gizleniyor, yerine koyu alan geliyordu).
+- **Lambalar:** park + kısa far simgesi; AUTO'da "A"; AUTO'da kısa farla birlikte park lambası da yanar; uzun far/selektör = kısa
+  far simgesi mavi (`Light 0x38A0000C` anında gelir, `lampHigh` saniyede bir; CSS'te `.high` `.auto`'dan sonra olmalı).
+  BSD/şerit üst çubuğun altında solda, hız sabitleyici ayarlı hızı sağda. DRL modelde yanıyor.
+- **Takılma çözüldü:** 3D araç her araç mesajında yeniden çiziliyordu (~21/sn, %71 jank). Artık yalnız modelde görünen değerler
+  (`MODEL_KEYS`) çizimi uyandırıyor → park halinde 3D 0/sn, jank %8–13 (gfxinfo).
+- **Yardımcı bağlantısı:** `ShellLink.watch()` her yeni bağlantıda `watch`'ı yeniden gönderir, kopunca 1,5 sn sonra yeniden
+  bağlanır (yardımcı yeniden başlayınca değerler — şarj göstergesi dahil — gelmiyordu). Araç yeniden başlatıldıktan sonra şarj
+  göstergesi henüz araçta görülmedi.
+
+## 3. oturum sonu durumu
 
 **Commit'li + push'lu (PR #1):** `14629e6` şarj istasyonu+kablo sağ-ön köşede (kapı açılınca kabloya değmiyor) ·
 `c4c213e` müzik kartı kapağı şarkı değişince yenileniyor (`MediaBridge.art()` null'ı önbelleğe almıyor) ·
@@ -112,8 +133,7 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
 4. ~~Radyo logosu~~ — **yapıldı (30.10).** Radyo (`com.byd.mediacenter`) kapak göndermiyor (yalnız genel 60×60 `MEDIA_ICON`);
    başlık RDS/DAB adı ("RDS SHOW RD", "DAB 03-KAFA RADYO"). Sayfa (`radioLogo`) adı temizleyip radio-browser.info'da (TR) arıyor,
    logoyu `localStorage.radioLogos`'ta saklıyor. Show/Fenomen/Best bulunuyor; CNN Türk/Kafa'nın veritabanında logosu yok → uygulama simgesi.
-5. **Harita hızı:** çifte yük + ortalama çözüldü (commit'siz). Kalan jank Yunus'un kendisi (~38 ms/kare, gfxinfo):
-   kaynağı **3D araç WebGL'inin sürekli render'ı** — on-demand render / pixelRatio düşürme düşünülebilir. Maps kendisi ~105 ms/kare.
+5. ~~Harita hızı~~ — **çözüldü (30.10, 4. oturum):** 3D yalnız modelde görünen değişikliklerde çiziliyor (`MODEL_KEYS`).
 6. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
 7. ~~Vites~~ — **çözüldü (30.10):** `getCurrentGear` içindeki EPB kontrolü CarSettings'i "android" paketiyle sorguladığı için reddediliyordu; vites doğrudan `getGearboxAutoModeType` ile okunuyor (P 1, R 2, N 3, D 4).
 

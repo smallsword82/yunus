@@ -447,13 +447,13 @@ button { font-family:inherit; color:inherit; }
 #indIcc b { font-size:24px; font-weight:600; min-width:24px; }
 .tt.adas.on svg { stroke:var(--tx); } #indIcc.on { color:var(--tx); } #indIcc.on svg { stroke:var(--tx); }
 #indIcc.act, #indIcc.act svg { color:#2fd06a; stroke:#2fd06a; } /* cruise working */
-#indLow.high { stroke:#3e8bff; } #indLow.high path:first-child { fill:#3e8bff; }
 #indPark path:nth-child(2) { fill:var(--cd2); }
 #indPark.on { stroke:#2fd06a; } #indPark.on path:nth-child(-n+2) { fill:#2fd06a; } /* position lamps (knob on park) */
 /* The knob on AUTO: an A in the lamp, as on the car's own tell-tale. */
 #indLow .a { display:none; fill:var(--pn); stroke:none; font:700 13px Inter,sans-serif; }
 #indLow.auto .a { display:block; }
 #indLow.auto { stroke:#2fd06a; } #indLow.auto path:first-child { fill:#2fd06a; } /* the cluster's AUTO lamp is lit */
+#indLow.high { stroke:#3e8bff; } #indLow.high path:first-child { fill:#3e8bff; } /* high beam or a flash: after AUTO, so blue wins */
 /* Rear camera while driving (as on Cybertruck): a wide, thin strip above the car shaped and
    mirrored like the interior rear-view mirror. Placed each frame above the car (placeRearCam). */
 #rearCam { position:absolute; left:0; top:0; width:360px; height:90px; z-index:3; border-radius:46px / 40px; overflow:hidden; background:#000;
@@ -1769,7 +1769,7 @@ function lightState() {
   try { dark = deviceDark; } catch (e) {}
   const low = S.lowLamp != null ? S.lowLamp : S.lights === 'on' || (S.lights === 'auto' && dark);
   const park = low || (S.sideLamp != null ? S.sideLamp : S.lights === 'park');
-  return { low, high: low && S.highBeam, park };
+  return { low, high: !!S.highBeam, park }; // high beam or a flash, also with the low beams off
 }
 function updateLamps(now) {
   const L = lightState();
@@ -1812,7 +1812,7 @@ function updateLamps(now) {
 function updateBeamIndicators(L) {
   $('indLow').classList.toggle('on', L.low && !L.high);
   $('indLow').classList.toggle('high', !!L.high); // high beam: the same lamp, in blue
-  $('indPark').classList.toggle('on', L.park && !L.low);
+  $('indPark').classList.toggle('on', !!L.park); // lit with the low beams too, like the cluster
   $('indLow').classList.toggle('auto', S.lights === 'auto');
 }
 function splitTailgate(car) {
@@ -2454,7 +2454,7 @@ function syncEmbedSoon() {
     if (sidePkg) embedSide();
     if (!mapEmbedded) return;
     const r = $('map').getBoundingClientRect();
-    if (r.width < 80 || r.height < 80 || current || trayOpen) YunusNative.embedVisible('map', false); // map area closed, or a card or the tray over it
+    if (r.width < 80 || r.height < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
     else startMapArea();
   }, 450);
 }
@@ -3987,16 +3987,14 @@ function openAppTray() {
   trayOpen = true;
   $('appTray').classList.add('show');
   document.querySelectorAll('[data-card="apps"]').forEach((b) => b.classList.add('on'));
-  if (mapEmbedded) YunusNative.embedVisible('map', false);
-  if (sidePkg) YunusNative.embedVisible('side', false);
+  popTouch(true); // over live Maps, like the other pop-ups
 }
 function closeAppTray() {
   if (!trayOpen) return;
   trayOpen = false;
   $('appTray').classList.remove('show');
   document.querySelectorAll('[data-card="apps"]').forEach((b) => b.classList.remove('on'));
-  if (mapEmbedded && !current) YunusNative.embedVisible('map', true);
-  if (sidePkg) embedSide();
+  popTouch(false);
 }
 $('trayClose').onclick = closeAppTray;
 $('trayGrid').onclick = (e) => {
@@ -4584,8 +4582,9 @@ function openNetPop(kind) {
 }
 // A pop-up over live Maps: Maps goes under the (see-through) page while one is open, then back on top.
 function popTouch(open) {
-  if (window.YunusNative && YunusNative.mapUnder) YunusNative.mapUnder(!!(open || netPopKind || seatPopFor));
-  if (sidePkg) { if (open) YunusNative.embedVisible('side', false); else if (!netPopKind && !seatPopFor) embedSide(); } // the third window is still on top
+  const any = !!(open || netPopKind || seatPopFor || trayOpen);
+  if (window.YunusNative && YunusNative.mapUnder) YunusNative.mapUnder(any);
+  if (sidePkg) { if (any) YunusNative.embedVisible('side', false); else embedSide(); } // the third window is still on top
 }
 function closeNetPop() {
   if (!netPopKind) return;
@@ -4891,6 +4890,9 @@ const CAR_HAL_KEEP = ['Ota 0x40700008', 'Statistic 0x4A502010', 'Tyre 0x99000124
   // them as they were last reported (lamps off with the car are reported too).
   'Light 0x13300023', 'Light 0x38A0000A', 'Light 0x38A00008', 'Light 0x38A0000C'];
 let autoPlayDone = false, playingPkg = null;
+// What shows on the 3D model (see the end of yunusCar).
+const MODEL_KEYS = ['doors', 'trunk', 'windows', 'sunshade', 'steerAngle', 'lights', 'lowLamp', 'sideLamp', 'highBeam', 'drl',
+  'fog', 'signal', 'hazard', 'chargePort', 'gear', 'locked', 'speed'];
 window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
   // simulation active until a validated telemetry field reaches this API.
@@ -5052,7 +5054,9 @@ window.yunusCar = (m) => {
   if (m.steer) S.set.steer = m.steer;
   const now = performance.now();
   if (current && now > liveRefreshAt) { liveRefreshAt = now + 500; refreshCard(); }
-  wake(1500);
+  // The 3D view is drawn again only for what shows on the model: the car sends many values a
+  // second (currents, settings, temperatures), and waking on each kept it drawing all the time.
+  if (MODEL_KEYS.some((k) => m[k] != null)) wake(1500);
 };
 // Replay the slow values kept from the last run (see CAR_HAL_KEEP); fresh events replace them.
 try {
