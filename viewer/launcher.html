@@ -2070,7 +2070,7 @@ const appLook = (pkg = '') => /spotify/.test(pkg) ? { icon: 'brand-spotify', col
 // The radio sends no cover, only the station name ("RDS SHOW RD", "DAB 06-CNN TURK"); look its logo up on
 // radio-browser.info by that name (Turkish stations), once per name, kept in localStorage.
 let radioLogos = {};
-try { radioLogos = JSON.parse(localStorage.getItem('radioLogos')) || {}; } catch {}
+try { radioLogos = JSON.parse(localStorage.getItem('radioLogos3')) || {}; } catch {}
 const radioName = (t) => (t || '').toLocaleUpperCase('tr').replace(/^(RDS|DAB)\s+(\d+\s*-\s*)?/, '')
   .replace(/(\s+(RD|RADYO|RADIO|FM|\d+[.,]\d+))+$/, '').trim();
 function radioLogo(m) {
@@ -2081,16 +2081,26 @@ function radioLogo(m) {
   radioLogos[name] = ''; // asked once; a miss stays a miss
   const done = (url) => {
     radioLogos[name] = url;
-    try { localStorage.setItem('radioLogos', JSON.stringify(radioLogos)); } catch {}
+    try { localStorage.setItem('radioLogos3', JSON.stringify(radioLogos)); } catch {}
     if (url && liveMedia) renderLiveMedia();
   };
   // Lower case without Turkish letters, so "CNN TURK" matches "Cnn Türk Radyo".
   const fold = (t) => t.toLocaleLowerCase('tr').replace(/[çğıöşü]/g, (c) => 'cgiosu'['çğıöşü'.indexOf(c)]);
   const want = fold(name);
-  fetch(`https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(want)}&countrycode=TR&limit=10&order=clickcount&reverse=true&hidebroken=true`)
-    .then((r) => r.json())
-    .then((list) => {
-      const hit = list.find((x) => x.favicon && fold(x.name).includes(want));
+  // The name as whole words ("Radyo D" is not "Radyo Doğubayazıt"), or run together as RDS writes
+  // it ("SLOWTURK" is "Slow Turk"; asked by its first letters then).
+  const words = (t) => ` ${fold(t).replace(/[^a-z0-9]+/g, ' ').trim()} `;
+  const compact = (t) => fold(t).replace(/[^a-z0-9]+/g, '').replace(/(radyo|radio|fm)$/, '');
+  const w = words(want), c = compact(want);
+  const ask = (q) => fetch(`https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(q)}&countrycode=TR&limit=20&order=clickcount&reverse=true&hidebroken=true`)
+    .then((r) => r.json()).then((list) => {
+      const withLogo = list.filter((x) => x.favicon);
+      return withLogo.find((x) => words(x.name) === w) || withLogo.find((x) => compact(x.name) === c)
+        || withLogo.find((x) => words(x.name).includes(w));
+    });
+  ask(want)
+    .then((hit) => hit || (want.includes(' ') || want.length < 6 ? null : ask(want.slice(0, 4))))
+    .then((hit) => {
       if (!hit) return done('');
       const img = new Image(); // only a logo that really loads
       img.onload = () => done(hit.favicon); img.onerror = () => done('');
@@ -2127,13 +2137,15 @@ function renderLiveMedia() {
   // Every app closed: the card keeps the last one (play starts it again), as in Kinex.
   const m = liveMedia.access && !liveMedia.pkg && liveMedia.last
     ? { ...liveMedia, ...liveMedia.last, idle: true, title: '', artist: 'Çalmak için ▶ dokun' } : { ...liveMedia };
-  if (!m.art) m.art = radioLogo(m);
+  const logo = !m.art && radioLogo(m);
+  if (logo) m.art = logo;
   const look = appLook(m.pkg);
   const label = !m.access ? 'İzin gerekli' : m.pkg ? m.app : 'Medya';
   $('srcBtn').innerHTML = `${m.access && m.pkg ? appIcon(m, 22) : `<i class="ti ti-${m.access ? 'music' : 'lock'}" style="color:var(--mu)"></i>`}${label}<i class="ti ti-chevron-down"></i>`;
   // No cover (radio, some apps): the app's own icon on the tile.
-  $('mmArt').outerHTML = m.art
-    ? `<div id="mmArt" class="art" style="background:url('${m.art}') center/cover"></div>`
+  // A station logo is often a wide banner: whole, on white, not cropped like a cover.
+  $('mmArt').outerHTML = logo ? `<div id="mmArt" class="art" style="background:#fff url('${m.art}') center/contain no-repeat"></div>`
+    : m.art ? `<div id="mmArt" class="art" style="background:url('${m.art}') center/cover"></div>`
     : m.access && m.icon ? `<div id="mmArt" class="art fallback"><img src="${m.icon}" alt="" style="width:56%;height:56%;border-radius:22%"></div>`
     : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`;
   $('mmTitle').textContent = !m.access ? 'Müzik kartı için bildirim erişimi ver' : m.pkg ? (m.title || m.app) : 'Çalan bir şey yok';
