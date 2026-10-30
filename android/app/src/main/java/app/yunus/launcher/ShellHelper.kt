@@ -60,6 +60,16 @@ object ShellHelper {
         try { while (true) {
             val line = reader.readLine() ?: break
             if (line == "watch") { CarWatch.subscribe(out); continue }
+            // "home yunus|byd": the car's home screen. Yunus's mode has BYD's bars off the screen
+            // (Yunus has its own); DiLink's launcher needs them back.
+            if (line.startsWith("home ")) {
+                val yunus = line.endsWith("yunus")
+                val sh = { c: String -> try { Runtime.getRuntime().exec(arrayOf("sh", "-c", c)).waitFor() } catch (t: Throwable) { System.err.println("$c: $t") } }
+                sh("cmd package set-home-activity " + if (yunus) "app.yunus.launcher/.MainActivity" else "com.android.launcher3/.home.MainActivity")
+                sh(if (yunus) "wm overscan 0,-84,0,-90" else "wm overscan reset")
+                if (!yunus) sh("input keyevent 3") // KEYCODE_HOME: over to DiLink's home
+                continue
+            }
             if (line == "recents") { try { Runtime.getRuntime().exec(arrayOf("input", "keyevent", "187")) } catch (t: Throwable) { System.err.println("recents: $t") }; continue } // KEYCODE_APP_SWITCH
             if (line == "qsbar") { try { injector.openCarPanel() } catch (t: Throwable) { System.err.println("qsbar: $t") }; continue }
             if (line.startsWith("cmd ")) { CarWatch.command(line.substring(4)); continue }

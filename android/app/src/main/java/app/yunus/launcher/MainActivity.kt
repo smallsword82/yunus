@@ -55,6 +55,7 @@ class MainActivity : Activity() {
     private lateinit var media: MediaBridge
     private lateinit var bt: BtBridge
     private lateinit var edge: EdgeHome
+    private lateinit var nativeApi: Any // YunusNative, shared with the dock overlay's page
     private lateinit var volume: VolumeBridge
     private lateinit var status: StatusBridge
 
@@ -85,7 +86,7 @@ class MainActivity : Activity() {
             settings.setGeolocationEnabled(true) // the map follows the car's GPS
             addJavascriptInterface(object {
             }, "YunusBridge")
-            addJavascriptInterface(object {
+            nativeApi = object {
                 // Opens one of the car's own screens, given as "package/.Activity".
                 @JavascriptInterface
                 fun open(component: String): Boolean = try {
@@ -158,9 +159,15 @@ class MainActivity : Activity() {
                 // (it is see-through there), so the pop-up shows over live Maps; after, Maps is on
                 // top again, fastest and taking its touches. Raised by Z, not moved: a TextureView
                 // taken out and put back loses its picture until the app draws again.
+                // The car's home screen: Yunus or DiLink's launcher (see the helper's "home").
+                @JavascriptInterface
+                fun isHome(): Boolean = isDefaultHome()
+                @JavascriptInterface
+                fun setHome(yunus: Boolean) = shell.send(if (yunus) "home yunus" else "home byd")
+
                 // The recent apps (BYD's bar with its key is off the screen); the shell sends the key.
                 @JavascriptInterface
-                fun recents() = shell.send("recents")
+                fun recents() { runOnUiThread { edge.hideDock() }; shell.send("recents") }
 
                 @JavascriptInterface
                 fun mapUnder(under: Boolean) = runOnUiThread { web.translationZ = if (under) 10f else 0f }
@@ -285,7 +292,17 @@ class MainActivity : Activity() {
                 fun mediaAccess() = runOnUiThread {
                     startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 }
-            }, "YunusNative")
+
+                // From the dock over another app: Yunus to the front, then [card] opened there ('' just home).
+                @JavascriptInterface
+                fun dockHome(card: String) = runOnUiThread {
+                    edge.hideDock()
+                    startActivity(android.content.Intent(this@MainActivity, MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                    postToPage(JSONObject().put("openCard", card).toString())
+                }
+            }
+            addJavascriptInterface(nativeApi, "YunusNative")
             webChromeClient = object : WebChromeClient() { // alert/confirm/prompt dialogs
                 // The page is our own asset, so its location requests are allowed without a prompt
                 // (the app-level location permission is asked once at start).
@@ -308,7 +325,14 @@ class MainActivity : Activity() {
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
         bt = BtBridge(this, ::postToPage)
-        edge = EdgeHome(this) { shell.send("recents") }
+        edge = EdgeHome(this, { shell.send("recents") }) { dock ->
+            // The dock overlay's page: the same app bridge and assets as the main page.
+            dock.addJavascriptInterface(nativeApi, "YunusNative")
+            dock.webViewClient = object : WebViewClientCompat() {
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                    assetLoader.shouldInterceptRequest(request.url)
+            }
+        }
         volume = VolumeBridge(this, ::postToPage)
         status = StatusBridge(this, ::postToPage).also { it.start() }
         // The bell's count from the notification listener (only the number, never the content).
@@ -466,7 +490,13 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     // The swipe-up-for-home strip is over the other apps only (Yunus has its own dock).
     override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide() }
-    override fun onPause() { web.onPause(); edge.show(); super.onPause() }
+    override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
+
+    // Yunus is the car's home screen (the HOME intent resolves to it).
+    private fun isDefaultHome(): Boolean = try {
+        packageManager.resolveActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME), 0)
+            ?.activityInfo?.packageName == packageName
+    } catch (_: Throwable) { false }
     override fun onDestroy() { carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
@@ -485,6 +515,7 @@ class MainActivity : Activity() {
             if (::web.isInitialized && !isFinishing) {
                 val quoted = JSONObject.quote(message)
                 web.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
+                if (::edge.isInitialized) edge.dockWeb()?.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
             }
         }
     }

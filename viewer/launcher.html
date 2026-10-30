@@ -688,6 +688,10 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
 .app span { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } /* long app names */
 
 /* dock */
+html.dockOnly, html.dockOnly body { background:transparent; }
+html.dockOnly #stage { height:112px; display:block; background:transparent; }
+html.dockOnly #dock { height:112px; }
+html.dockOnly #stage > :not(#dock) { display:none !important; }
 #dock { touch-action:none; /* a swipe up from its edge is ours (recents), not a page pan */ grid-column:1 / -1; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
 .dk:hover { background:var(--cd); }
@@ -1048,6 +1052,10 @@ import { RoomEnvironment } from './vendor/three/jsm/environments/RoomEnvironment
 
 const $ = (id) => document.getElementById(id);
 const stage = $('stage');
+// launcher.html#dock: only the dock, in the app's overlay window over other apps (DockOverlay):
+// no car model, no map, no embedded apps; its card keys send Yunus home to open the card.
+const DOCK_ONLY = location.hash === '#dock';
+if (DOCK_ONLY) document.documentElement.classList.add('dockOnly');
 
 // ---------- vehicle state (fake; later fed by the HAL bridge) ----------
 const S = { gear: 'P', speed: 0, sunshade: 0, locked: true, trunk: false, charging: false, temp: 22, ac: true, fan: 3,
@@ -1144,7 +1152,7 @@ const pressNum = (bar) => (bar == null ? '—' : S.set.pressUnit === 'psi' ? Mat
 // bridge (`cmd package set-home-activity`); "BYD ana ekranına dön" puts DiLink's launcher back.
 // Demo: only the state below changes.
 function homeBlock() {
-  const yes = S.set.isHome;
+  const yes = window.YunusNative && YunusNative.isHome ? YunusNative.isHome() : S.set.isHome;
   return `<div class="homeBox">
     <div class="head"><div class="ic"><i class="ti ti-home"></i></div>
       <div><b>Ana ekran uygulaması</b><span>${yes ? 'Yunus açılışta ve Ana ekran tuşunda açılır' : 'Şu an: BYD DiLink ana ekranı'}</span></div>
@@ -1349,7 +1357,7 @@ let PORTRAIT = false;
 function fit() {
   const { w, h } = viewSize();
   const portrait = h > w * 1.1;
-  const SW = portrait ? 1080 : 1920, SH = portrait ? 1920 : 1080;
+  const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? 112 : portrait ? 1920 : 1080;
   const k = stageScale = Math.min(w / SW, h / SH);
   stage.style.transform = `translate(${(w - SW * k) / 2}px, ${(h - SH * k) / 2}px) scale(${k})`;
   if (portrait !== PORTRAIT) {
@@ -1525,7 +1533,7 @@ const DEVICE = !!window.YunusNative;
 // Tyre pressures come from the car (Tyre device); until it reports them the card shows "—".
 if (DEVICE) S.tyres = { FL: null, FR: null, RL: null, RR: null };
 S.tyreState = {}; // TYRE_PRESSURE_STATE_*: 0 normal, 1 over, 2 under
-carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
+if (!DOCK_ONLY) carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
 function onCarLoaded(gltf) {
   performance.mark('car-loaded');
   const car = gltf.scene; carObj = car;
@@ -3727,6 +3735,7 @@ function fillSideApps() {
     `<button class="app" data-side-pkg="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('');
 }
 function embedSide() {
+  if (DOCK_ONLY) return;
   const [x, y, w, h] = screenRect($('sideApp'));
   // Closed (no size along the long side) or too small: hide it. Upright a closed window still has
   // its full width, so both sides count.
@@ -4019,7 +4028,7 @@ function closeCard() {
   document.querySelectorAll('[data-card]').forEach((b) => b.classList.remove('on'));
   if (S.gear === 'P') camTo('default');
 }
-document.querySelectorAll('[data-card]').forEach((b) => b.onclick = () => openCard(b.dataset.card));
+document.querySelectorAll('[data-card]').forEach((b) => b.onclick = () => (DOCK_ONLY ? YunusNative.dockHome(b.dataset.card) : openCard(b.dataset.card)));
 $('cardClose').onclick = closeCard;
 
 // Like Tesla: drag the grip up to go full screen, down to shrink back, further down to close.
@@ -4139,8 +4148,12 @@ body.addEventListener('click', (e) => {
   }
   if (act === 'repair') { c.repairMsg = 'İzinler ve ADB bağlantısı yeniden kuruldu (demo).'; refreshCard(); return; }
   if (act === 'restart') { if (confirm('Yunus yeniden başlatılsın mı?')) location.reload(); return; }
-  if (act === 'homeSet' || act === 'homeByd') { S.set.isHome = act === 'homeSet'; saveSettings(); }
-  if (act === 'openByd') alert('Demo: araçta burada DiLink ana ekranı açılır.');
+  if (act === 'homeSet' || act === 'homeByd') {
+    S.set.isHome = act === 'homeSet'; saveSettings();
+    if (window.YunusNative && YunusNative.setHome) { YunusNative.setHome(act === 'homeSet'); setTimeout(refreshCard, 1500); }
+  }
+  if (act === 'openByd' && window.YunusNative) openCarApp('com.android.launcher3/.home.MainActivity');
+  if (act === 'openByd' && !window.YunusNative) alert('Demo: araçta burada DiLink ana ekranı açılır.');
   if (act === 'faultsAll') {
     const manual = TELLTALES.filter((t) => !t.auto), on = !manual.every((t) => S.faults[t.id]);
     manual.forEach((t) => { S.faults[t.id] = on; });
@@ -4259,19 +4272,20 @@ setFan(S.fan, true); // initial value
 // Car button: the home key (BYD's bar is off the screen) — a tap closes whatever is open (card,
 // tray, pop-ups) and brings the car view back; hold for Yunus's settings.
 const CAR_SETTINGS = 'com.byd.carsettings/.MainActivity';
-// In Yunus too, a swipe up from the bottom edge held a moment opens the recent apps (over other
-// apps the same gesture is the native EdgeHome strip); let go early, it is the home key.
+// The dock is already here (in Yunus, or brought over another app by the first swipe), so a swipe
+// up from the bottom edge opens the recent apps.
 (function edgeSwipe() {
-  let y0 = null, up = false, t = 0;
-  addEventListener('pointerdown', (e) => { const sy = (e.clientY - stage.getBoundingClientRect().top) / stageScale; y0 = sy > (PORTRAIT ? 1920 : 1080) - 24 ? e.clientY : null; up = false; });
+  let y0 = null;
+  addEventListener('pointerdown', (e) => { const sy = (e.clientY - stage.getBoundingClientRect().top) / stageScale; y0 = sy > (DOCK_ONLY ? 112 : PORTRAIT ? 1920 : 1080) - 24 ? e.clientY : null; });
   addEventListener('pointermove', (e) => {
-    if (y0 === null || up || (y0 - e.clientY) / stageScale < 36) return;
-    up = true; t = setTimeout(() => { up = false; y0 = null; if (window.YunusNative && YunusNative.recents) YunusNative.recents(); }, 350);
+    if (y0 === null || (y0 - e.clientY) / stageScale < 36) return;
+    y0 = null;
+    if (window.YunusNative && YunusNative.recents) YunusNative.recents();
   });
-  const end = () => { if (up) { clearTimeout(t); goHome(); } y0 = null; up = false; };
-  addEventListener('pointerup', end); addEventListener('pointercancel', () => { clearTimeout(t); y0 = null; up = false; });
+  addEventListener('pointerup', () => { y0 = null; });
 })();
 function goHome() {
+  if (DOCK_ONLY) return YunusNative.dockHome('');
   closeNetPop(); closeSeatPop(); closeAppTray();
   if (current) closeCard();
   if (S.gear === 'P' && !S.charging) camTo('default');
@@ -4905,6 +4919,7 @@ window.yunusCar = (m) => {
   }
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.net) { renderNet(m.net); return; }
+  if (m.openCard != null) { if (m.openCard === 'apps') openAppTray(); else if (m.openCard) openCard(m.openCard); else goHome(); return; } // from the dock overlay
   if (m.probe) { (window.YunusProbe = window.YunusProbe || []).push(m.probe); return; } // see the helper's probe
   if (m.btList) { netData.bt = m.btList; if (netPopKind === 'bt') renderNetPop(); return; }
   if (m.wifi) { m.wifi.nets.sort((a, b) => b.on - a.on); netData.wifi = m.wifi; if (netPopKind === 'wifi') renderNetPop(); return; } // the joined one first
