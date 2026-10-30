@@ -681,32 +681,40 @@ button { font-family:inherit; color:inherit; }
 #fanCtl b i { font-size:30px; margin-left:4px; color:var(--mu); }
 .sep { flex:1; }
 /* Seat climate and defrost in the dock (Tesla: tap a seat to step the heat, hold for the full set) */
-/* Climate keys (seats, demisters, air direction): raised tiles with a soft top highlight; a key
-   that is working takes its colour (orange heat, blue cooling/air) with a glow. */
-.clim { position:relative; width:80px; height:80px; border-radius:20px; color:var(--tx); opacity:.92;
-  background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)) var(--cd); /* Chrome 74: no color-mix */
-  background:linear-gradient(180deg, color-mix(in srgb, var(--cd) 100%, #fff 6%), var(--cd));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 6px rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.05);
-  transition:transform .12s, background .25s, box-shadow .25s, color .25s; }
-.clim:hover { background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)) var(--cd2);
-  background:linear-gradient(180deg, color-mix(in srgb, var(--cd2) 100%, #fff 6%), var(--cd2)); }
-.clim:active { transform:scale(.93); }
-.clim svg { width:46px; height:46px; color:inherit; }
-.clim.heat, .clim.lit { color:#ff8a4c; opacity:1; border-color:rgba(255,138,76,.45);
-  background:radial-gradient(circle at 50% 30%, rgba(255,138,76,.32), rgba(255,138,76,.08) 70%), var(--cd);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 0 18px rgba(255,138,76,.28); }
-.clim.vent { color:#5cb2ff; opacity:1; border-color:rgba(92,178,255,.45);
-  background:radial-gradient(circle at 50% 30%, rgba(92,178,255,.32), rgba(92,178,255,.08) 70%), var(--cd);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 0 18px rgba(92,178,255,.28); }
+/* Climate keys (seats, demisters, air direction), as on Tesla: bare bold icons on the bar, no
+   tiles; a key that is working takes its colour (orange heat, blue air, green inside air). */
+.clim { position:relative; width:80px; height:80px; border-radius:18px; color:var(--tx); background:none; border:0;
+  transition:transform .12s, color .25s, background .2s; }
+.clim:hover { background:var(--cd); }
+.clim:active { transform:scale(.9); background:var(--cd); }
+.clim svg { width:46px; height:46px; color:inherit; stroke-width:2.1; }
+.clim.heat, .clim.lit { color:#ff7a2f; }
+.clim.vent { color:#3e9bff; }
 /* The level bars sit below the icon without pushing it up, so every dock icon shares one centre line. */
 .seatDk { touch-action:none; }
 .seatDk svg { margin-top:-8px; }
 .seatDk .lv { position:absolute; bottom:9px; left:50%; transform:translateX(-50%); display:flex; gap:3px; height:4px; }
-.seatDk .lv span { width:11px; height:4px; border-radius:2px; background:rgba(255,255,255,.14); }
-.seatDk .lv span.on { background:currentColor; box-shadow:0 0 6px currentColor; }
+.seatDk .lv span { width:11px; height:4px; border-radius:2px; background:rgba(127,127,127,.3); }
+.seatDk .lv span.on { background:currentColor; }
 .seatDk em { position:absolute; top:6px; right:9px; font-style:normal; font-size:14px; font-weight:700; color:inherit; }
 .seatDk[data-seatdk="pass"] svg { transform:scaleX(-1); }
-#airFlow .on { color:#5cb2ff; filter:drop-shadow(0 0 3px rgba(92,178,255,.8)); }
+#airFlow .on { color:#3e9bff; }
+#airFlow path:not(.on) { opacity:.45; } /* the unused directions stay faint, as on Tesla */
+/* Working keys move: warm air rises in the heat waves, the recirculation arrow turns, the air
+   direction arrows flow, the fan turns with its speed. Only stroke offsets and opacity animate. */
+@keyframes wvFlow { to { stroke-dashoffset:-8; } }
+@keyframes rcTurn { from { transform:rotate(0); } to { transform:rotate(360deg); } }
+@keyframes keyPop { 0% { transform:scale(.8); } 60% { transform:scale(1.12); } 100% { transform:none; } }
+.clim .wv { stroke-dasharray:3 1; }
+.clim.lit .wv, .clim.heat .wv, .clim.vent .wv { animation:wvFlow 1s linear infinite; }
+.clim.vent .wv { stroke-dasharray:2.5 1.5; animation-duration:.8s; }
+#airFlow .ln.on { stroke-dasharray:2 1.6; animation:wvFlow .9s linear infinite; }
+.clim .rc { transform-origin:12px 9.5px; }
+#recirc.lit .rc { animation:rcTurn 2.4s linear infinite; }
+.clim:not(.seatDk).lit svg { animation:keyPop .4s ease-out; }
+#recirc.lit { color:#2fc48d; }
+#fVal i.spin { animation:rcTurn var(--fanT, 1.5s) linear infinite; color:#5cb2ff; }
+@media (prefers-reduced-motion: reduce) { .clim *, #fVal i { animation:none !important; } }
 .seatIco { width:30px; height:30px; }
 /* Volume: level bar on the dock key; a slider pops up above it while changing. */
 #vIcon { width:auto; min-width:84px; padding:0 12px; gap:8px; flex-direction:column; justify-content:center; font-size:38px; }
@@ -923,11 +931,11 @@ button { font-family:inherit; color:inherit; }
       <button class="dk" id="fUp" aria-label="Fanı artır"><i class="ti ti-chevron-right"></i></button>
     </div>
     <button class="dk clim seatDk" data-seatdk="driver" aria-label="Sürücü koltuğu (basılı tut: tüm seçenekler)"></button>
-    <button class="dk clim" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5C8 5.5 16 5.5 21.5 8.5L19 19H5z"/><path d="M8.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M12 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M15.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4"/></svg></button>
-    <button class="dk clim" id="defRear" aria-label="Arka cam rezistansı"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M8.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M12 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2M15.5 16c-1-1.1 1-2.2 0-3.3s1-2.2 0-3.2"/></svg></button>
-    <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="14" r="7.5"/><circle cx="10.5" cy="14" r="2"/><path d="M3 13h5.5M12.5 13H18M10.5 16v5.5"/><path d="M17 2.5c-.8 1 .8 2 0 3s.8 2 0 3M20.5 2.5c-.8 1 .8 2 0 3s.8 2 0 3"/></svg></button>
+    <button class="dk clim" id="defFront" aria-label="Ön cam buğu çözme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8.5C8 5.5 16 5.5 21.5 8.5L19 19H5z"/><path class="wv" d="M8.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M12 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4M15.5 16.5c-1-1.2 1-2.3 0-3.6s1-2.3 0-3.4"/></svg></button>
+    <button class="dk clim" id="defRear" aria-label="Arka cam ve ayna ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="stroke-width:1.8"><rect x="7" y="4" width="10" height="12" rx="2"/><path class="wv" d="M10 13.8c-.8-.9.8-1.8 0-2.7s.8-1.8 0-2.6s.8-1.6 0-2.4M14 13.8c-.8-.9.8-1.8 0-2.7s.8-1.8 0-2.6s.8-1.6 0-2.4"/><path d="M4.6 8.5H1.8a1 1 0 0 0-1 1.1l.4 5a1.6 1.6 0 0 0 1.6 1.4h1.8zM19.4 8.5h2.8a1 1 0 0 1 1 1.1l-.4 5a1.6 1.6 0 0 1-1.6 1.4h-1.8z"/><path class="wv" d="M2.9 14.5c-.5-.6.5-1.2 0-1.8s.5-1.1 0-1.6M21.1 14.5c-.5-.6.5-1.2 0-1.8s.5-1.1 0-1.6"/><path d="M8 20h8"/></svg></button>
+    <button class="dk clim" id="wheelHeat" aria-label="Direksiyon ısıtma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="14" r="7.5"/><circle cx="10.5" cy="14" r="2"/><path d="M3 13h5.5M12.5 13H18M10.5 16v5.5"/><path class="wv" d="M17 8.5c-.8-1 .8-2 0-3s.8-2 0-3M20.5 8.5c-.8-1 .8-2 0-3s.8-2 0-3"/></svg></button>
     <button class="dk clim" id="airFlow" aria-label="Hava yönü"></button>
-    <button class="dk clim" id="recirc" aria-label="İç hava sirkülasyonu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5h18M5 17.5l1.6-5.2A2.5 2.5 0 0 1 9 10.5h6a2.5 2.5 0 0 1 2.4 1.8l1.6 5.2"/><path d="M8 7.5a5 5 0 0 1 8.5 0"/><path d="M16.8 4.6l-.3 2.9-2.8-.6"/><circle cx="7.5" cy="20" r="1.2"/><circle cx="16.5" cy="20" r="1.2"/></svg></button>
+    <button class="dk clim" id="recirc" aria-label="İç hava sirkülasyonu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5h18M5 17.5l1.6-5.2A2.5 2.5 0 0 1 9 10.5h6a2.5 2.5 0 0 1 2.4 1.8l1.6 5.2"/><g class="rc"><path d="M7.6 8.2a5 5 0 0 1 8.9-.4"/><path d="M16.9 4.9l-.4 2.9-2.8-.7"/></g><circle cx="7.5" cy="20" r="1.2"/><circle cx="16.5" cy="20" r="1.2"/></svg></button>
     <div class="sep sepBreak"></div>
     <div id="dockApps"></div>
     <button class="dk dkApp" id="dockAdd" aria-label="Uygulama ekle"><div style="background:var(--cd2);color:var(--tx)"><i class="ti ti-plus"></i></div></button>
@@ -4080,7 +4088,7 @@ const AC_SCREEN = 'com.byd.airconditioning/.mainactivity.FullScreenMainActivity'
 const acTimers = {};
 const acSend = (cmd, args, wait = 400) => { clearTimeout(acTimers[cmd]); acTimers[cmd] = setTimeout(() => carCmd(cmd, args), wait); };
 function renderTemp() { // with the climate off the set temperature stays, dimmed (as on Tesla)
-  $('tVal').textContent = S.temp.toFixed(1) + '°';
+  $('tVal').textContent = S.temp.toFixed(S.live ? 0 : 1) + '°'; // the car sets whole degrees
   $('tVal').style.opacity = S.ac === false ? 0.35 : '';
 }
 let acSentAt = -1e9; // when Yunus last sent a temperature (none yet)
@@ -4103,7 +4111,9 @@ $('tVal').addEventListener('pointerdown', () => {
     S.ac = S.ac === false; renderTemp(); if (current === 'climate') refreshCard();
   }, 600);
 });
-['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $('tVal').addEventListener(ev, () => clearTimeout(tHold)));
+// Ended by lifting the finger or by sliding (dockSlider below), not by pointerleave: the slider
+// captures the pointer on the whole key, which fires a leave on the number at once.
+['pointerup', 'pointercancel'].forEach((ev) => $('tVal').parentElement.addEventListener(ev, () => clearTimeout(tHold)));
 $('tVal').addEventListener('click', (e) => { if (tHeld) { tHeld = false; e.stopPropagation(); } }, true);
 // Fan speed 0-7, 0 is off (as the car's own bar).
 function setFan(v, fromCar) {
@@ -4113,7 +4123,9 @@ function setFan(v, fromCar) {
     else acSend('acFan', { level: v });
   }
   S.fan = Math.min(7, Math.max(0, v));
-  $('fVal').innerHTML = `${S.fan}<i class="ti ti-propeller"></i>`;
+  // The propeller turns while air blows, faster with the speed.
+  const spin = S.fan > 0 && S.ac !== false;
+  $('fVal').innerHTML = `${S.fan}<i class="ti ti-propeller${spin ? ' spin' : ''}" style="--fanT:${(3.2 / Math.max(1, S.fan)).toFixed(2)}s"></i>`;
   $('fVal').style.opacity = S.fan === 0 ? 0.35 : ''; // off, dimmed like the temperature
   if (current === 'climate') refreshCard();
 }
@@ -4152,8 +4164,8 @@ function seatAuto() {
 // Car seat in side view (headrest, raked backrest, cushion on its rail), facing left; heat adds
 // rising waves in front of the backrest, ventilation airflow lines.
 function seatSvg(kind, cls = '') {
-  const extra = kind === 'heat' ? '<path d="M5 13.5c-.9-1 .9-2 0-3s.9-2 0-3M8.5 13.5c-.9-1 .9-2 0-3s.9-2 0-3"/>'
-    : kind === 'vent' ? '<path d="M3.5 8.5h4.5M3.5 11.5h6M3.5 14.5h4.5"/>' : '';
+  const extra = kind === 'heat' ? '<path class="wv" d="M5 13.5c-.9-1 .9-2 0-3s.9-2 0-3M8.5 13.5c-.9-1 .9-2 0-3s.9-2 0-3"/>'
+    : kind === 'vent' ? '<path class="wv" d="M3.5 8.5h4.5M3.5 11.5h6M3.5 14.5h4.5"/>' : '';
   return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <rect x="15.2" y="1.8" width="5" height="3.6" rx="1.6" transform="rotate(14 17.7 3.6)"/>
     <path d="M15.4 6.6h3.9c.7 0 1.2.7 1 1.4l-2.4 9.5h-5.1z"/>
@@ -4250,9 +4262,9 @@ function renderAirFlow() {
   const f = S.flow, on = (k) => (f[k] ? 'on' : '');
   $('airFlow').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="14.5" cy="5" r="1.8"/><path d="M14 8l-1.5 6h5l1.5 6M12.5 14l-1 4"/>
-    <path class="${on('defrost')}" d="M3 3.5l5 0M6.5 2l1.5 1.5L6.5 5"/>
-    <path class="${on('face')}" d="M3 8.5h6M7.5 7l1.5 1.5L7.5 10"/>
-    <path class="${on('foot')}" d="M3 19h6M7.5 17.5L9 19l-1.5 1.5"/></svg>`;
+    <path class="ln ${on('defrost')}" d="M2.5 3.5H8"/><path class="${on('defrost')}" d="M6.5 2l1.5 1.5L6.5 5"/>
+    <path class="ln ${on('face')}" d="M2.5 8.5H9"/><path class="${on('face')}" d="M7.5 7l1.5 1.5L7.5 10"/>
+    <path class="ln ${on('foot')}" d="M2.5 19H9"/><path class="${on('foot')}" d="M7.5 17.5L9 19l-1.5 1.5"/></svg>`;
 }
 $('airFlow').onclick = () => {
   const i = FLOW_STEPS.findIndex((s) => s.face === S.flow.face && s.foot === S.flow.foot && s.defrost === S.flow.defrost);
@@ -4705,7 +4717,7 @@ window.yunusCar = (m) => {
   if (m.lowLamp != null) S.lowLamp = m.lowLamp;
   if (m.sideLamp != null) S.sideLamp = m.sideLamp;
   if (m.fog != null) S.fog = m.fog;
-  if (m.acOn != null) { S.ac = m.acOn; renderTemp(); }
+  if (m.acOn != null) { S.ac = m.acOn; renderTemp(); setFan(S.fan, true); } // the fan stops turning with the climate off
   if (m.acTemp != null) setTemp(m.acTemp, true);
   if (m.fan != null) setFan(m.fan, true);
   if (m.climate) { // the car's own climate settings, whoever changed them
