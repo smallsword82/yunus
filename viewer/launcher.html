@@ -4197,13 +4197,25 @@ function autoLevel() {
   if (d >= 3) return { heat: 0, vent: 1 };
   return { heat: 0, vent: 0 };
 }
+// Auto heat at the full level steps down to 1 after 15 minutes, as on Tesla: the seat is warm by then.
+const AUTO_HIGH_MS = 15 * 60e3;
 function seatAuto() {
-  for (const st of Object.values(S.seats)) if (st.auto) Object.assign(st, autoLevel());
+  const now = Date.now();
+  for (const st of Object.values(S.seats)) {
+    if (!st.auto) { st.autoHighAt = 0; continue; }
+    const lv = autoLevel();
+    if (lv.heat === 2) {
+      st.autoHighAt = st.autoHighAt || now;
+      if (now - st.autoHighAt >= AUTO_HIGH_MS) lv.heat = 1;
+    } else st.autoHighAt = 0;
+    Object.assign(st, lv);
+  }
   noteSeatMode();
   // Auto is Yunus's own rule (the car has none), so it is remembered here across restarts.
   try { localStorage.setItem('seatAuto', JSON.stringify({ driver: !!S.seats.driver.auto, pass: !!S.seats.pass.auto })); } catch {}
   renderSeatDock();
 }
+setInterval(() => { if (S.seats.driver.auto || S.seats.pass.auto) seatAuto(); }, 60e3); // for the 15-minute step
 try { const a = JSON.parse(localStorage.getItem('seatAuto')) || {}; S.seats.driver.auto = !!a.driver; S.seats.pass.auto = !!a.pass; } catch {}
 // The mode a seat key shows and steps while off: the one last used on that seat (heat or vent).
 try { const l = JSON.parse(localStorage.getItem('seatLast')) || {}; S.seats.driver.last = l.driver || 'heat'; S.seats.pass.last = l.pass || 'heat'; } catch {}
