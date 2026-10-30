@@ -108,8 +108,10 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   `/account_msg_with_tk`'de, BYD beyaz listesinde — dokunma. Ad Yunus › Ekran'dan kalıyor.
 - **Uyarı afişi** artık araç sütununun üstünde (gömülü harita/3. pencere sayfanın üstünde çiziliyor);
   araçta henüz yanarken görülmedi.
-- **Farlar ilk açılışta:** araç ışık değerlerini yalnız değişince gönderiyor; bilinmezken "otomatik"
-  konumunda kısa far aracın gece modunu (`deviceDark`) izliyor.
+- **Farlar ilk açılışta:** araç ışık değerlerini yalnız değişince gönderiyor ve getter'lar imzalı.
+  Son düğme ve lamba değerleri `CAR_HAL_KEEP` ile saklanıp açılışta geri yükleniyor (araçta
+  denendi: açık ve kapalı kayıtla doğru açıldı); hiç kayıt yoksa "otomatik" gece modunu izliyor.
+  Not: `lowLamp`/`sideLamp` önceden `telemetryKeys`'te olmadığı için hiç işlenmiyordu, düzeltildi.
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya

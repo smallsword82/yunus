@@ -1630,8 +1630,8 @@ function facingCamera(h) {
 }
 // Which lights are on. "auto" stands in for the light sensor and reads as night in the demo.
 // From the lamps when the car has reported them (lowLamp / sideLamp), else from the knob. The car
-// reports only changes, so after a start the lamps are unknown: on auto the low beams then follow
-// the car's night mode (deviceDark, declared further down: false until it is set).
+// reports only changes; the last ones are kept for the next start (CAR_HAL_KEEP). With none kept
+// yet, on auto the low beams follow the car's night mode (deviceDark, declared further down).
 function lightState() {
   let dark = false;
   try { dark = deviceDark; } catch (e) {}
@@ -4446,7 +4446,10 @@ const CAR_HAL_MAP = {
 let KMH_PER_RPM = 0.0108, realSpeed = false;
 try { KMH_PER_RPM = +localStorage.getItem('kmhPerRpm') || KMH_PER_RPM; } catch {}
 const CAR_HAL_KEEP = ['Statistic 0x4A502010', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
-  'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C'];
+  'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C',
+  // The light knob and the lamps: the car reports them only when they change, so a start shows
+  // them as they were last reported (lamps off with the car are reported too).
+  'Light 0x13300023', 'Light 0x38A0000A', 'Light 0x38A00008', 'Light 0x38A0000C'];
 let autoPlayDone = false, playingPkg = null;
 window.yunusCar = (m) => {
   // Transport diagnostics and raw Kinex events are not mapped vehicle state. Keep the demo
@@ -4514,7 +4517,7 @@ window.yunusCar = (m) => {
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
-    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
     'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'sunshade', 'steerAngle'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
