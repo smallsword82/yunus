@@ -54,6 +54,28 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
 - Denenip olmayanlar (tekrar deneme): bölünmüş ekran / serbest pencere (ünite desteklemiyor),
   `wm overscan` (BYD uygulamalarını bozuyor, Maps yok sayıyor).
 
+## Araçta bulunanlar (30.10.2026)
+
+- **Kısayol paneli** = BYD SystemUI (`com.android.systemui`, pencere `BydQSBar`, kütüphane
+  `com.byd.bydqsmodeslib`). Düğmeler: dilink/ Bluetooth, Bağlı cihaz, Veri, 5G, Sessiz, Mod,
+  Ekran döndürme kilidi, Ekranı kapat, Ekran görüntüsü, Wi-Fi; sahne/ Bebek, Ekran temizleme,
+  Kamp, Şekerleme; araç/ Ön cam buğu, AVH, Ses efekti, Otomatik park, Kör nokta, Çocuk izleme,
+  Isıtma-soğutma, Özel ayar, DMS, Kapı (= iç tavan lambasının kapı modu, KİLİT DEĞİL), Sürüş
+  kaydedici, ESP, Park freni, Rejen, HMA, HUD, Ortam ışığı, Şerit uyarısı, Masaj, Enerji, Arka
+  panel kilidi, Buzdolabı, SLW, Koltuk ayarı, Simülatör, Tavan perdesi, Dik yokuş, Direksiyon
+  ısıtma, Tavan camı, Trafik işareti, Bagaj, Bagaj lambası, Kablosuz şarj, Taşıma modu.
+  Araç düğmeleri BYD imzalı izinlerle çalışıyor; Yunus'ta yalnız Android olanlar (BT, Wi-Fi,
+  veri, ekran kapat/döndür, ekran görüntüsü) gerçek iş yapabilir.
+- **Merkezi kilit hiçbir BYD ekranında yok:** panelde, araç ayarlarında (`CarSetting.apk`:
+  yalnız hız kilidi, uzaktan açma ayarı gibi ayarlar) ve DoorLock cihazında (sadece
+  `getDoorLockStatus`) kilitle/aç komutu yok. "BYD ekranına gizlice dokunma" ile kilit yapılamaz.
+- **Kameralar:** Android'e tek kamera açık (arka). 360°/yan kameralar yalnız BYD kamera
+  uygulamasında (gömme yolu kalıyor).
+- **Lastik:** değerler 214–215 geliyor (kPa varsayımıyla 2,15 bar) — aracın lastik ekranıyla
+  karşılaştırılacak.
+- **Sürücü adı/resmi:** `com.byd.accountservice` içinde yok (oyun merkezi + harita token'ı).
+- **Bildirim erişimi:** BYD ayar ekranı "UnsupportActivity"; Yunus ADB ile kendine veriyor.
+
 ## Sıradaki işler
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
