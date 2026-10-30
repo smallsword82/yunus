@@ -183,7 +183,7 @@ button { font-family:inherit; color:inherit; }
 #stage:not(.portrait) #carPanel { grid-column:2; grid-row:1; }
 #stage:not(.portrait) #mapWrap { grid-column:3; grid-row:1; }
 #stage:not(.portrait) #sidePanel { grid-column:4; grid-row:1; }
-#status { position:absolute; top:28px; left:36px; right:36px; display:flex; align-items:center; font-size:26px; z-index:2; }
+#status { position:absolute; top:8px; left:36px; /* its row's middle on the status bar's (28 px), level with the clock */ right:36px; display:flex; align-items:center; font-size:26px; z-index:2; }
 #gears { display:flex; gap:18px; font-weight:500; cursor:pointer; }
 #gears span { color:var(--mu); }
 #gears span.on { color:var(--tx); }
@@ -4070,7 +4070,7 @@ body.addEventListener('click', (e) => {
     const st = S.seats[t.dataset.seat], kind = t.dataset.kind, other = kind === 'heat' ? 'vent' : 'heat';
     st[kind] = (st[kind] + 1) % 3;
     if (st[kind]) st[other] = 0;
-    renderSeatDock();
+    renderSeatDock(); pushSeats();
   }
   const act = t.dataset.do;
   if (act === 'tup') setTemp(S.temp + (S.live ? 1 : 0.5));
@@ -4264,7 +4264,6 @@ function renderSeatDock() {
     const icon = `<i class="ico" style="--ico:url(img/byd/sys_navi_bar_${side}_seat_${shown === 'vent' ? 'ventilation' : 'heat'}.png)"></i>`;
     el.innerHTML = `${icon}<div class="lv">${[1, 2].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
   });
-  pushSeats();
   if (seatPopFor) renderSeatPop();
 }
 let seatPopFor = null;
@@ -4293,7 +4292,7 @@ function closeSeatPop() {
 $('seatPop').addEventListener('click', (e) => {
   const t = e.target.closest('[data-pk]'); if (!t) return;
   stepSeat(S.seats[seatPopFor], t.dataset.pk);
-  seatAuto();
+  seatAuto(); pushSeats(); // only a tap tells the car (a redraw never does)
   if (current === 'climate') refreshCard();
 });
 let seatHold = null, seatHeld = false;
@@ -4307,7 +4306,7 @@ document.querySelectorAll('[data-seatdk]').forEach((el) => {
     // A tap steps the key's mode (the one shown): AUTO → 1 → 2 → off.
     const st = S.seats[el.dataset.seatdk];
     stepSeat(st, st.heat ? 'heat' : st.vent ? 'vent' : st.last || 'heat');
-    seatAuto();
+    seatAuto(); pushSeats();
     if (current === 'climate') refreshCard();
   });
 });
@@ -4654,7 +4653,7 @@ function setBattery(soc, range) {
 }
 const seatsSent = {};
 // The car reports a seat change a few seconds late; until then its reports are the old state.
-const seatSentAt = {};
+const seatSentAt = {}, seatLater = {}, seatLaterAt = {};
 function pushSeats() { // a seat changed on screen: tell the car, unless the car is where this came from
   if (!S.live) return;
   for (const [k, st] of Object.entries(S.seats)) {
@@ -4696,6 +4695,11 @@ const CAR_HAL_MAP = {
   'Setting 0x4FA00008': (v) => (v ? { seats: { driver: { vent: v - 1 } } } : {}), // SET_DRIVER_SEAT_VENTILATING_STATE
   'Setting 0x4FA00013': (v) => (v ? { seats: { pass: { heat: v - 1 } } } : {}), // SET_PASSENGER_SEAT_HEATING_STATE
   'Setting 0x4FA00010': (v) => (v ? { seats: { pass: { vent: v - 1 } } } : {}), // SET_PASSENGER_SEAT_VENTILATING_STATE
+  // The same read every second (getSeatHeatingState / getSeatVentilatingState), so the keys are right from the start.
+  'Get seatH1': (v) => (v >= 1 && v <= 3 ? { seats: { driver: { heat: v - 1 } } } : {}),
+  'Get seatH2': (v) => (v >= 1 && v <= 3 ? { seats: { pass: { heat: v - 1 } } } : {}),
+  'Get seatV1': (v) => (v >= 1 && v <= 3 ? { seats: { driver: { vent: v - 1 } } } : {}),
+  'Get seatV2': (v) => (v >= 1 && v <= 3 ? { seats: { pass: { vent: v - 1 } } } : {}),
   // Warning lights, INSTRUMENT_2IN1_FAULT_* (FAULT_INDICATOR_*: 0 unknown, 1 lit, 2 off, 3-7 flashing).
   'Instrument 0x2960000E': (v) => ({ tt: { main: v } }), // MAIN_ALARM_INDICATOR
   'Instrument 0x29600026': (v) => ({ tt: { key: v } }), // SMART_KEY_SYS_WARN_LIGHT
@@ -4930,7 +4934,15 @@ window.yunusCar = (m) => {
   if (m.outside != null) { S.outside = Math.round(m.outside); $('outTemp').textContent = `${S.outside}°C`; seatAuto(); }
   if (m.seats) {
     for (const [k, v] of Object.entries(m.seats)) {
-      if (performance.now() - (seatSentAt[k] || -1e9) < 8000) continue; // our own change still on its way
+      // Our own change still on its way: the car's word waits until then (kept, not dropped, as it
+      // is not said again if it doesn't change).
+      const wait = 8000 - (performance.now() - (seatSentAt[k] || -1e9));
+      if (wait > 0) {
+        seatLater[k] = Object.assign(seatLater[k] || {}, v);
+        clearTimeout(seatLaterAt[k]);
+        seatLaterAt[k] = setTimeout(() => { const later = seatLater[k]; seatLater[k] = null; if (later) window.yunusCar({ seats: { [k]: later } }); }, wait + 50);
+        continue;
+      }
       const st = S.seats[k];
       Object.assign(st, v); seatsSent[k] = `${st.heat}/${st.vent}`;
     }

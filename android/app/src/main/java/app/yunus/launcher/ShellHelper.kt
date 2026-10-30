@@ -355,6 +355,9 @@ private object CarWatch {
         // getCurrentGear is refused (its EPB check queries CarSettings as package "android", not our
         // uid 2000); it is built on GEARBOX_AUTO_MODE (P 1, R 2, N 3, D 4, M 5, S 6), read directly.
         "gearbox.BYDAutoGearboxDevice" to listOf(Get("gear", "getGearboxAutoModeType"), Get("parkSw", "getParkBrakeSwitch")), // 1 applied
+        // Seat heat and ventilation (1 off, 2 low, 3 high): their events come only on change.
+        "setting.BYDAutoSettingDevice" to listOf(Get("seatH1", "getSeatHeatingState", 1), Get("seatH2", "getSeatHeatingState", 2),
+            Get("seatV1", "getSeatVentilatingState", 1), Get("seatV2", "getSeatVentilatingState", 2)),
         "safetybelt.BYDAutoSafetyBeltDevice" to listOf(Get("belt1", "getSafetyBeltStatus", 1)), // SAFETY_BELT_AREA_MAIN; 1 buckled, 0 not
         "doorlock.BYDAutoDoorLockDevice" to listOf(Get("lock", "getDoorLockStatus", 1)), // driver's door: 1 unlocked, 2 locked
         "statistic.BYDAutoStatisticDevice" to listOf(Get("soc", "getElecPercentageValue"), Get("range", "getElecDrivingRangeValue"),
@@ -540,8 +543,16 @@ private object CarWatch {
                 val c = sd.javaClass
                 val h = c.getMethod("setSeatHeatingState", Integer.TYPE, Integer.TYPE)
                 val v = c.getMethod("setSeatVentilatingState", Integer.TYPE, Integer.TYPE)
-                val r = if (heat > 1) listOf(v.invoke(sd, area, vent), h.invoke(sd, area, heat)) else listOf(h.invoke(sd, area, heat), v.invoke(sd, area, vent))
-                System.err.println("cmd seat $area heat=$heat vent=$vent = $r")
+                // Only what changes: a second set right after the first (say "cooling off" when it
+                // already is) cancels the first one on the car (seen: heat off then vent off left
+                // the heat on).
+                val curH = c.getMethod("getSeatHeatingState", Integer.TYPE).invoke(sd, area) as Int
+                val curV = c.getMethod("getSeatVentilatingState", Integer.TYPE).invoke(sd, area) as Int
+                val r = ArrayList<Any?>()
+                if (heat > 1) { if (curV != vent && vent > 1) r += v.invoke(sd, area, vent); if (curH != heat) r += h.invoke(sd, area, heat) }
+                else if (vent > 1) { if (curV != vent) r += v.invoke(sd, area, vent) } // on: the car lets the heat go
+                else { if (curH != 1) r += h.invoke(sd, area, 1); if (curV != 1) { if (r.isNotEmpty()) Thread.sleep(400); r += v.invoke(sd, area, 1) } }
+                System.err.println("cmd seat $area heat=$heat vent=$vent (was $curH/$curV) = $r")
             } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
             return
         }
