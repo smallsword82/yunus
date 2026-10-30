@@ -101,6 +101,15 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   (asıl oynatıcı `com.spotify.music` / SpotifySDK); ne tarayıcı servisi ne medya tuşu alıcısı var.
   Arka planda başlamayan uygulama artık 3. pencerede açılıyor (`startWanted`); radyo çalarken
   `startFailed` silinmiyor. YT Music ReVanced da arka planda başlamadı → 3. pencerede açıldı, kart onu takip etti.
+- **Sürücü resmi (30.10, araçta görüldü):** kaynak `com.byd.diLinkAccount` (accountservice değil).
+  Sağlayıcı `content://com.byd.accountProvider`: `/account_msg` sorgusu (bize yalnız isLogin,
+  isCarOwner, photoUrl, hasUnreadMsg döner — **nickName yok**), `/avatar` resim dosyası
+  (`CarUser.kt`, izin `com.byd.permission.ACCOUNT_SERVICE_LINK`, normal). Ad + token
+  `/account_msg_with_tk`'de, BYD beyaz listesinde — dokunma. Ad Yunus › Ekran'dan kalıyor.
+- **Uyarı afişi** artık araç sütununun üstünde (gömülü harita/3. pencere sayfanın üstünde çiziliyor);
+  araçta henüz yanarken görülmedi.
+- **Farlar ilk açılışta:** araç ışık değerlerini yalnız değişince gönderiyor; bilinmezken "otomatik"
+  konumunda kısa far aracın gece modunu (`deviceDark`) izliyor.
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya

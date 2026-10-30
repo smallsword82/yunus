@@ -1179,16 +1179,28 @@ function updateTelltales() {
   const red = TELLTALES.find((t) => ttColor(t) === 'red' && !['plug', 'epb'].includes(t.id) && ttFault(t));
   if (!red) dismissedAlert = null;
   $('warnBanner').classList.toggle('show', !!red && red.id !== dismissedAlert);
+  if (red) placeWarnBanner();
   if (red) $('warnBanner').innerHTML = `${ttHtml(red)}<div><b>${red.name}</b><br><span style="font-size:17px;color:var(--mu)">${red.desc}</span></div>`;
 }
 setInterval(updateTelltales, 250);
+// The embedded map and third-window apps are drawn above the page, so the banner sits over the
+// car column (right of its warning lights) when that is wide enough; else in the middle as before.
+function placeWarnBanner() {
+  const c = $('carPanel').getBoundingClientRect(), st = stage.getBoundingClientRect(), w = c.width / stageScale;
+  const b = $('warnBanner').style;
+  if (w < 420) { b.left = b.width = b.top = b.transform = ''; return; }
+  b.left = (c.left - st.left) / stageScale + 80 + 'px';
+  b.top = (c.top - st.top) / stageScale + 76 + 'px';
+  b.width = Math.min(760, w - 100) + 'px';
+  b.transform = 'none';
+}
 $('telltales').onclick = (e) => {
   if (!e.target.closest('.more')) return;
   CARDS.controls.tab = 'warnings';
   if (current !== 'controls') openCard('controls'); else refreshCard();
 };
 $('warnBanner').onclick = () => {
-  const red = TELLTALES.find((t) => !t.auto && ttColor(t) === 'red' && S.faults[t.id]);
+  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !['plug', 'epb'].includes(t.id) && ttFault(t)); // as in updateTelltales
   dismissedAlert = red ? red.id : null;
   updateTelltales();
 };
@@ -1617,9 +1629,13 @@ function facingCamera(h) {
   return THREE.MathUtils.smoothstep(toCam.dot(h.userData.facing), 0.05, 0.35);
 }
 // Which lights are on. "auto" stands in for the light sensor and reads as night in the demo.
-// From the lamps when the car has reported them (lowLamp / sideLamp), else from the knob.
+// From the lamps when the car has reported them (lowLamp / sideLamp), else from the knob. The car
+// reports only changes, so after a start the lamps are unknown: on auto the low beams then follow
+// the car's night mode (deviceDark, declared further down: false until it is set).
 function lightState() {
-  const low = S.lowLamp != null ? S.lowLamp : S.lights === 'on' || S.lights === 'auto';
+  let dark = false;
+  try { dark = deviceDark; } catch (e) {}
+  const low = S.lowLamp != null ? S.lowLamp : S.lights === 'on' || (S.lights === 'auto' && dark);
   const park = low || (S.sideLamp != null ? S.sideLamp : S.lights === 'park');
   return { low, high: low && S.highBeam, park };
 }
@@ -4222,6 +4238,7 @@ function renderProfile() {
   $('profPic').textContent = pic ? '' : (name ? name.trim()[0].toLocaleUpperCase('tr-TR') : '');
 }
 renderProfile();
+if (window.YunusNative && YunusNative.userRefresh) YunusNative.userRefresh();
 // A tap opens the car's account screen, else Yunus's settings where the name is set.
 $('profile').onclick = () => {
   if (window.YunusNative && YunusNative.openApp('com.byd.accountservice')) return;

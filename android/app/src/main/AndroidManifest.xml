@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <!-- The bell in the status bar pulls down the notification shade (normal permission). -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!-- The car's signed-in user (name and photo) from BYD's account app (normal permission). -->
+    <uses-permission android:name="com.byd.permission.ACCOUNT_SERVICE_LINK" />
 
     <!-- BYDAuto HAL _COMMON permissions (protectionLevel=dangerous, source package "android",
          so grantable to any app once the user approves — the same set BYD Road Computer and the
@@ -40,6 +42,7 @@
     <!-- Android 11+ hides other apps unless declared: Yunus opens and embeds launchable apps
          (Google Maps, YouTube, …). -->
     <queries>
+        <package android:name="com.byd.diLinkAccount" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

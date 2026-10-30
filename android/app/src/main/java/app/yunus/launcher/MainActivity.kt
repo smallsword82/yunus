@@ -206,6 +206,10 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun volumeRefresh() = runOnUiThread { volume.send() }
 
+                // The car's signed-in user (name and photo) for the status bar, {user:{…}}.
+                @JavascriptInterface
+                fun userRefresh() = CarUser.read(applicationContext, ::postToPage)
+
                 // Wi-Fi and mobile signal for the top bar: the page asks once it is ready, then
                 // {net:{…}} follows every change.
                 @JavascriptInterface
