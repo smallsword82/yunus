@@ -718,9 +718,7 @@ button { font-family:inherit; color:inherit; }
 #recirc .air.in, #recirc.lit .air.out { display:none; }
 #recirc.lit .air.in { display:block; }
 #recirc:not(.lit) .air { opacity:.78; }
-/* Inside air: only the arrow moves, a small nudge along its way round. */
-@keyframes arwNudge { 0%, 100% { transform:translateX(0); } 50% { transform:translateX(2.2px); } }
-#recirc.lit .arw { animation:arwNudge 1.4s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) { .clim .ico { animation:none !important; } }
 #airFlow .on { color:#3e6ae1; }
 #airFlow path[class]:not(.on) { opacity:.4; } /* the unused directions stay faint, as on Tesla */
@@ -749,20 +747,20 @@ button { font-family:inherit; color:inherit; }
 #volPop .track { position:relative; flex:1; height:10px; border-radius:5px; background:var(--cd2); cursor:pointer; }
 #volPop .fill { position:absolute; left:0; top:0; bottom:0; border-radius:5px; background:var(--tx); }
 #volPop .knob { position:absolute; top:50%; width:28px; height:28px; margin:-14px 0 0 -14px; border-radius:50%; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); }
-#seatPop { position:absolute; bottom:124px; z-index:20; width:132px; padding:10px; border-radius:22px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
-  display:flex; flex-direction:column; gap:8px; opacity:0; transform:translateY(12px); pointer-events:none; transition:opacity .2s, transform .2s; }
+#seatPop { position:absolute; bottom:124px; z-index:20; width:104px; padding:6px; border-radius:18px; background:var(--cd); box-shadow:0 10px 32px rgba(0,0,0,.4);
+  display:flex; flex-direction:column; gap:4px; opacity:0; transform:translateY(12px); pointer-events:none; transition:opacity .2s, transform .2s; }
 #seatPop.show { opacity:1; transform:none; pointer-events:auto; }
-/* A key per mode: the car's seat icon with the level bars (or AUTO) under it, coloured when on. */
-#seatPop .pk { position:relative; height:112px; border:0; border-radius:16px; background:var(--cd2); color:var(--tx); cursor:pointer;
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; transition:background .2s, color .2s; }
-#seatPop .pk .ico { width:84px; height:84px; margin:-8px 0 -6px; background:currentColor; opacity:.8; -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
+/* A key per mode: the car's seat icon with the level bars (or AUTO) under it; on, it takes its colour. */
+#seatPop .pk { height:86px; border:1px solid rgba(127,127,127,.28); border-radius:13px; background:var(--cd2); color:var(--tx); cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; transition:background .2s, color .2s, border-color .2s; }
+#seatPop .pk .ico { width:66px; height:66px; margin:-8px 0 -5px; background:currentColor; opacity:.85; -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
 #seatPop .pk.on .ico { opacity:1; }
-#seatPop .pk.heat.on { color:#e8442e; }
-#seatPop .pk.vent.on { color:#3e6ae1; }
+#seatPop .pk.heat.on { color:#e8442e; border-color:#e8442e; background:rgba(232,68,46,.1); }
+#seatPop .pk.vent.on { color:#3e6ae1; border-color:#3e6ae1; background:rgba(62,106,225,.1); }
 #seatPop .pk .lv { display:flex; gap:4px; height:4px; }
-#seatPop .pk .lv span { width:16px; height:4px; border-radius:2px; background:rgba(127,127,127,.3); }
+#seatPop .pk .lv span { width:14px; height:4px; border-radius:2px; background:rgba(127,127,127,.32); }
 #seatPop .pk .lv span.on { background:currentColor; }
-#seatPop .pk b { font-size:14px; font-weight:700; letter-spacing:.06em; line-height:4px; }
+#seatPop .pk b { font-size:13px; font-weight:700; letter-spacing:.06em; line-height:4px; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -4202,6 +4200,14 @@ function autoPick() {
 }
 // Auto heat at the full level steps down to 1 after 15 minutes, as on Tesla: the seat is warm by then.
 const AUTO_HIGH_MS = 15 * 60e3;
+// A seat key's step, the same in the pop-up and on the bar: off → AUTO → 1 → 2 → off.
+function stepSeat(st, kind) {
+  const other = kind === 'heat' ? 'vent' : 'heat';
+  if (st.auto && st.autoFrom === kind) Object.assign(st, { auto: false, [kind]: 1, [other]: 0 });
+  else if (!st.auto && st[kind] === 1) st[kind] = 2;
+  else if (!st.auto && st[kind] === 2) st[kind] = 0;
+  else Object.assign(st, { auto: true, autoFrom: kind, [other]: 0 });
+}
 function seatAuto() {
   const now = Date.now();
   for (const st of Object.values(S.seats)) {
@@ -4263,7 +4269,7 @@ function openSeatPop(k, btn) {
   seatPopFor = k;
   renderSeatPop();
   const r = btn.getBoundingClientRect(), s = stage.getBoundingClientRect();
-  $('seatPop').style.left = THREE.MathUtils.clamp((r.left - s.left + r.width / 2) / stageScale - 66, 16, (PORTRAIT ? 1080 : 1920) - 132 - 16) + 'px';
+  $('seatPop').style.left = THREE.MathUtils.clamp((r.left - s.left + r.width / 2) / stageScale - 52, 16, (PORTRAIT ? 1080 : 1920) - 104 - 16) + 'px';
   $('seatPop').classList.add('show');
   // Maps and the third-window app are drawn above the page; out of the way while it is open.
   if (mapEmbedded) YunusNative.embedVisible('map', false);
@@ -4277,11 +4283,7 @@ function closeSeatPop() {
 }
 $('seatPop').addEventListener('click', (e) => {
   const t = e.target.closest('[data-pk]'); if (!t) return;
-  const st = S.seats[seatPopFor], kind = t.dataset.pk, other = kind === 'heat' ? 'vent' : 'heat';
-  if (st.auto && st.autoFrom === kind) Object.assign(st, { auto: false, heat: 0, vent: 0 }); // 4th: off
-  else if (st.auto || !st[kind]) Object.assign(st, { auto: false, [kind]: 2, [other]: 0 }); // 1st: full
-  else if (st[kind] === 2) st[kind] = 1; // 2nd
-  else Object.assign(st, { auto: true, autoFrom: kind }); // 3rd: AUTO (Yunus picks heat or cooling)
+  stepSeat(S.seats[seatPopFor], t.dataset.pk);
   seatAuto();
   if (current === 'climate') refreshCard();
 });
@@ -4293,11 +4295,9 @@ document.querySelectorAll('[data-seatdk]').forEach((el) => {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
   el.addEventListener('click', () => {
     if (seatHeld) { seatHeld = false; return; }
-    // A tap steps the key's mode (the one shown): 2 → 1 → off; on from off at 2.
-    const st = S.seats[el.dataset.seatdk], mode = st.heat ? 'heat' : st.vent ? 'vent' : st.last || 'heat';
-    const other = mode === 'heat' ? 'vent' : 'heat';
-    st[mode] = st[mode] ? st[mode] - 1 : st.auto ? 0 : 2;
-    st[other] = 0; st.auto = false;
+    // A tap steps the key's mode (the one shown): AUTO → 1 → 2 → off.
+    const st = S.seats[el.dataset.seatdk];
+    stepSeat(st, st.auto ? st.autoFrom || 'heat' : st.heat ? 'heat' : st.vent ? 'vent' : st.last || 'heat');
     seatAuto();
     if (current === 'climate') refreshCard();
   });
@@ -4538,11 +4538,13 @@ function setBattery(soc, range) {
   if (range != null) { S.rangeKm = range; $('rangeTxt').textContent = Math.round(range) + ' km'; }
 }
 const seatsSent = {};
+// The car reports a seat change a few seconds late; until then its reports are the old state.
+const seatSentAt = {};
 function pushSeats() { // a seat changed on screen: tell the car, unless the car is where this came from
   if (!S.live) return;
   for (const [k, st] of Object.entries(S.seats)) {
     const v = `${st.heat}/${st.vent}`;
-    if (seatsSent[k] !== v) { seatsSent[k] = v; carCmd('seat', { seat: k, heat: st.heat, vent: st.vent }); }
+    if (seatsSent[k] !== v) { seatsSent[k] = v; seatSentAt[k] = performance.now(); carCmd('seat', { seat: k, heat: st.heat, vent: st.vent }); }
   }
 }
 let liveRefreshAt = 0;
@@ -4808,6 +4810,7 @@ window.yunusCar = (m) => {
   if (m.outside != null) { S.outside = Math.round(m.outside); $('outTemp').textContent = `${S.outside}°C`; seatAuto(); }
   if (m.seats) {
     for (const [k, v] of Object.entries(m.seats)) {
+      if (performance.now() - (seatSentAt[k] || -1e9) < 8000) continue; // our own change still on its way
       const st = S.seats[k], want = autoLevel(st.autoFrom);
       // A level set on the car's own keys that Auto would not have chosen: the driver took over.
       if (st.auto && Object.keys(v).some((f) => v[f] !== want[f]) && `${st.heat}/${st.vent}` === seatsSent[k]) st.auto = false;
