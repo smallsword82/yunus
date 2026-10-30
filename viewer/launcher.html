@@ -4435,7 +4435,9 @@ const CAR_HAL_MAP = {
   'Get winFR': (v) => ({ windows: { FR: v } }),
   'Get winRL': (v) => ({ windows: { RL: v } }),
   'Get winRR': (v) => ({ windows: { RR: v } }),
-  'Get shade': (v) => ({ sunshade: v }),
+  // getSunroofWindowblindPosition is a position code, not a percent: 1 full open, 2 full closed,
+  // 3 half; 4 stopped part-way and 0 invalid keep the last known value. (setSunshadeState takes a percent.)
+  'Get shade': (v) => (v === 1 ? { sunshade: 100 } : v === 2 ? { sunshade: 0 } : v === 3 ? { sunshade: 50 } : {}),
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C

@@ -387,9 +387,10 @@ private object CarWatch {
                     System.err.println("cmd window $area -> $state = $r")
                 }
                 "sunshade" -> {
-                    val state = if (o.optInt("open", 0) <= 5) k("SUNROOF_CLOSE") else k("SUNROOF_OPEN")
-                    val r = c.getMethod("setSunshadeState", Integer.TYPE).invoke(dev, state)
-                    System.err.println("cmd sunshade -> $state = $r")
+                    // setSunshadeState takes a percent 0..100 (0 closed, 100 open), like the moonroof.
+                    val pct = o.optInt("open", 0).coerceIn(0, 100)
+                    val r = c.getMethod("setSunshadeState", Integer.TYPE).invoke(dev, pct)
+                    System.err.println("cmd sunshade -> $pct = $r")
                 }
             }
         } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
