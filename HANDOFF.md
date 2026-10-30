@@ -1,174 +1,155 @@
 # Devir notu — Yunus (BYD Dolphin, DiLink 3)
 
-Tarih: 30.10.2026 (dördüncü oturum sonu) · Dal: `claude/live-vehicle-data` · **PR: smallsword82/yunus#1**
-APK: `release/yunus-0.1-test.apk` · Son commit: dalın ucu (`git log`). **Bu oturumun commit'leri push'lanmadı** (kullanıcı "şimdilik kalsın").
+Tarih: 30.10.2026 (4. oturum sonu) · Dal: `claude/live-vehicle-data` · **PR: smallsword82/yunus#1**
+APK: `release/yunus-0.1-test.apk` (araçta kurulu = dalın ucu) · Çalışma ağacı temiz.
+**4. oturumun commit'leri push'lanmadı** — kullanıcı "şimdilik kalsın" dedi; sormadan push'lama.
 
-## 4. OTURUM (30.10 akşam) — hepsi commit'li, araçta doğrulandı
+## EN SON DURUM (yeni pencere buradan başlasın)
 
-- **Varsayılan launcher Yunus.** `wm overscan 0,-84,0,-90`: iki BYD çubuğu ekran dışında. Üstten çekme doğrudan BYD hızlı
-  panelini (BydQSBar) açar (yardımcı ekran dışındaki çubuğu y=-42'den çeker). Yunus › Sistem › Ana ekran: Yunus ↔ BYD launcher
-  (yardımcı `home yunus|byd`). Ayrıntı: memory `byd-navbar-overscan`.
-- **Başka uygulama öndeyken** (`EdgeHome.kt`): alt kenarda görünmez şerit; 1. yukarı kaydırma Yunus dock'u (`launcher.html#dock`,
-  overlay WebView), dock'ta 2. kaydırma son uygulamalar. Yunus'ta araç simgesi = ana sayfa, alt kenardan kaydırma = son uygulamalar.
-- **Klima dock'u:** BYD'nin kendi simgeleri (`viewer/img/byd/`), koltuk ısıtma/soğutma pop-up'ı (kapalı→1→2→kapalı, oto yok),
-  direksiyon ısıtma, hava yönü (3 yön birden), iç/dış hava, arka buz+ayna, fana basılı tut = oto.
-- **Durum çubuğu:** Wi-Fi / BT / bildirim pop-up'ları (IWifiManager, `BtBridge.kt`), tema aracın gece moduna uyar.
-  Pop-up açıkken Maps sayfanın ALTINA iner (`YunusNative.mapUnder` → `web.translationZ`) ve canlı kalır — apps penceresi de
-  artık böyle (önceden Maps gizleniyor, yerine koyu alan geliyordu).
-- **Lambalar:** park + kısa far simgesi; AUTO'da "A"; AUTO'da kısa farla birlikte park lambası da yanar; uzun far/selektör = kısa
-  far simgesi mavi (`Light 0x38A0000C` anında gelir, `lampHigh` saniyede bir; CSS'te `.high` `.auto`'dan sonra olmalı).
-  BSD/şerit üst çubuğun altında solda, hız sabitleyici ayarlı hızı sağda. DRL modelde yanıyor.
-- **Takılma çözüldü:** 3D araç her araç mesajında yeniden çiziliyordu (~21/sn, %71 jank). Artık yalnız modelde görünen değerler
-  (`MODEL_KEYS`) çizimi uyandırıyor → park halinde 3D 0/sn, jank %8–13 (gfxinfo).
-- **Yardımcı bağlantısı:** `ShellLink.watch()` her yeni bağlantıda `watch`'ı yeniden gönderir, kopunca 1,5 sn sonra yeniden
-  bağlanır (yardımcı yeniden başlayınca değerler — şarj göstergesi dahil — gelmiyordu). Araç yeniden başlatıldıktan sonra şarj
-  göstergesi henüz araçta görülmedi.
+Araçta her şey çalışıyor, kullanıcı günü kapattı ("bitirelim bugünlük"). Son istekler bitti:
+- Açılıştaki harita takılması çözüldü (aşağıda "Performans").
+- Apps penceresi Maps'i karartmıyor; Maps altta canlı kalıyor, pencere tek parça kapanıyor.
+- Far simgeleri gösterge gibi: AUTO'da park lambası da yanıyor, uzun far/selektörde kısa far simgesi mavi.
 
-## 3. oturum sonu durumu
+**Açık / doğrulanmadı:**
+1. **Şarj göstergesi araç yeniden başlatıldıktan sonra** — kullanıcı "veri almıyor" dedi. Sebep büyük olasılıkla yardımcının
+   `watch` aboneliğinin kopmasıydı; `3c61d4a` ile her yeni bağlantıda yeniden gönderiliyor (yardımcı öldürülüp açılınca
+   değerlerin geri geldiği görüldü). Aracın tam yeniden başlatılmasından sonra şarj göstergesi **henüz görülmedi** — ilk fırsatta bak.
+2. **Push** — kullanıcı isteyince.
+3. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
+4. Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç hep park/şarjdaydı).
 
-**Commit'li + push'lu (PR #1):** `14629e6` şarj istasyonu+kablo sağ-ön köşede (kapı açılınca kabloya değmiyor) ·
-`c4c213e` müzik kartı kapağı şarkı değişince yenileniyor (`MediaBridge.art()` null'ı önbelleğe almıyor) ·
-`1c80e5e` kilit durumu okunuyor.
+## 4. oturumda yapılanlar (hepsi commit'li, araçta doğrulandı)
 
-**COMMIT'SİZ (çalışma ağacında, araçta doğrulandı — önce commit'le):**
-- `viewer/launcher.html`: 8 sn'lik MapLibre fallback timer'ı **cihazda kapalı** (`&& !(window.YunusNative && YunusNative.embedApp)`)
-  → açılışta önce Yunus haritası sonra Google Maps "çifte yük" bitti.
-- `MainActivity.kt` `AppEmbed.launchIfNew`: map slot'unda Maps açıldıktan **4,5 sn sonra my-location (◎) butonuna
-  sentetik dokunuş** (`t <display> 0/1 0 x y`, x = w−45dp, y = h−122dp) → araç ortalanır + takip modu. Araçta doğrulandı.
-- Embed çözünürlüğünü düşürme (renderScale 0.67) **denendi, kullanıcı SEVMEDİ, geri alındı**. Tekrar önerme.
-  Harita display'i zaten pencereyle birebir: `#map` (720,48) 1200×920, k=dpr×vvScale=1.
+**Varsayılan launcher + BYD çubukları**
+- Yunus HOME (`cmd package set-home-activity app.yunus.launcher/.MainActivity`; BYD `com.android.launcher3` yedek olarak duruyor).
+- `wm overscan 0,-84,0,-90`: BYD üst (84 px) ve alt (90 px) çubukları ekran dışında, açılışlarda kalıcı. Geri al: `wm overscan reset`.
+- Üstten çekme yalnız BYD hızlı panelini (BydQSBar) açar: yardımcı `qsbar` → `openCarPanel()` ekran dışındaki durum çubuğunu
+  `y=-42`'den tek kaydırmayla çeker (`statusBarTop()` dumpsys'ten `mFrame` okur).
+- Yunus › Sistem › Ana ekran: Yunus ↔ BYD launcher geçişi (yardımcı `home yunus|byd`: set-home-activity + overscan aç/sıfırla).
+- Başka uygulama öndeyken (`EdgeHome.kt`, yalnız Yunus varsayılan HOME iken): alt kenarda görünmez 22 dp şerit. 1. yukarı kaydırma
+  Yunus dock'unu getirir (`launcher.html#dock`, `TYPE_APPLICATION_OVERLAY` WebView; `DOCK_ONLY` modu araç modelini yüklemez),
+  dock üstünde 2. kaydırma son uygulamalar (`recents` → KEYCODE_APP_SWITCH). Dock 7 sn sonra / dışarı dokununca gider;
+  kartları `YunusNative.dockHome(card)` ile Yunus'u öne alır. İzin: `appops set app.yunus.launcher SYSTEM_ALERT_WINDOW allow`.
+- Yunus'un içinde: araç simgesi = ana sayfa (`goHome`), alt kenardan (56 px) yukarı kaydırma = son uygulamalar.
+- Ayrıntı: memory `byd-navbar-overscan`.
 
-**Kilit — kapandı:** OKUMA çalışıyor (DoorLock+Ota dinleyicisi, `Ota 0x40700008`: 1 açık / 2 kilitli, `CAR_HAL_KEEP`'te).
-KOMUT HAL'den **mümkün değil**: `set()` 0x80000400 döner; çalışan uygulama (`br.com.rory.electro`) BT telefon-anahtarı
-taklidiyle kilitliyor, gönderdiği `postEvent(1001, 0x48E00037, 1)` sadece durum yayını — bizden birebir aynısı kilitlemiyor.
-Gösterge salt-okunur. (Helper'da `lock`/`post` cmd kancaları duruyor, deney için.) Ayrıntı: memory `door-lock-read-gated-command`.
+**Klima dock'u** (aracın kendi simgeleri: `viewer/img/byd/` — 208 SystemUI simgesi, `ac_*.svg`, `wind_part_*.png`)
+- Sıcaklık/fan, sıcaklığa basılı tut = klima aç/kapa, fana basılı tut = oto (düzen kaymaz, tüm düğmeler eşit aralıklı).
+- Hava yönü: aktif oklar, 3 yön birden. İç/dış hava: iki ayrı simge, **animasyonsuz** (kullanıcı istemedi). Arka buz + ayna tek simge.
+- Direksiyon ısıtma çalışıyor (`acCommand` `wheelHeat`).
+- **Koltuk ısıtma/soğutma:** küçük pop-up, üst üste iki simge (ısıtma, soğutma), yazı yok, **oto yok** (kaldırıldı — araçta
+  yanlış çalışıyordu). Her basış: kapalı → 1 → 2 → kapalı. Bardaki tuş son seçilen modu gösterir.
+  Yardımcı yalnız **değişen** setter'ı gönderir (ikinci setter birincisini iptal ediyordu → kapanmıyordu); sayfa durumu yalnız
+  dokununca gönderir, geç gelen araç raporlarını erteler (`seatSentAt`/`seatLater`).
 
-**Navigasyon:** Google Maps nav modunda yatay düzen (paneller solda, araç sağ-altta) — normal, sorun değil.
-Test için `am start --display <id> -a VIEW -d 'google.navigation:q=…'` kullanılabilir.
+**Durum çubuğu**
+- Biraz büyütüldü; tema aracın gece moduna uyar (`deviceDark`).
+- Wi-Fi pop-up'ı: aç/kapa, ağlar, bağlan (yardımcı `wifiCommand`, ServiceManager'dan `IWifiManager`: setWifiEnabled, startScan,
+  getScanResults, getConfiguredNetworks, addOrUpdateNetwork, enableNetwork, reconnect).
+- Bluetooth pop-up'ı (`BtBridge.kt`, profil 16 HFP client + 11 A2DP sink). Bildirim pop-up'ı (`MediaBridge` listesi; aç/sil/temizle).
+- **Pop-up'lar canlı Maps üstünde:** açılınca Maps sayfanın ALTINA iner (`YunusNative.mapUnder` → `web.translationZ = 10`),
+  sayfa orada saydam. Kapanınca Maps **280 ms sonra** (solma bitince) öne döner — hemen dönerse pencerenin harita üstündeki kısmı
+  birden kaybolur ("parça parça kapanıyor"). `popTouch()` koltuk, Wi-Fi/BT/bildirim ve **apps penceresi** için ortak.
+  Kullanıcı Maps'in sürekli altta durmasını SEVMEDİ (dokunma zorlaştı, kastı) ve anlık görüntü yöntemini reddetti — yalnız pop-up açıkken.
+- Ayarlar listesi kayar, kart aşağı çekince kapanır.
 
-## BU OTURUMUN ATILIMI: araç verisi gerçekten okunuyor VE kumanda ediliyor
+**Lambalar ve sürüş yardımı (üst çubuk)**
+- Vites satırı saatle aynı hizada.
+- Park + kısa far simgesi. Far düğmesi `Light 0x13300023`: 1 kapalı, 2 AUTO, 3 park, 4 kısa far. AUTO'da simgede "A".
+  Lamba durumları: `Light 0x38A0000A` kısa, `0x38A00008` park, `0x38A0000C` uzun (olay, anında) + `lampSide/Low/High`
+  (`getLightStatus` 1/2/3, saniyede bir). AUTO'da kısa farla park lambası da yanar.
+- Uzun far/selektör = kısa far simgesi **mavi** (ayrı simge yok). CSS'te `#indLow.high`, `#indLow.auto`'dan **sonra** gelmeli
+  (yoksa AUTO'nun yeşili maviyi ezer — bu oturumdaki hata buydu; veri hep geliyordu).
+- BSD (`Adas 0x41800008`) ve şerit (`Adas 0x32F0002A`): üst çubuğun altında solda, uyarı ışığı gibi; yalnız açıkken.
+  Hız sabitleyici: ayarlı hız (`Instrument 0x2A600008`) sağda pilin altında, `0x29600032` durumu.
+- DRL (`Light 0x4FE0000E`: 1 açık, 2 kapalı) 3D modelde yanıyor. 12 V ışığı kaldırıldı. Kemer pop-up'ı yok.
 
-Kinex'in yöntemini Yunus'a ekledik. Eski "cam/perde/kilit için BYD imzası şart" sonucu **çürüdü**.
-Kabuk yardımcısı (shell, uid 2000, `app_process`) artık BYD HAL cihazlarını **izin denetimini geçiren
-bir `ContextWrapper` ile** kuruyor; imzalı `_GET`/`_SET` getter'ları çalışıyor.
+**Performans**
+- Takılmanın sebebi 3D araçtı: `window.yunusCar` her araç mesajında `wake(1500)` çağırıyordu → park halinde saniyede ~21 çizim,
+  karelerin %71'i takılıyordu. Artık yalnız modelde görünen değerler (`MODEL_KEYS`) çizimi uyandırıyor → park halinde 3D 0/sn,
+  takılan kare %8–13 (`dumpsys gfxinfo app.yunus.launcher`; `#fpsMeter` metni "3D x/sn" gösterir).
+- Modele yeni bir şey eklersen anahtarını `MODEL_KEYS`'e de ekle, yoksa değişiklik ancak başka bir sebeple çizilince görünür.
 
-**`ShellHelper.kt` → `CarWatch.Permissive`** (bağlam sarıcı): `ActivityThread.getSystemContext()`'i sarar,
-- `checkSelfPermission` / `checkCallingOrSelfPermission` / `checkCallingPermission` / `checkPermission` → GRANTED
-- `enforceCallingOrSelfPermission` / `enforceCallingPermission` → boş
-- `getPackageName` / `getOpPackageName` → `"com.android.shell"` (uid 2000 ile eşleşsin diye)
-- `getApplicationContext` → this
-Kinex'in jar'ındaki `Lb/W;` sınıfının aynısı. Bununla Bodywork/DoorLock/Charging/Instrument kuruluyor.
+**Yardımcı bağlantısı** (`MainActivity` `ShellLink`)
+- `shell.watch()`: her yeni bağlantıda `watch` yeniden gönderilir; okuyucu iş parçacığı bitince 1,5 sn sonra yeniden bağlanır.
 
-**`CarWatch.GETTERS`** (her saniye okunuyor, yalnız değişince gönderiliyor):
-- `soc` `getElecPercentageValue`, `range` `getElecDrivingRangeValue`, `odo` `getTotalMileageValue` (Statistic) ✅
-- `steer` `getSteeringWheelValue(1)` (±780 direksiyon derecesi), `winFL/FR/RL/RR` `getWindowOpenPercent(1..4)`,
-  `shade` `getSunroofWindowblindPosition` (Bodywork) ✅
-- `chgGun` `getChargingGunState`, `chgState` `getChargingState`, `chgPower` `getChargingPower`,
-  `restMin` `getChargingRestTime` → `[saat, dakika]` dizisi (Charging) ✅
-- `lock` `getDoorLockStatus(1)` → **0 (geçersiz) dönüyor, çalışmıyor** (Kinex dinleyiciyle okuyor, getter'la değil)
-- `gear` `getCurrentGear` → **SecurityException "package android ≠ uid 2000"** (getPackageName override çözmedi); vites `P`'de kalıyor
-- `poll()` artık IntArray döndüren getter'ları işler (getChargingRestTime).
+**Diğer:** radyo kartında RDS/DAB logoları; açılışta seçili navigasyonla (Google Maps) doğrudan başlar; şarj portunun altındaki
+"şarj ediliyor" yazısı ve bagaj düğmesi kaldırıldı. Araç arıza kodları (DTC) Yunus'tan silinemez.
 
-**Komutlar** (`YunusNative.command(json)` → yardımcı `cmd <json>` → bodywork, aynı bağlamla):
-- Cam: `setBodyWindowCtrlState(area, state)`. area 1=FL 2=FR 3=RL 4=RR. state sabitleri **reflection'la** okunuyor:
-  `WINDOW_CLOSE=2`, `WINDOW_OPEN_FULL=1`, `WINDOW_OPEN_HALF=4`. **Araçta doğrulandı** (ön sol cam 100→0).
-- Perde: `setSunshadeState(yüzde 0..100)` — 0 kapat, 100 aç. **Araçta doğrulandı**.
-  ÖNEMLİ: perde YAZMA yüzde, OKUMA ise **konum kodu**: `getSunroofWindowblindPosition` → 1 tam açık, 2 tam kapalı,
-  3 yarım, 4 durdu, 0 geçersiz (yüzde DEĞİL). Sayfada `'Get shade'` bunu yüzdeye çeviriyor.
+## Araç verisi: nasıl okunuyor ve kumanda ediliyor
 
-**Sürükleme davranışı:** araçta cam/perde noktasını sürükleyince **sadece nokta** parmağı izler; cam/perde
-aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizlemede eski davranış (cam parmağı izler).
+Kabuk yardımcısı (`ShellHelper.kt`, ADB ile uid 2000, `app_process`) BYD HAL cihazlarını **izin denetimini geçiren bir
+`ContextWrapper`** (`CarWatch.Permissive`, Kinex'in `Lb/W;` sınıfının aynısı) ile kuruyor:
+`check*Permission` → GRANTED, `enforce*` → boş, `getPackageName`/`getOpPackageName` → `"com.android.shell"`, `getApplicationContext` → this.
 
-**Aç-kapa düzeltmesi (önemli):** Yunus kapatılıp açılınca yardımcı süreç ayakta kalır; yeniden bağlanan sayfaya
-`CarWatch.subscribe` artık değerleri **doğrudan o bağlantıya** gönderir + `getAllStatus`'u yeniden tetikler
-(önceden yayınla gönderiyordu, eski bağlantı bozunca eksik gelirdi → "açıp kapatınca hiçbir şey gelmiyor"). Çözüldü.
+**Protokol** (TCP 19340, satır satır): `watch` (abone ol), `cmd <json>` (komut), `qsbar`, `recents`, `home yunus|byd`,
+`t`/`launch`/`close` (gömülü uygulamalar). Yanıt: `ev <Dev> 0xID <i|f|d> <değer>` ve `msg <json>` (sayfaya olduğu gibi).
+Sayfa girişi `window.yunusCar(m)`; `CAR_HAL_MAP` `'Dev 0xID'` / `'Get anahtar'` → telemetri; `CAR_HAL_KEEP` değerleri
+localStorage'da saklar (açılışta hemen görünsün diye).
 
-## Şarj arayüzü (bu oturumda yapıldı, araçta doğrulandı)
+**`CarWatch.GETTERS`** (saniyede bir, yalnız değişince gönderilir):
+- Statistic: `soc`, `range`, `odo`. Bodywork: `steer` (±780°), `winFL/FR/RL/RR`, `shade` (konum kodu: 1 açık, 2 kapalı, 3 yarım, 4 durdu).
+- Charging: `chgGun` (2 = tabanca takılı), `chgState`, `chgPower` (0 döner), `restMin` → `[saat, dakika]`.
+- Gearbox: `gear` = `getGearboxAutoModeType` (P 1, R 2, N 3, D 4/6), `parkSw` (1 çekili). `getCurrentGear` reddediliyor (EPB
+  kontrolü CarSettings'i "android" paketiyle soruyor).
+- Setting: `seatH1/H2` (ısıtma), `seatV1/V2` (soğutma). Light: `lampSide/Low/High`, `drl`. SafetyBelt: `belt1` (1 takılı).
+- Kilit: getter 0 döner; durum dinleyiciden (`Ota 0x40700008`: 1 açık, 2 kilitli). Kilit KOMUTU HAL'den mümkün değil
+  (BT telefon-anahtarı taklidi gerekir). Ayrıntı: memory `door-lock-read-gated-command`.
+- Genel okuma: `AbsBYDAutoDevice.get(deviceType, featureId)` — Instrument 1007, Light 1004, ADAS 1038, Gearbox 1011.
+  Uyarı ışıkları (`ShellHelper.LIGHTS`) ve yukarıdaki Light/ADAS/Instrument id'leri saniyede bir böyle okunuyor (olay gelmeden de görünsün).
+  Bazıları `get`'te 65535 döner → yalnız olayla gelir.
 
-- **Tespit:** `getChargingGunState == 2` (tabanca takılı) → kablo/animasyon gösterilir. (Şarj durumu `0x34400018`
-  yalnız değişince geldiğinden, araç Yunus açılmadan takılıysa hiç gelmez; o yüzden getter.) `showCharging()`
-  artık şarjı `chargeState`'e göre AÇIP KAPATMIYOR (sadece metin) — tabanca durumu belirler.
-- **Yandan görünüm:** şarjda `PRESETS.charge` (theta 270, phi 83, r 92), `CHARGE_TARGET (0, 0.75, -0.9)` — araç+kablo+istasyon
-  sığar. `onCarLoaded`'da araç yüklenince `S.charging` ise tekrar uygulanır (yoksa varsayılana sıfırlanıyordu).
-- **Panel** `#chargeInfo`: sağ üst, **sabit 230px genişlik**, **% yok** (üst çubuk pili gösteriyor),
-  ⚡ **çekilen kW** + kalan süre. Üst çubuk pili `#battBox.charging` → şimşek + yeşil çerçeve.
-- **kW kalibrasyonu (göstergede 3,0 kW iken):** `chargeKw = (5000 - battCurrent) * 0.1 * (battVolt || 420) / 1000`.
-  `battCurrent` = `Statistic 0x44A00020` (STATISTIC_INSTANTANEOUS_CURRENT, ofset 5000, 0,1 A/adım, <5000 = şarj).
-  `battVolt` = `Charging 0x44400008` (V; olay, `CAR_HAL_KEEP`'te saklanıyor; gelene kadar nominal 420). `getChargingPower` 0 dönüyor.
-- **Kalan süre:** `getChargingRestTime` → `[saat, dakika]`, her saniye okunur → saat kaybolmaz.
-- **Kablo konumu:** modeldeki `ChargeSocket` düğümünün dünya konumuna hizalanıyor (`buildChargeGear()`), ama
-  **modelde soket ön-sol'da**. Gerçek Dolphin portu arka ise `HOT.hCharge`'ı elle arkaya al.
+**Komutlar** (`YunusNative.command(json)` → `cmd <json>`):
+- Cam `setBodyWindowCtrlState(alan 1..4, durum)` (`WINDOW_CLOSE=2`, `OPEN_FULL=1`, `OPEN_HALF=4`, reflection'la); perde
+  `setSunshadeState(0..100)`.
+- Klima `acCommand` (AC cihazı, ilk argüman hep kaynak 0): `start/stop`, `setAcTemperature(0, °C tam 17..33, 0, 1)` (iki katı
+  verince 33 olur!), `setAcWindLevel(0, 1..7)`, `setAcWindMode(0, 1 yüz 2 yüz+ayak 3 ayak 4 ayak+cam 5 cam 6 hepsi 7 yüz+cam)`,
+  `setAcDefrostState(0, 1 ön/2 arka, 0/1)`, `setAcCycleMode`, `setAcControlMode(0, 0 oto)`, `wheelHeat`, `seat`.
+  Durum olayları: güç `0x40400010`, fan `0x4040001C`, sıcaklık `0x40400028`, iç hava `0x40400014`, hava yönü `0x40400018`,
+  ön buğu `0x40400016`, arka `0x43400031`, dış sıcaklık `0x40400038`. Sayfanın başlangıç bekçisi `acSentAt = -1e9` olmalı (0 iken
+  aracın değerleri ilk saniyelerde yok sayılıyordu).
+- Feature id → isim: `bridge/bydauto_feature_ids.json` (framework.jar'dan). Kullanıcıya test ettirmeden önce oraya bak.
 
-## Diğer bu oturum (hepsi commit'li)
-- **Dörtlü okları:** üst çubukta sol+sağ ok artık dörtlüyle birlikte yanıp söner (`updateSignalArrows`).
-- **Müzik kartı "Başlat":** arka planda başlamayan uygulama (BYD Spotify kabuğu `com.vivid.music.byd`, YT Music)
-  3. pencerede açılır. Kart kapağı kutuda tam, arka plan bulanık.
-- **Sürücü resmi:** `com.byd.diLinkAccount` → `content://com.byd.accountProvider/avatar` (`CarUser.kt`). Ad gelmiyor (BYD beyaz listesi), Yunus › Ekran'dan.
-- **Ön tekerler — DENENDİ, GERİ ALINDI (c7bcd82 → fc5b679).** Model dört tekeri tek mesh çiziyor
-  (`dolphin_parts.glb`: `tyre_Tire_0`, rim/disk hepsi birleşik). Üçgen bölme **sol ön tekeri kaybetti + dışarı
-  parça taşırdı**. Front = **+z** (dünya uzayı; bagaj/far ön). Güvenli yöntem: ön teker için **sıkı sınır
-  kutusu** (üç köşesi de içinde) kullan, mudflap/köprü üçgenleri hariç tut. `STEER_RATIO ≈ 15`, `STEER_SIGN`.
+## Şarj arayüzü
+- Tabanca takılı (`chgGun == 2`) → kablo + istasyon + yandan görünüm (`PRESETS.charge`). `showCharging()` yalnız metni günceller.
+- Panel `#chargeInfo` (sağ üst, 230 px): çekilen kW + kalan süre. `chargeKw = (5000 − battCurrent) × 0,1 × (battVolt || 420) / 1000`;
+  `battCurrent` = `Statistic 0x44A00020`, `battVolt` = `Charging 0x44400008` (`CAR_HAL_KEEP`'te).
+- Kablo modeldeki `ChargeSocket` düğümüne hizalı (model soketi ön-sol'da).
 
-## Açık işler (öncelik sana göre; kullanıcı sonuç görmek ister, kısa-net ilerle)
+## Bilinen tuzaklar (bu oturumda yaşandı)
+- **Siyah ekran = sayfada sözdizimi hatası.** Tek satırlık bir işleyicinin sonuna eklenen yorum `});`'yi yuttu; Python ile JS
+  dizgisine gerçek satır sonu yazıldı. Değişiklikten sonra önizlemede ya da CDP'de hata olmadığını kontrol et.
+- Kotlin'e Python'dan `"\n"` yazarken gerçek satır sonu girmesin (`chr(92)+'n'`); regex için ham `"""…"""` dizgisi.
+- WebView localStorage force-stop'tan önce diske yazılmayabilir: yaz, bekle, `location.reload()`.
+- Maps'in TextureView'ını taşımak haritayı boşaltıyor → yalnız `translationZ` ile katman değiştir.
+- Chrome 74 WebView: `?.`, `??`, `color-mix`, `Promise.any`, `min()`, `backdrop-filter` YOK.
+- Embed çözünürlüğünü düşürme (renderScale 0.67) denendi, kullanıcı sevmedi — tekrar önerme.
 
-1. ~~Klima~~ — **yapıldı (30.10), araçta doğrulandı.** Yardımcı `CarWatch.acCommand` (AC cihazı, Permissive bağlam; ilk arg hep
-   kaynak 0): `start/stop`, `setAcTemperature(0, °C tam 17..33, 0, 1)` (34..66 verince araç 33 yapıyor!), `setAcWindLevel(0, 1..7)`,
-   `setAcWindMode(0, 1 yüz 2 yüz+ayak 3 ayak 4 ayak+cam 5 cam 6 hepsi 7 yüz+cam)`, `setAcDefrostState(0, 1 ön/2 arka, 0/1)`,
-   `setAcCycleMode(0, 1 iç hava)`, `setAcControlMode(0, 0 oto)`. Durum olayları: güç `0x40400010`, fan `0x4040001C`, sıcaklık
-   `0x40400028`, iç hava `0x40400014`, hava yönü `0x40400018`, ön buğu `0x40400016`, arka `0x43400031`, dış `0x40400038`.
-   Sayfa: dock sıcaklık/fan (araçta 1° adım, kaydırınca 400 ms sonra gönderir), sıcaklığa basılı tut = aç/kapa, hava yönü, buğu, iç hava.
-2. ~~Kilit~~ — kapandı (yukarıda "EN SON DURUM").
-3. ~~El freni + kemer~~ — **çözüldü (31.10).** Getter'lar: `Gearbox.getParkBrakeSwitch` (1 çekili) → `tt.epb`, durum
-   çubuğunda gösteriliyor; `SafetyBelt.getSafetyBeltStatus(1)` (sürücü; 1 takılı, 0 değil) → `S.belts.drv`. Koltuk doluluğu
-   okunamaz ama ekran yalnız araç açıkken çalıştığından kemer ışığı `belt1 == 0` iken hep yanar (hız şartı kullanıcı istemedi). `Instrument.getELECParkingState/Color` → 65535 (işe yaramaz).
-   **Gösterge ışıkları başlangıçta da okunuyor:** yardımcı `AbsBYDAutoDevice.get(1007, featureId)` ile 18 ışığı her saniye okuyup
-   `Instrument 0x…` olayı olarak gönderiyor (`ShellHelper.LIGHTS`). Okunabilenler: ABS, ESC, 12 V, hava yastığı, OK (2 = sönük),
-   batarya ısı/arıza, güç aktarma (0 = bilinmiyor). Ana uyarı, anahtar, TPMS, fren, direksiyon, soğutma, güç sınırı, park lambası,
-   ACC `get`'te 65535 döner → bunlar yalnız olayla gelir.
-   Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç park/şarjdaydı).
-- **Bu oturumun sonu (30.10):** 12 V ışığı kaldırıldı (`0x2A600026` araç hazırken hep 1, göstergede lamba yok); vites
-  `getGearboxAutoModeType` ile; uyarı ışıkları başlangıçta `get(1007, id)` ile okunuyor; DAB'da kapak = istasyonun slaytı
-  (yardımcı `/sdcard/Android/data/com.fd.service.dab/files/dab/slide/` en yenisini `/data/local/tmp/yunus_dab.jpg`'ye kopyalar);
-  açılışta yardımcı geç gelirse Yunus haritası açılmıyor, yardımcıyı 60 sn bekliyor. Araç arıza kodları (DTC) Yunus'tan silinemez.
-4. ~~Radyo logosu~~ — **yapıldı (30.10).** Radyo (`com.byd.mediacenter`) kapak göndermiyor (yalnız genel 60×60 `MEDIA_ICON`);
-   başlık RDS/DAB adı ("RDS SHOW RD", "DAB 03-KAFA RADYO"). Sayfa (`radioLogo`) adı temizleyip radio-browser.info'da (TR) arıyor,
-   logoyu `localStorage.radioLogos`'ta saklıyor. Show/Fenomen/Best bulunuyor; CNN Türk/Kafa'nın veritabanında logosu yok → uygulama simgesi.
-5. ~~Harita hızı~~ — **çözüldü (30.10, 4. oturum):** 3D yalnız modelde görünen değişikliklerde çiziliyor (`MODEL_KEYS`).
-6. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
-7. ~~Vites~~ — **çözüldü (30.10):** `getCurrentGear` içindeki EPB kontrolü CarSettings'i "android" paketiyle sorguladığı için reddediliyordu; vites doğrudan `getGearboxAutoModeType` ile okunuyor (P 1, R 2, N 3, D 4).
-
-## Nasıl çalışılıyor (önemli)
-
-- **İzin dosyası `.claude/settings.local.json`** (kullanıcı oluşturdu, GEREKLİ): `Bash(./gradlew:*)`, `Bash(adb:*)`,
-  `Bash(cp:*)`, `Bash(git:*)` izinleri. Olmadan auto-mode sınıflandırıcısı derlemeyi engeller — çünkü kod bir izin-denetimi
-  aşan bağlam sarıcı içeriyor ("Security Weaken"). Ajan bu dosyayı **kendisi yazamaz** (Self-Modification); kullanıcı yazar.
-- **Derleme:** `android/` içinde `./gradlew assembleDebug` → `app/build/outputs/apk/debug/yunus-0.1-test.apk` → `release/`'e kopyala.
-- **Yardımcı kodu değiştiyse** (ShellHelper.kt): kurulumdan sonra **eski yardımcı sürecini öldür** ki yeni kod yüklensin:
-  `adb shell "ps -A -o PID,ARGS | grep app.yunus.launcher.ShellHelper" | awk '{print $1}'` → `kill -9`, sonra Yunus'u yeniden başlat.
-  Sayfa-only değişiklikte yardımcıyı öldürmeye gerek yok, APK kur + Yunus'u yeniden başlat yeter.
-- **Yeniden başlat:** `adb shell am force-stop app.yunus.launcher; adb shell am start -n app.yunus.launcher/.MainActivity`.
-- **Sayfayı/veriyi incelemek (CDP):** `PID=$(adb shell pidof app.yunus.launcher); adb forward tcp:9222 localabstract:webview_devtools_remote_$PID`,
-  sonra Runtime.evaluate ile `window.YunusCarData` (ham olaylar/getter'lar), `window.yunusCar({...})` (telemetri enjekte, test için),
-  `document.getElementById(...)`. `S` modül kapsamında — doğrudan okunamaz; DOM'dan ya da `window.YunusCarData`'dan bak.
-- **Framework getter/sabit adları:** `framework.jar` dexdump'ı taşındı — `.../scratchpad/fw/classes*.txt`. Cihaz sınıfı:
-  `Landroid/hardware/bydauto/<dev>/BYDAuto<Dev>Device;`. Feature ID → isim: `bridge/bydauto_feature_ids.json`.
-- **Kinex jar'ları** (yöntem kaynağı): `kinex_hal_api_service.jar` (bağlam sarıcı `Lb/W;`, HalDoorLockListener…).
-- **ADB tap ile test:** ekranda düğmesi olanı ADB `input tap` + `logcat postEvent` ile dene, sonra eski haline getir — kullanıcıyı uğraştırma.
-- Chrome 74 (araç tarayıcısı): `color-mix`, flex-`gap` yedeği, `??`, `Promise.any`, `min()`, `backdrop-filter` YOK.
+## Nasıl çalışılıyor
+- **İzin dosyası `.claude/settings.local.json`** (kullanıcı yazdı, GEREKLİ): `Bash(./gradlew:*)`, `Bash(adb:*)`, `Bash(cp:*)`,
+  `Bash(git:*)`. Olmadan auto-mode derlemeyi engeller (kod izin denetimini aşan bağlam sarıcı içeriyor). Ajan bu dosyayı yazamaz.
+- **Derle + kur:** `android/` içinde `./gradlew assembleDebug -q` → `app/build/outputs/apk/debug/yunus-0.1-test.apk` →
+  `release/`'e kopyala → `adb install -r` → `adb shell am start -n app.yunus.launcher/.MainActivity`.
+- **Yardımcı kodu değiştiyse:** kurulumdan sonra eski yardımcıyı öldür
+  (`adb shell "ps -A -o PID,ARGS | grep app.yunus.launcher.ShellHelper"` → `kill -9`), sonra Yunus'u yeniden başlat.
+- **Sayfayı incele (CDP):** `PID=$(adb shell pidof app.yunus.launcher); adb forward tcp:9222 localabstract:webview_devtools_remote_$PID`;
+  Runtime.evaluate ile `window.YunusCarData` (ham değerler), `window.yunusCar({...})` (telemetri enjekte), DOM.
+  `S` modül kapsamında, doğrudan okunamaz.
+- **Ekran görüntüsü:** `adb exec-out screencap -p > x.png`. Performans: `adb shell dumpsys gfxinfo app.yunus.launcher [reset]`.
+- Framework dexdump: `.../scratchpad/fw/classes*.txt`; cihaz sınıfı `Landroid/hardware/bydauto/<dev>/BYDAuto<Dev>Device;`.
+- ADB `input tap` ile denenebilecek şeyi kullanıcıya yaptırma; sonra eski haline getir.
 
 ## Çalışma ortamı
-- Araç: `adb connect 10.184.30.214:5555` (kablosuz ADB açık; Yunus'un ADB anahtarı araçta onaylı).
-- Yardımcı logu: `adb shell cat /data/local/tmp/yunus_helper.log` (yalnız hatalar + "watch: listening to …").
-- Emülatör (ev testi): `emulator -avd yunus34` (Android 14, 1920×1080/240dpi; araç verisi/BYD uygulamaları yok).
-- Masaüstü önizleme: `python -m http.server 8765 --directory viewer` → `launcher.html` (demo modu).
+- Araç: `adb connect 10.184.30.214:5555` (kablosuz ADB). Yardımcı logu: `adb shell cat /data/local/tmp/yunus_helper.log`.
+- Emülatör: `emulator -avd yunus34` (araç verisi yok). Masaüstü önizleme: `python -m http.server 8765 --directory viewer` → `launcher.html`.
 
-## Araçta bilinenler (değişmedi)
-- Kısayol paneli = BYD SystemUI `BydQSBar`; araç düğmeleri BYD imzalı. Durum şeridini aşağı çekince yardımcı `qsbar`
-  ile BYD panelini açıyor (sabit iki kaydırma; `cmd statusbar collapse` kapatır). Yunus'un kendi panelini kullanıcı İSTEMEDİ — önerme.
-- Merkezi kilit hiçbir BYD *ekranında* yok; kilit HAL üzerinden (yukarı bak). 360°/yan kamera yalnız BYD kamera uygulamasında (`com.byd.avc`).
-- Lastik basıncı ~214–215 geliyor (birim doğrulanacak). Bildirim erişimini Yunus ADB ile kendine verir.
+## Araçta bilinenler
+- Hızlı panel = BYD SystemUI `BydQSBar` (araç düğmeleri BYD imzalı). Yunus'un kendi panelini kullanıcı İSTEMEDİ.
+- 360°/yan kamera yalnız BYD kamera uygulamasında (`com.byd.avc`). Lastik basıncı ~214–215 geliyor (birim doğrulanmadı).
+- Ön tekerleri döndürme denendi, geri alındı: model dört tekeri tek mesh çiziyor (`tyre_Tire_0`); üçgen bölme sol ön tekeri kaybetti.
 
 ## Kullanıcı hakkında
-Türkçe konuşuyor. Sonuç görmek ister; koddan çıkarılabilecek şeyler için test yaptırmaktan hoşlanmaz
-(ama kW gibi kalibrasyon gereken değerlerde göstergeden tek bir değeri söyleyebilir). Uzun araştırmada sabırsız — kısa, net ilerle.
-Bu oturumda çok sayıda küçük istek arka arkaya geldi; her birini yapıp commit'ledik.
+Türkçe konuşuyor. Sonuç görmek ister; koddan çıkarılabilecek şeyler için test yaptırmaktan hoşlanmaz. Kısa, net ilerle.
+Tasarımda **aracın kendi simgelerini ve Tesla tarzını** istiyor; abartılı animasyon (büyüyüp küçülme) istemiyor; beğenmediğini
+açıkça söyler, birkaç deneme normal. Çok sayıda küçük istek arka arkaya gelir; her birini yapıp araçta kontrol edip commit'le.
