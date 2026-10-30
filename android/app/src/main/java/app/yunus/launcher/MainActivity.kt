@@ -214,6 +214,11 @@ class MainActivity : Activity() {
                     MediaListener.instance?.let { postToPage(JSONObject().put("notifCount", it.count()).toString()) }
                 }
 
+                // A pull down on Yunus's status bar: the car's own quick panel (BYD's BydQSBar),
+                // opened by the shell helper with the swipe a finger would make on the car's bar.
+                @JavascriptInterface
+                fun openCarPanel() = shell.send("qsbar")
+
                 // The bell: pulls down the system's notification shade over Yunus.
                 @JavascriptInterface
                 fun openNotifications() = runOnUiThread {

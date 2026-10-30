@@ -13,13 +13,16 @@ import java.net.Socket
  * (the way Kinex runs its touch bridge). The shell may start an app on Yunus's private virtual
  * display and inject touches into it, which an app cannot do itself.
  *
- * Deliberately narrow: it runs no arbitrary commands, and both things it does are limited to
- * virtual displays owned by Yunus (never the car's main screen or another app's display). It
+ * Deliberately narrow: it runs no arbitrary commands, and what it does is limited to virtual
+ * displays owned by Yunus (never the car's main screen or another app's display), except one fixed
+ * gesture on the main screen that takes no arguments (qsbar). It
  * listens on 127.0.0.1 only and serves a connection only after it sends the token Yunus passed
  * on the command line. One request per line:
  *   launch <display> <package>/<activity>              start that activity on the display
  *   close <display>                                     close the apps running on the display
  *   t <display> <action> <id> <x> <y> [<id> <x> <y> …]   inject a touch event into the display
+ *   qsbar                                               open the car's quick panel (BYD SystemUI's
+ *                                                       BydQSBar): the swipe a finger would make
  *   watch                                               send the car's window, sunshade and speed
  *                                                       values on this connection (read only)
  * Car values come back as lines "ev <Device> 0x<id> <i|f|d> <value>".
@@ -57,6 +60,7 @@ object ShellHelper {
         try { while (true) {
             val line = reader.readLine() ?: break
             if (line == "watch") { CarWatch.subscribe(out); continue }
+            if (line == "qsbar") { try { injector.openCarPanel() } catch (t: Throwable) { System.err.println("qsbar: $t") }; continue }
             try {
                 val fields = line.split(' ')
                 val display = fields.getOrNull(1)?.toIntOrNull() ?: continue
@@ -167,6 +171,32 @@ private class TouchInjector {
     private val inject = inputManager.javaClass.getMethod("injectInputEvent", InputEvent::class.java, Int::class.javaPrimitiveType)
     private val setDisplayId = MotionEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
     private var downTime = 0L
+
+    /**
+     * The car's quick panel opens from a swipe down on the right part of its status bar (the left
+     * part pulls down the notifications). Yunus runs full screen, so the bar is hidden: a first
+     * swipe from the top edge brings it in, a second one on it opens the panel. Fixed, on the main
+     * screen (display 0), in its current orientation.
+     */
+    fun openCarPanel() {
+        val info = Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null)
+            .let { it.javaClass.getMethod("getDisplayInfo", Int::class.javaPrimitiveType).invoke(it, 0) }
+        val w = info.javaClass.getField("logicalWidth").getInt(info).toFloat()
+        val h = info.javaClass.getField("logicalHeight").getInt(info).toFloat()
+        swipe(w * 0.78f, 1f, h * 0.2f)
+        SystemClock.sleep(700)
+        swipe(w * 0.78f, h * 0.028f, h * 0.46f)
+    }
+
+    private fun swipe(x: Float, y0: Float, y1: Float) {
+        val steps = 12
+        for (i in 0..steps + 1) {
+            val y = y0 + (y1 - y0) * minOf(i, steps) / steps
+            val action = if (i == 0) MotionEvent.ACTION_DOWN else if (i > steps) MotionEvent.ACTION_UP else MotionEvent.ACTION_MOVE
+            touch(0, listOf(action.toString(), "0", x.toString(), y.toString()))
+            SystemClock.sleep(20)
+        }
+    }
 
     // fields: <action> <id> <x> <y> [<id> <x> <y> …]
     fun touch(display: Int, fields: List<String>) {

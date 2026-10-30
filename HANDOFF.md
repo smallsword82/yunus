@@ -85,10 +85,14 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   kendi çubuğunu açıyordu. Artık cihazda sistemden gelen değişiklikte yalnız dock'taki ses tuşu
   güncelleniyor (`setVol`, launcher.html). Yunus'un dock tuşlarında yalnız Yunus'un çubuğu çıkıyor
   (araçta ekran görüntüsüyle doğrulandı). Kullanıcıya direksiyon tuşuyla denetmesini söyle.
-- **Yunus kontrol paneli: yapıldı, araçta denendi, kullanıcı istemedi — kaldırıldı (30.10).**
-  Android düğmelerinden (parlaklık, BT, sessiz…) oluşan kendi paneli "aracın kendi kısayolları
-  değil" diye beğenmedi. Aynı fikri tekrar önerme; istenen, aracın kendi kısayolları
-  (BYD SystemUI `BydQSBar`, araç düğmeleri BYD imzası istiyor).
+- **Durum şeridini aşağı çekmek = aracın kendi kısayol paneli (30.10, araçta doğrulandı).**
+  Yunus'un kendi Android düğmeli paneli yapıldı, kullanıcı istemedi ("aracın kendi kısayolları
+  değil"), kaldırıldı — tekrar önerme. Şimdi: sayfa `YunusNative.openCarPanel()` → yardımcıya
+  `qsbar` → `TouchInjector.openCarPanel()` ana ekranda sabit iki kaydırma yapar (gizli BYD
+  çubuğunu getir, sonra çubuğun sağ tarafından aşağı çek; sol taraf bildirimleri açar). Argüman
+  almıyor, yardımcının ana ekranda yaptığı tek şey bu. `cmd statusbar expand-settings` /
+  `expandSettingsPanel` BYD'de bildirimleri açıyor, paneli değil. BYD paneli açıkken kabuk o
+  pencereye dokunamıyor ("Injecting to another application"): kapatmak `cmd statusbar collapse`.
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya

@@ -376,6 +376,7 @@ button { font-family:inherit; color:inherit; }
    the left, Wi-Fi and cellular on the right); the map, Google Maps included, starts below it. */
 #topBar { position:absolute; top:0; left:0; right:0; height:48px; display:flex; align-items:center; padding:0 28px; font-size:22px; font-weight:500; background:var(--pn); color:var(--tx); z-index:4; }
 #topBar > * + * { margin-left:26px; }
+#topBar { touch-action:none; } /* pulled down for the car's quick panel */
 #topBar #outTemp { color:var(--tx); }
 #lockInd { font-size:26px; cursor:pointer; padding:8px 2px; }
 #lockInd.off { opacity:.35; } /* state not known yet */
@@ -4236,6 +4237,20 @@ $('btInd').onclick = () => openSetting('bluetooth');
 // The bell: the number of notifications; a tap pulls down the system's notification shade.
 $('bellInd').onclick = () => { if (window.YunusNative && YunusNative.openNotifications) YunusNative.openNotifications(); };
 $('locInd').onclick = () => openSetting('location');
+// Pull down on the status bar: the car's own quick panel (its Wi-Fi, Bluetooth, brightness and car
+// switches, which only BYD's apps may work). The helper's swipe passes through Yunus's bar too, so
+// pulls are ignored for a moment after one. A pull does not also fire the shortcut it started on.
+let barPull = null, barPulled = false, barPullAt = 0;
+$('topBar').addEventListener('pointerdown', (e) => { barPull = e.clientY; barPulled = false; });
+addEventListener('pointermove', (e) => {
+  if (barPull == null || e.clientY - barPull < 30 * stageScale) return;
+  barPull = null; barPulled = true;
+  if (Date.now() - barPullAt < 2500 || !(window.YunusNative && YunusNative.openCarPanel)) return;
+  barPullAt = Date.now();
+  YunusNative.openCarPanel();
+});
+addEventListener('pointerup', () => { barPull = null; });
+$('topBar').addEventListener('click', (e) => { if (barPulled) { barPulled = false; e.stopPropagation(); } }, true);
 $('clockTxt').onclick = () => openSetting('date');
 function tickClock() { $('clockTxt').textContent = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); }
 tickClock(); setInterval(tickClock, 10000);
