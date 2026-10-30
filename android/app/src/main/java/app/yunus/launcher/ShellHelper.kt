@@ -431,6 +431,10 @@ private object CarWatch {
                 val v = fg.invoke(inst, 1004, id) as Int
                 if (v in 0..15) event("Light", id, v)
             }
+            // The cluster's driver-assist row: blind spot and lane keeping switched on (ADAS 1038),
+            // and the cruise control's state and set speed (instrument; 65535 while not in use).
+            for (id in intArrayOf(0x41800008, 0x32F0002A)) { val v = fg.invoke(inst, 1038, id) as Int; if (v in 0..15) event("Adas", id, v) }
+            for (id in intArrayOf(0x29600032, 0x2A600008)) { val v = fg.invoke(inst, 1007, id) as Int; event("Instrument", id, if (v in 0..300) v else -1) }
         } catch (t: Throwable) { lightsDead = true; System.err.println("watch lights: ${t.cause ?: t}") }
         if (polls.any { !it.dead } || !lightsDead) main.postDelayed({ poll() }, 1000)
     }
@@ -469,6 +473,7 @@ private object CarWatch {
      */
     fun command(json: String) = main.post {
         if (json.contains("\"cmd\":\"wifi")) return@post wifiCommand(json)
+        if (json.contains("\"cmd\":\"probe")) return@post probe(json)
         if (json.contains("\"cmd\":\"ac") || json.contains("\"cmd\":\"wheelHeat") || json.contains("\"cmd\":\"seat\"")) return@post acCommand(json)
         val dev = bodyworkDev ?: run { System.err.println("cmd: no bodywork device"); return@post }
         try {
@@ -640,6 +645,18 @@ private object CarWatch {
             }
             main.postDelayed({ wifiReport() }, 600)
         } catch (t: Throwable) { System.err.println("wifi $json: ${t.cause ?: t}") }
+    }
+
+    /** {cmd:probe, type, ids:[…]} → msg {probe:{type, values:{id: value}}}: a feature's raw value read
+     *  with get(deviceType, featureId), to find what a signal says on this car. */
+    private fun probe(json: String) {
+        val inst = instrumentDev; val fg = featGet ?: return
+        try {
+            val o = org.json.JSONObject(json); val type = o.getInt("type"); val ids = o.getJSONArray("ids")
+            val vals = org.json.JSONObject()
+            for (i in 0 until ids.length()) { val id = ids.getInt(i); vals.put(String.format("0x%08X", id), try { fg.invoke(inst, type, id) } catch (t: Throwable) { "${t.cause ?: t}" }) }
+            send("msg " + org.json.JSONObject().put("probe", org.json.JSONObject().put("type", type).put("values", vals)))
+        } catch (t: Throwable) { System.err.println("probe $json: ${t.cause ?: t}") }
     }
 
     private fun wifiReport() {

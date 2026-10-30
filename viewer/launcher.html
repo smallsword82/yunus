@@ -439,6 +439,14 @@ button { font-family:inherit; color:inherit; }
 #beamInd svg { width:40px; height:28px; fill:none; stroke:var(--cd2); stroke-width:2.6; stroke-linecap:round; }
 #beamInd svg path:first-child { fill:var(--cd2); }
 #indLow.on { stroke:#2fd06a; } #indLow.on path:first-child { fill:#2fd06a; }
+#adasR { position:absolute; top:78px; right:30px; z-index:2; display:flex; align-items:center; }
+.adas svg, .tt.adas svg { height:28px; fill:none; stroke:var(--cd2); stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+.tt.adas svg { width:34px; }
+#indIcc { display:flex; align-items:center; gap:5px; color:var(--cd2); }
+#indIcc svg { width:30px; }
+#indIcc b { font-size:24px; font-weight:600; min-width:24px; }
+.tt.adas.on svg { stroke:var(--tx); } #indIcc.on { color:var(--tx); } #indIcc.on svg { stroke:var(--tx); }
+#indIcc.act, #indIcc.act svg { color:#2fd06a; stroke:#2fd06a; } /* cruise working */
 #indLow.high { stroke:#3e8bff; } #indLow.high path:first-child { fill:#3e8bff; }
 #indPark path:nth-child(2) { fill:var(--cd2); }
 #indPark.on { stroke:#2fd06a; } #indPark.on path:nth-child(-n+2) { fill:#2fd06a; } /* position lamps (knob on park) */
@@ -829,6 +837,10 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
       <div class="batt" id="battBox"><span style="color:var(--mu)" id="rangeTxt">312 km</span><div class="cell"><div style="width:78%" id="socBar"></div><i class="ti ti-bolt" id="battBolt"></i></div><span id="socTxt">78%</span></div>
     </div>
     <div id="telltales"></div>
+    <!-- Driver assist, as the cluster shows it all the time: blind spot and lane keeping lead the
+         warning-light column (updateTelltales), the cruise control and its set speed sit under the
+         battery. -->
+    <div id="adasR" class="adas"><span id="indIcc" aria-label="Hız sabitleyici"><svg viewBox="0 0 28 28"><circle cx="14" cy="14" r="11"/><path d="M14 14l5-5M6 18h3M19 18h3"/></svg><b id="iccSpd">—</b></span></div>
     <div id="speedBox" style="opacity:0">
       <div class="spdRow"><span id="speed">0</span><span class="spdUnit" id="spdUnit">km/h</span></div>
       <div id="powerKw">0 kW</div>
@@ -1267,15 +1279,19 @@ let dismissedAlert = null;
 function updateTelltales() {
   // Red ones first, two columns of nine at most; beyond that the last ones fold into a "+N"
   // chip (red if a red one is folded) that opens the warnings list.
+  // Blind spot and lane keeping lead the column all the time, as on the cluster: grey off, white on.
+  const a = S.adas || {};
+  const assist = `<div class="tt adas ${a.bsd ? 'on' : ''}" title="Kör nokta"><svg viewBox="0 0 34 28"><rect x="12" y="5" width="10" height="18" rx="3"/><path d="M8 17a6 6 0 0 1 0-6M4.5 19.5a10 10 0 0 1 0-11M26 17a6 6 0 0 0 0-6M29.5 19.5a10 10 0 0 0 0-11"/></svg></div>`
+    + `<div class="tt adas ${a.lane ? 'on' : ''}" title="Şerit"><svg viewBox="0 0 34 28"><path d="M5 26 11 2M29 26 23 2"/><rect x="13" y="11" width="8" height="12" rx="2.5"/></svg></div>`;
   const lit = TELLTALES.filter((t) => !t.status && isWarning(t) && ttLit(t))
     .sort((a, b) => (ttColor(a) === 'red' ? 0 : 1) - (ttColor(b) === 'red' ? 0 : 1));
-  const box = $('telltales'), fit = 18;
+  const box = $('telltales'), fit = 16; // two places go to the assist icons
   const shown = lit.length > fit ? lit.slice(0, fit - 1) : lit;
   const hidden = lit.slice(shown.length);
-  const key = lit.map((t) => t.id + (halTT[t.id] && halTT[t.id].flash ? '*' : '')).join() + '|' + shown.length; // * flashing
+  const key = lit.map((t) => t.id + (halTT[t.id] && halTT[t.id].flash ? '*' : '')).join() + '|' + shown.length + '|' + !!a.bsd + !!a.lane; // * flashing
   if (box.dataset.key !== key) {
     box.dataset.key = key;
-    box.innerHTML = shown.map(ttHtml).join('') + (hidden.length
+    box.innerHTML = assist + shown.map(ttHtml).join('') + (hidden.length
       ? `<span class="more ${hidden.some((t) => ttColor(t) === 'red') ? 'red' : ''}" title="${hidden.map((t) => t.name).join(', ')}">+${hidden.length}</span>` : '');
   }
   // A red fault also pops up a notification with the manual's advice; a tap hides it until
@@ -4692,6 +4708,11 @@ const CAR_HAL_MAP = {
   'Get lampLow': (v) => (v === 0 || v === 1 ? { lowLamp: v === 1 } : {}),
   'Get lampHigh': (v) => (v === 0 || v === 1 ? { highBeam: v === 1 } : {}),
   'Get drl': (v) => (v === 1 || v === 2 ? { drl: v === 1 } : {}), // getDayRunningLightState: 1 on, 2 off
+  // Driver assist (updateTelltales, #adasR): blind spot / lane keeping switched on; cruise state and set speed.
+  'Adas 0x41800008': (v) => ({ adas: { bsd: v === 1 } }), // ADAS_BSD_STATE
+  'Adas 0x32F0002A': (v) => ({ adas: { lane: v === 1 } }), // ADAS_ELKA_SWITCH_STATE
+  'Instrument 0x29600032': (v) => ({ adas: { iccState: v } }), // DD_ACC_INDICAT_LIGHT_STATE (-1 not in use)
+  'Instrument 0x2A600008': (v) => ({ adas: { iccSpeed: v > 0 ? v : null } }), // DD_ACC_CRUISING_SPEED, km/h
   'Light 0x4FE0000E': (v) => (v === 1 || v === 2 ? { drl: v === 1 } : {}), // LIGHT_LEFT_DAYTIME_LIGHT_STATE
   'Light 0x38A00008': (v) => ({ sideLamp: v === 1 }), // LIGHT_SIDE_LIGHT
   // LIGHT_TURN_SIGNAL_LIGHT: 1 off, 2/3 left, 4/5 right, 6-9 hazard and emergency flashing.
@@ -4847,6 +4868,7 @@ window.yunusCar = (m) => {
   }
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.net) { renderNet(m.net); return; }
+  if (m.probe) { (window.YunusProbe = window.YunusProbe || []).push(m.probe); return; } // see the helper's probe
   if (m.btList) { netData.bt = m.btList; if (netPopKind === 'bt') renderNetPop(); return; }
   if (m.wifi) { m.wifi.nets.sort((a, b) => b.on - a.on); netData.wifi = m.wifi; if (netPopKind === 'wifi') renderNetPop(); return; } // the joined one first
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
@@ -4895,7 +4917,7 @@ window.yunusCar = (m) => {
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
-    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'drl', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'drl', 'adas', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
     'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle', 'belts'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
@@ -4933,6 +4955,13 @@ window.yunusCar = (m) => {
   if (m.lowLamp != null) S.lowLamp = m.lowLamp;
   if (m.sideLamp != null) S.sideLamp = m.sideLamp;
   if (m.drl != null) S.drl = m.drl;
+  if (m.adas) {
+    const a = Object.assign(S.adas = S.adas || {}, m.adas);
+    updateTelltales(); // blind spot / lane keeping in the warning-light column
+    $('iccSpd').textContent = a.iccSpeed ? a.iccSpeed : '—';
+    $('indIcc').classList.toggle('on', !!a.iccSpeed);
+    $('indIcc').classList.toggle('act', a.iccState === 1);
+  }
   if (m.fog != null) S.fog = m.fog;
   if (m.acOn != null) { S.ac = m.acOn; renderTemp(); setFan(S.fan, true); } // the fan stops turning with the climate off
   if (m.acTemp != null) setTemp(m.acTemp, true);
