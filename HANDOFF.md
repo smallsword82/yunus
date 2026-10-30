@@ -109,7 +109,7 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
 5. **Harita hızı:** çifte yük + ortalama çözüldü (commit'siz). Kalan jank Yunus'un kendisi (~38 ms/kare, gfxinfo):
    kaynağı **3D araç WebGL'inin sürekli render'ı** — on-demand render / pixelRatio düşürme düşünülebilir. Maps kendisi ~105 ms/kare.
 6. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
-7. **Vites:** `getCurrentGear` paket/uid hatası (çözülmedi); cihazda vites `P` varsayılanda.
+7. ~~Vites~~ — **çözüldü (30.10):** `getCurrentGear` içindeki EPB kontrolü CarSettings'i "android" paketiyle sorguladığı için reddediliyordu; vites doğrudan `getGearboxAutoModeType` ile okunuyor (P 1, R 2, N 3, D 4).
 
 ## Nasıl çalışılıyor (önemli)
 

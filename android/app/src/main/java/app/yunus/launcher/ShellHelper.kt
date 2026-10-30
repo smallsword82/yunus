@@ -344,7 +344,9 @@ private object CarWatch {
         "speed.BYDAutoSpeedDevice" to listOf(Get("speed", "getCurrentSpeed")),
         // The park-brake and seat-belt lights arrive as events only on change, so read them too
         // (Instrument's getELECParkingState/Color answer 65535, invalid, on the Dolphin).
-        "gearbox.BYDAutoGearboxDevice" to listOf(Get("gear", "getCurrentGear"), Get("parkSw", "getParkBrakeSwitch")), // 1 applied
+        // getCurrentGear is refused (its EPB check queries CarSettings as package "android", not our
+        // uid 2000); it is built on GEARBOX_AUTO_MODE (P 1, R 2, N 3, D 4, M 5, S 6), read directly.
+        "gearbox.BYDAutoGearboxDevice" to listOf(Get("gear", "getGearboxAutoModeType"), Get("parkSw", "getParkBrakeSwitch")), // 1 applied
         "safetybelt.BYDAutoSafetyBeltDevice" to listOf(Get("belt1", "getSafetyBeltStatus", 1)), // SAFETY_BELT_AREA_MAIN; 1 buckled, 0 not
         "doorlock.BYDAutoDoorLockDevice" to listOf(Get("lock", "getDoorLockStatus", 1)), // driver's door: 1 unlocked, 2 locked
         "statistic.BYDAutoStatisticDevice" to listOf(Get("soc", "getElecPercentageValue"), Get("range", "getElecDrivingRangeValue"),
