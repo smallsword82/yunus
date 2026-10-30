@@ -55,6 +55,18 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
 
 ## Sıradaki işler
 
+0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
+   `watch` gönderir; yardımcı sistem bağlamıyla Bodywork/Speed'i dinler ve her saniye hız, vites,
+   SOC, menzil, km, direksiyon açısı, 4 cam ve perde getter'larını çağırır. Araçta
+   `adb shell cat /data/local/tmp/yunus_helper.log` → "watch: listening to Bodywork/Speed" mi,
+   yoksa her getter için SecurityException mı? Çalışıyorsa: hız gerçek değerden gelir (motor
+   devri tahmini devre dışı kalır), camlar/perde 3B modelde hareket eder, `S.steerAngle` dolar
+   (yol görünümünü kıvırmak için kullanılabilir). Reddediliyorsa Kinex'in daemon'unu
+   (kinex_hal_api_service.jar, `HalDaemonBodywork`) daha ayrıntılı incele.
+   Ayrıca araçta doğrulanacak: lastik basıncı birimi (250 = 2,5 bar varsayıldı), şarj gücü kW mi,
+   motor devri→hız katsayısı (`kmhPerRpm`), uyarı lambası kodları, kısayol paneli (uiautomator
+   dump), yan kamera (kamera listesi / com.byd.avc gömme), SmartTube 3. pencere siyah ekran.
+
 1. **Müzik kartı araçta:** kod hazır ve emülatörde doğrulandı (`MediaBridge.kt`: başlık, sanatçı,
    kapak, ilerleme, önceki/oynat/sonraki, kaynak seçici). Araçta Yunus'a bir kez **bildirim erişimi**
    verilmeli (karttaki yazıya dokun → "Yunus müzik kartı"). Radyonun (`com.byd.mediacenter`) kapak
