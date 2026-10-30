@@ -861,7 +861,10 @@ private class CarHal(private val ctx: android.content.Context, private val emit:
         "tyre.BYDAutoTyreDevice", "light.BYDAutoLightDevice",
         "pm2p5.BYDAutoPM2p5Device", "power.BYDAutoPowerDevice",
         "sensor.BYDAutoSensorDevice", "ota.BYDAutoOtaDevice",
-        "safetybelt.BYDAutoSafetyBeltDevice", "setting.BYDAutoSettingDevice")
+        "safetybelt.BYDAutoSafetyBeltDevice", "setting.BYDAutoSettingDevice",
+        // Windows and the sunshade live here; it is expected to refuse (signature _GET), tried
+        // in case this head unit's build lets the listener through.
+        "bodywork.BYDAutoBodyworkDevice")
     private val held = java.util.concurrent.CopyOnWriteArrayList<Any>()
     private val last = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)

@@ -4307,6 +4307,13 @@ const CAR_HAL_MAP = {
   'Charging 0x34400032': (v) => ({ gun: v }),
   'Charging 0x32300018': (v) => ({ chargeKw: v }),
   'Charging 0x32300038': (v) => ({ chargeMin: v }),
+  // Windows and sunshade, in % open (BODYWORK_*_PERCENT). The Bodywork device is signature-locked,
+  // so these arrive only if this head unit lets its listener through (to be seen on the car).
+  'Bodywork 0x38800018': (v) => ({ windows: { FL: v } }),
+  'Bodywork 0x4B900010': (v) => ({ windows: { FR: v } }),
+  'Bodywork 0x38800020': (v) => ({ windows: { RL: v } }),
+  'Bodywork 0x4B900018': (v) => ({ windows: { RR: v } }),
+  'Bodywork 0x41A00010': (v) => ({ sunshade: v }),
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
@@ -4381,7 +4388,7 @@ window.yunusCar = (m) => {
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
     'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
-    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin'];
+    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'sunshade'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
@@ -4391,6 +4398,7 @@ window.yunusCar = (m) => {
   if (m.doors) Object.assign(S.doors, m.doors);
   if (m.trunk != null && m.trunk !== S.trunk) setTrunk(m.trunk, true);
   if (m.windows) Object.assign(S.windows, m.windows);
+  if (m.sunshade != null) setShade(m.sunshade);
   if (m.chargePort != null && m.chargePort !== S.charging) setCharge(m.chargePort, true);
   if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
   if (m.tyres) Object.assign(S.tyres, m.tyres);
