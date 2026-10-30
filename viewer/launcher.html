@@ -124,7 +124,7 @@ input { user-select:text; -webkit-user-select:text; }
 /* Portrait (the Dolphin's screen turned upright, 1080×1920): the windows stack, car on top, then
    the map, the third window and the dock. The same sizes (--carW, --sideW) become heights and the
    handles lie across; the dock takes two rows (climate, then apps and volume). */
-#stage.portrait { width:1080px; height:1920px; grid-template-columns:1fr; grid-template-rows:48px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 224px;
+#stage.portrait { width:1080px; height:1920px; grid-template-columns:1fr; grid-template-rows:56px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 224px;
   transition:grid-template-rows .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait.dragging { transition:none; }
 /* The status bar (time, temperature, Wi-Fi, cellular) runs across the top of the screen upright;
@@ -133,7 +133,7 @@ input { user-select:text; -webkit-user-select:text; }
 #stage.portrait #carPanel { grid-row:2; grid-column:1; }
 #stage.portrait #mapWrap { grid-row:3; grid-column:1; min-height:0; }
 #stage.portrait #map { top:0; }
-#stage.portrait #mapWrap > .floating { margin-top:-48px; } /* the map's controls had room for the bar */
+#stage.portrait #mapWrap > .floating { margin-top:-56px; } /* the map's controls had room for the bar */
 #stage.portrait #sidePanel { grid-row:4; grid-column:1; border-left:0; border-top:1px solid var(--cd); }
 #stage.portrait #dock { grid-row:5; grid-column:1; flex-wrap:wrap; align-content:center; padding:6px 20px; }
 #stage.portrait #dock .sepBreak { flex-basis:100%; height:0; margin:4px 0; border:0; }
@@ -302,9 +302,9 @@ button { font-family:inherit; color:inherit; }
 #stage.driving #telltales { top:300px; }
 #status .batt { margin-left:auto; }
 #netStat { display:flex; align-items:center; margin-left:auto; }
-#netStat > * + * { margin-left:12px; }
+#netStat > * + * { margin-left:14px; }
 #netStat .hide { display:none; }
-#netStat i { font-size:24px; }
+#netStat i { font-size:29px; }
 #topBar #clockTxt, #topBar #outTemp, #netStat i { cursor:pointer; padding:8px 4px; } /* shortcuts */
 #netStat .off { opacity:.4; }
 #bellInd { position:relative; cursor:pointer; }
@@ -377,18 +377,18 @@ button { font-family:inherit; color:inherit; }
 #bsCam.warn { box-shadow:0 0 0 6px #e5484d, 0 10px 30px rgba(0,0,0,.5); }
 /* Tesla's status bar: a thin strip along the top of the map area (time and outside temperature on
    the left, Wi-Fi and cellular on the right); the map, Google Maps included, starts below it. */
-#topBar { position:absolute; top:0; left:0; right:0; height:48px; display:flex; align-items:center; padding:0 28px; font-size:22px; font-weight:500; background:var(--pn); color:var(--tx); z-index:4; }
+#topBar { position:absolute; top:0; left:0; right:0; height:56px; display:flex; align-items:center; padding:0 28px; font-size:25px; font-weight:500; background:var(--pn); color:var(--tx); z-index:4; }
 #topBar > * + * { margin-left:26px; }
 #topBar { touch-action:none; } /* pulled down for the car's quick panel */
 #topBar #outTemp { color:var(--tx); }
-#lockInd { font-size:26px; cursor:pointer; padding:8px 2px; }
+#lockInd { font-size:30px; cursor:pointer; padding:8px 2px; }
 #lockInd.off { opacity:.35; } /* state not known yet */
 #lockInd.open { color:var(--dn); }
 #profile { display:flex; align-items:center; cursor:pointer; }
 #profile:empty, #profile.hide { display:none; }
-#profPic { width:30px; height:30px; border-radius:50%; background:var(--ac) center/cover no-repeat; color:#fff; font-size:15px; font-weight:600;
+#profPic { width:35px; height:35px; border-radius:50%; background:var(--ac) center/cover no-repeat; color:#fff; font-size:17px; font-weight:600;
   display:flex; align-items:center; justify-content:center; flex:none; }
-#profName { margin-left:10px; font-size:20px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#profName { margin-left:10px; font-size:23px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #topBar #netStat { margin-left:auto; }
 #car3d { position:absolute; top:0; right:0; bottom:0; left:0; }
 #fpsMeter { position:absolute; top:84px; left:36px; z-index:5; font:500 18px/1.3 ui-monospace,monospace; color:var(--mu); background:var(--cd); padding:6px 10px; border-radius:8px; pointer-events:none; display:none; }
@@ -480,7 +480,7 @@ button { font-family:inherit; color:inherit; }
    parked card (below the bottom edge) into view */
 #mapWrap { position:relative; overflow:clip; }
 #carPanel { overflow:clip; }
-#map { position:absolute; top:48px; right:0; bottom:0; left:0; background:#1a1c20; }
+#map { position:absolute; top:56px; right:0; bottom:0; left:0; background:#1a1c20; }
 #stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
 #mapStyleBtn { right:24px; top:72px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; font-size:30px; border:0; cursor:pointer; }
 #mapStyleBtn i { font-size:30px; }
