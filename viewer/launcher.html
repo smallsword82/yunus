@@ -701,6 +701,13 @@ button { font-family:inherit; color:inherit; }
 .clim .ico { display:block; width:80px; height:80px; /* the PNGs carry their own padding */ background:currentColor;
   -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
 .clim:not(.lit):not(.heat):not(.vent) .ico { opacity:.78; }
+/* Air direction: three stacked icons (face, feet, screen); the directions in use in blue. */
+#airFlow { position:relative; }
+#airFlow .ico { position:absolute; left:0; top:0; width:80px; height:80px; }
+#airFlow .ico:not(.on):not(.fig) { opacity:.3; }
+#airFlow .ico.on { color:#3e6ae1; opacity:1; }
+/* The trunk key on the car model is not wanted for now. */
+#hTrunk { display:none !important; }
 /* A working key's icon carries a moving light: rising through the heaters and demisters (warm
    air going up), across recirculation and seat cooling (air going round). Only the masked
    background moves;  */
@@ -4296,7 +4303,10 @@ const FLOW_STEPS = [{ face: true, foot: false, defrost: false }, { face: true, f
   { face: false, foot: true, defrost: false }, { face: false, foot: true, defrost: true }];
 function renderAirFlow() {
   const f = S.flow, on = (k) => (f[k] ? 'on' : '');
-  $('airFlow').innerHTML = '<i class="ico" style="--ico:url(img/byd/sys_navi_bar_wind.png)"></i>'; // the car's own icon; the climate card shows the directions
+  // The bar's own air-direction icon cut into its parts (img/byd/wind_part_*): the seated figure,
+  // and the screen, face and feet arrows, lit in blue for the directions in use.
+  $('airFlow').innerHTML = ['person', 'defrost', 'face', 'foot']
+    .map((k) => `<i class="ico ${k === 'person' ? 'fig' : on(k)}" style="--ico:url(img/byd/wind_part_${k}.png)"></i>`).join('');
 }
 $('airFlow').onclick = () => {
   const i = FLOW_STEPS.findIndex((s) => s.face === S.flow.face && s.foot === S.flow.foot && s.defrost === S.flow.defrost);
