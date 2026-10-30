@@ -2636,11 +2636,15 @@ $('gears').onclick = () => { if (S.live || DEVICE) return; setGear(S.gear === 'P
 // On the car: signal state from the light HAL, video from the BYD AVM (360) camera.
 // Here the camera feed is a drawn placeholder.
 let bsHideTimer = null, bsSide = 'left', bsRaf = null;
+// Both status-bar arrows blink together with the hazards; otherwise just the signalled side.
+function updateSignalArrows() {
+  $('sigL').classList.toggle('on', S.signal === 'left' || S.hazard);
+  $('sigR').classList.toggle('on', S.signal === 'right' || S.hazard);
+}
 function setSignal(side, fromCar) {
   if (S.live && !fromCar) return;
   S.signal = fromCar ? side : S.signal === side ? null : side;
-  $('sigL').classList.toggle('on', S.signal === 'left');
-  $('sigR').classList.toggle('on', S.signal === 'right');
+  updateSignalArrows();
   updateBlindSpot();
 }
 // Demo: tap the beam tell-tales to flick the high beam. On the car this comes from the light HAL.
@@ -3941,7 +3945,7 @@ body.addEventListener('click', (e) => {
   if (act === 'charge') return setCharge(!S.charging);
   if (act === 'play') S.playing = !S.playing;
   if (act === 'plate') return savePlate();
-  if (act === 'hazard') S.hazard = !S.hazard;
+  if (act === 'hazard') { S.hazard = !S.hazard; updateSignalArrows(); }
   if (act === 'pet') return startPet();
   if (act === 'clean') return startClean();
   if (act === 'phoneDemo') return phoneConnected();
@@ -4591,7 +4595,7 @@ window.yunusCar = (m) => {
   }
   if (m.tyreState) Object.assign(S.tyreState, m.tyreState);
   if ('signal' in m && m.signal !== S.signal) setSignal(m.signal, true);
-  if (m.hazard != null) S.hazard = m.hazard;
+  if (m.hazard != null && m.hazard !== S.hazard) { S.hazard = m.hazard; updateSignalArrows(); }
   if (m.lights) S.lights = m.lights;
   if (m.highBeam != null) S.highBeam = m.highBeam;
   if (m.lowLamp != null) S.lowLamp = m.lowLamp;
