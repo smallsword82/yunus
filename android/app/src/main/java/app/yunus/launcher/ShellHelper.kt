@@ -264,6 +264,25 @@ private object CarWatch {
     private var started = false
     private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)
 
+    /** A context whose permission checks all pass, so the HAL devices' own check does not refuse this
+     *  shell process (as Kinex's Lb/W; does). Overrides only the check/enforce methods. */
+    private class Permissive(base: android.content.Context) : android.content.ContextWrapper(base) {
+        private val granted = android.content.pm.PackageManager.PERMISSION_GRANTED
+        // Some getters (gearbox, door-lock) also check the caller's package matches its uid; the
+        // system context reports "android" (uid 1000) while we run as uid 2000, so they throw
+        // "calling package android does not match caller's uid 2000". Report shell's package, which
+        // matches uid 2000 (Kinex forces the same op-package).
+        override fun getPackageName() = "com.android.shell"
+        override fun getOpPackageName() = "com.android.shell"
+        override fun getApplicationContext(): android.content.Context = this
+        override fun checkSelfPermission(permission: String) = granted
+        override fun checkCallingOrSelfPermission(permission: String) = granted
+        override fun checkCallingPermission(permission: String) = granted
+        override fun checkPermission(permission: String, pid: Int, uid: Int) = granted
+        override fun enforceCallingOrSelfPermission(permission: String, message: String?) {}
+        override fun enforceCallingPermission(permission: String, message: String?) {}
+    }
+
     fun subscribe(out: java.io.OutputStream) {
         subscribers.add(out)
         android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -275,11 +294,18 @@ private object CarWatch {
     fun unsubscribe(out: java.io.OutputStream) { subscribers.remove(out) }
 
     private fun start() {
-        val ctx = try {
+        val base = try {
             val at = Class.forName("android.app.ActivityThread")
             val thread = at.getMethod("systemMain").invoke(null)
             at.getMethod("getSystemContext").invoke(thread) as android.content.Context
         } catch (t: Throwable) { System.err.println("watch: no system context: $t"); return }
+        // The BYD HAL devices check their signature BYDAUTO_*_GET/SET perms on the Context handed to
+        // getInstance; running as shell we don't hold them, so a direct construction is refused.
+        // Kinex's kinex_hal_api_service.jar (class Lb/W;) hands the device a Context whose permission
+        // checks all pass, so the device's own check succeeds and bodywork (windows, sunshade,
+        // steering) and door-lock become readable and commandable from this shell process. Same
+        // approach here; proven on the car, where Kinex reads and locks the Dolphin this way.
+        val ctx: android.content.Context = Permissive(base)
         for (name in listOf("bodywork.BYDAutoBodyworkDevice", "speed.BYDAutoSpeedDevice"))
             try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
         // Also the getters Kinex reads, once a second (SOC, range and speed don't come as events
