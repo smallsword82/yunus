@@ -17,7 +17,7 @@ Kinex'in jar'ı, kullanılmayan fontlar/görseller ve Draco çözücü APK'dan �
 | Hız, güç çubuğu (gaz/rejen), toplam km | ⚠️ eşlendi; hız motor devrinden (katsayı sürüşte ayarlanacak) |
 | Şarj durumu + Tesla tarzı şarj görünümü | ⚠️ eşlendi, emülatörde taklitle doğrulandı |
 | Uyarı lambaları (20), lastik basınçları | ⚠️ gösterge verisinden eşlendi, araçta görülecek |
-| Camlar, perde, direksiyon açısı, kilit durumu, park halinde SOC | ⚠️ kabuk yardımcısı Kinex yöntemiyle okumayı deniyor — araçta ilk iş |
+| Camlar, perde, direksiyon açısı, kilit durumu, park halinde SOC | ❌ araçta denendi (30.10): kabuk + sistem bağlamı da reddedildi (BODYWORK/DOOR_LOCK/SPEED/GEARBOX/STATISTIC izinleri yok). Cam yüzdesi 0x38800018 yalnız BYD imzalı uygulamalara gidiyor. Tekrar deneme. |
 | Kilitleme (komut), kör nokta, gerçek yan kamera | ❌ BYD imzası / BYD uygulaması gerekiyor (plan aşağıda) |
 | Harita alanı: Google Maps / Yunus Harita, 3B binalar, şarj istasyonları, navigasyon | ✅ |
 | 3 pencere, sürükleyerek boyut, 3. pencerede gerçek uygulamalar, kapatma | ✅ emülatörde |
