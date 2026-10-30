@@ -184,10 +184,21 @@ private class TouchInjector {
             .let { it.javaClass.getMethod("getDisplayInfo", Int::class.javaPrimitiveType).invoke(it, 0) }
         val w = info.javaClass.getField("logicalWidth").getInt(info).toFloat()
         val h = info.javaClass.getField("logicalHeight").getInt(info).toFloat()
+        // BYD's status bar may be pushed above the screen (wm overscan 0,-84,…: it never shows over
+        // Yunus); then one pull started on it, up there, opens the quick panel straight away.
+        val bar = statusBarTop()
+        if (bar != null && bar < 0) { swipe(w * 0.78f, bar / 2f, h * 0.46f); return }
         swipe(w * 0.78f, 1f, h * 0.2f)
         SystemClock.sleep(700)
         swipe(w * 0.78f, h * 0.028f, h * 0.46f)
     }
+
+    /** The top of BYD's status bar window (negative when it sits above the screen), from dumpsys. */
+    private fun statusBarTop(): Int? = try {
+        val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", "dumpsys window windows | grep -A30 ' StatusBar}' | grep -m1 'mFrame='"))
+        val line = p.inputStream.bufferedReader().readText(); p.waitFor()
+        Regex("""mFrame=\[(-?\d+),(-?\d+)\]""").find(line)?.groupValues?.get(2)?.toInt()
+    } catch (_: Throwable) { null }
 
     private fun swipe(x: Float, y0: Float, y1: Float) {
         val steps = 12

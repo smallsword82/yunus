@@ -412,11 +412,35 @@ class MainActivity : Activity() {
 
     private fun hideSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // On the car BYD's bars are pushed off the screen (wm overscan 0,-84,0,-90): then they are
+        // left "shown" up there, out of sight, so a swipe shows nothing and the helper can pull the
+        // status bar there to open the quick panel. Elsewhere they are hidden as usual.
+        if (barsOffScreen()) {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN) // the theme's
+            WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+            return
+        }
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
+
+    // The display's overscan is negative at the top (the status bar above the screen), read from
+    // the hidden DisplayInfo the system keeps for it.
+    // (Hidden API: reached by reflecting on reflection, as BtBridge does.)
+    private fun barsOffScreen(): Boolean = try {
+        val infoCls = Class.forName("android.view.DisplayInfo")
+        val info = infoCls.getConstructor().newInstance()
+        val getMethod = Class::class.java.getDeclaredMethod("getDeclaredMethod", String::class.java, arrayOf<Class<*>>()::class.java)
+        val getField = Class::class.java.getDeclaredMethod("getDeclaredField", String::class.java)
+        val m = getMethod.invoke(android.view.Display::class.java, "getDisplayInfo", arrayOf<Class<*>>(infoCls)) as java.lang.reflect.Method
+        m.isAccessible = true
+        m.invoke(windowManager.defaultDisplay, info)
+        val f = getField.invoke(infoCls, "overscanTop") as java.lang.reflect.Field
+        f.isAccessible = true
+        f.getInt(info) < 0
+    } catch (t: Throwable) { android.util.Log.w("Yunus", "barsOffScreen: $t"); false }
 
     // Back in front, also after another window covered Yunus (an app in the third window starting
     // its player on the main screen for a moment): the page draws only on change, so it is asked to

@@ -4028,10 +4028,12 @@ function endCardDrag(e) {
   card.style.height = '';
   if (Math.abs(dy) < 6) { drag = null; return; }
   const h = drag.h - dy;
+  // A pull down of more than 120 px closes the card (from full size it first goes back to normal);
+  // up past 80 px it goes full. Less than that, it stays as it was.
   if (h > (normalH + FULL_H) / 2 || (dy < -80 && !drag.wasFull)) card.classList.add('full');
-  else if (drag.wasFull && h > normalH * 0.6) card.classList.remove('full');
-  else if (h < normalH * 0.6) closeCard();
-  else card.classList.remove('full');
+  else if (drag.wasFull && dy > 120 && h > normalH * 0.6) card.classList.remove('full');
+  else if (dy > 120) closeCard();
+  else if (drag.wasFull) card.classList.add('full');
   drag = null;
 }
 $('cardGrip').ondblclick = () => card.classList.toggle('full');
