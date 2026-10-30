@@ -158,6 +158,31 @@ input { user-select:text; -webkit-user-select:text; }
   opacity:0; pointer-events:none; transform:translate(-50%, 24px); transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1); }
 #appTray.show { opacity:1; pointer-events:auto; transform:translate(-50%, 0); }
 #stage.portrait #appTray { bottom:240px; width:1000px; max-height:1100px; }
+#topBar { touch-action:none; } /* pull down for the controls panel */
+#qsPanel { position:absolute; left:50%; top:56px; width:1000px; max-width:calc(100% - 40px); background:var(--pn); color:var(--tx);
+  border-radius:0 0 28px 28px; box-shadow:0 24px 80px rgba(0,0,0,.45); z-index:31; padding:26px 30px 0;
+  opacity:0; pointer-events:none; transform:translate(-50%, -30px); transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1); }
+#qsPanel.show { opacity:1; pointer-events:auto; transform:translate(-50%, 0); }
+#stage.portrait #qsPanel { top:60px; }
+#qsBody .qsRow { display:grid; grid-template-columns:repeat(5, 1fr); grid-gap:14px; margin-bottom:22px; }
+#qsBody .qsBtn { background:var(--cd); border:0; border-radius:18px; height:118px; font-size:19px; color:inherit; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; }
+#qsBody .qsBtn > * + * { margin-top:8px; }
+#qsBody .qsBtn i { font-size:36px; }
+#qsBody .qsBtn.on { background:var(--ac); color:#fff; }
+#qsBody .qsBtn.dis { opacity:.4; }
+#qsBody .qsSl { display:flex; align-items:center; background:var(--cd); border-radius:18px; height:76px; padding:0 22px; margin-bottom:14px; }
+#qsBody .qsSl > * + * { margin-left:18px; }
+#qsBody .qsSl i { font-size:32px; }
+#qsBody .qsSl input { flex:1; height:44px; -webkit-appearance:none; background:transparent; }
+#qsBody .qsSl input::-webkit-slider-runnable-track { height:10px; border-radius:5px; background:var(--cd2); }
+#qsBody .qsSl input::-webkit-slider-thumb { -webkit-appearance:none; width:36px; height:36px; margin-top:-13px; border-radius:50%; background:var(--ac); border:0; }
+#qsBody .qsSl input:disabled { opacity:.4; }
+#qsBody .qsSl b { width:64px; text-align:right; font-size:22px; font-weight:500; }
+#qsBody .qsNote { font-size:18px; color:var(--mu); margin:-4px 0 18px; }
+#qsBody .qsLbl { font-size:20px; color:var(--mu); margin:4px 0 10px; }
+#qsGrip { height:34px; display:flex; align-items:center; justify-content:center; touch-action:none; cursor:grab; }
+#qsGrip div { width:80px; height:7px; border-radius:4px; background:var(--cd2); }
 .trayHead { display:flex; align-items:center; padding:24px 28px 8px 32px; font-size:28px; font-weight:600; }
 .trayHead button { margin-left:auto; background:var(--cd); border:0; width:52px; height:52px; border-radius:50%; font-size:26px; cursor:pointer; }
 .trayGrid { overflow-y:auto; min-height:0; touch-action:pan-y; overscroll-behavior:contain; /* more apps than fit: scroll down */ padding:12px 22px 28px; display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:28px 6px; }
@@ -891,6 +916,9 @@ button { font-family:inherit; color:inherit; }
   <div id="volPop"><i class="ti ti-volume"></i><div class="track"><div class="fill"></div><div class="knob"></div></div></div>
   <!-- Trial ("Sinyalde kenardan kamera penceresi"): the side view slides in from the signal's edge. -->
   <div id="sigPane"><canvas id="sigCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="sigArrow"></i><span id="sigTxt">Sol kamera</span></div></div>
+  <!-- The controls panel: pulled down from the status bar, over all windows (Yunus's version of the
+       car's quick panel, with only what Yunus can really do). Filled by renderQs(). -->
+  <div id="qsPanel" role="dialog" aria-label="Kontrol paneli"><div id="qsBody"></div><div id="qsGrip"><div></div></div></div>
   <!-- The app tray, as in Tesla: over all windows, in the middle, just above the dock. -->
   <div id="appTray" role="dialog" aria-label="Uygulamalar">
     <div class="trayHead">Uygulamalar<button id="trayClose" aria-label="Kapat"><i class="ti ti-x"></i></button></div>
@@ -2251,7 +2279,7 @@ function syncEmbedSoon() {
     if (sidePkg) embedSide();
     if (!mapEmbedded) return;
     const r = $('map').getBoundingClientRect();
-    if (r.width < 80 || r.height < 80 || current || trayOpen) YunusNative.embedVisible('map', false); // map area closed, or a card or the tray over it
+    if (r.width < 80 || r.height < 80 || current || trayOpen || qsOpen) YunusNative.embedVisible('map', false); // map area closed, or a card, the tray or the panel over it
     else startMapArea();
   }, 450);
 }
@@ -3451,6 +3479,7 @@ function permBlock() {
     ${row(!!p.location, 'Konum', 'Harita ve navigasyon')}
     ${row(!!p.media, 'Müzik kartı', 'Bildirim erişimi (çalan müzik)')}
     ${row(!!p.adb, 'Yardımcı (ADB)', 'Google Haritalar ve 3. pencere')}
+    ${row(!!p.write, 'Sistem ayarları', 'Kontrol panelinde parlaklık ve döndürme kilidi')}
     <button class="btn" data-do="fixPerms" style="width:100%;margin:12px 0 22px"><i class="ti ti-refresh"></i>İzinleri tazele</button>`;
 }
 // The car's own CarPlay and Android Auto apps, when installed, for the settings' phone section.
@@ -3519,7 +3548,7 @@ function embedSide() {
   const [x, y, w, h] = screenRect($('sideApp'));
   // Closed (no size along the long side) or too small: hide it. Upright a closed window still has
   // its full width, so both sides count.
-  if (sideW < 80 || w < 60 || h < 60 || trayOpen) return YunusNative.embedVisible('side', false);
+  if (sideW < 80 || w < 60 || h < 60 || trayOpen || qsOpen) return YunusNative.embedVisible('side', false);
   YunusNative.embedApp('side', sidePkg, x, y, w, h);
 }
 // An element's place on the screen in physical pixels, for the embedded apps' windows. The page is
@@ -3757,7 +3786,7 @@ function closeAppTray() {
   trayOpen = false;
   $('appTray').classList.remove('show');
   document.querySelectorAll('[data-card="apps"]').forEach((b) => b.classList.remove('on'));
-  if (mapEmbedded && !current) YunusNative.embedVisible('map', true);
+  if (mapEmbedded && !current && !qsOpen) YunusNative.embedVisible('map', true);
   if (sidePkg) embedSide();
 }
 $('trayClose').onclick = closeAppTray;
@@ -3768,6 +3797,93 @@ $('trayGrid').onclick = (e) => {
 };
 // A tap outside the tray (and not on the apps button) closes it.
 document.addEventListener('pointerdown', (e) => { if (trayOpen && !e.target.closest('#appTray,[data-card="apps"]')) closeAppTray(); });
+// ---------- controls panel ----------
+// Pulled down from the status bar, over everything (the embedded apps hide while it is open, as for
+// the tray). Only what Yunus can really change: brightness, volume, Bluetooth, mute, rotation lock
+// and auto brightness through Android (MainActivity.setQs); an app can't switch Wi-Fi on Android 10,
+// so it opens the car's Wi-Fi screen. The car's own switches need BYD's signature: their screens
+// open instead. The preview keeps a demo state.
+let qsOpen = false, qs = DEVICE ? null : { wifi: true, bt: true, mute: false, brightness: 180, autoBrightness: false, rotationLocked: true, write: true };
+const QS_CAR = [['climate', 'air-conditioning', 'Klima'], ['carSettings', 'car', 'Araç ayarları'], ['cam360', 'camera', '360° kamera'], ['yunus', 'adjustments', 'Yunus ayarları']];
+function renderQs(v) {
+  if (v) qs = v;
+  if (!qsOpen) return;
+  if (!qs) { $('qsBody').innerHTML = '<p class="qsNote">Yükleniyor…</p>'; return; }
+  const btn = (k, icon, label, on, dis) => `<button class="qsBtn${on ? ' on' : ''}${dis ? ' dis' : ''}" data-qs="${k}"><i class="ti ti-${icon}"></i><span>${label}</span></button>`;
+  const pct = Math.round(qs.brightness / 255 * 100);
+  $('qsBody').innerHTML = `
+    <div class="qsSl"><i class="ti ti-sun"></i><input type="range" min="2" max="100" value="${pct}" data-qsr="brightness" ${qs.write ? '' : 'disabled'} aria-label="Parlaklık"><b>${pct}%</b></div>
+    <div class="qsSl"><i class="ti ti-volume"></i><input type="range" min="0" max="${VOL_MAX}" value="${S.vol}" data-qsr="vol" aria-label="Ses"><b>${S.vol}</b></div>
+    ${qs.write ? '' : '<p class="qsNote">Parlaklık ve döndürme için: Yunus › Sistem › İzinleri tazele.</p>'}
+    <div class="qsRow" style="margin-top:12px">
+      ${btn('wifi', qs.wifi ? 'wifi' : 'wifi-off', 'Wi-Fi', qs.wifi)}
+      ${btn('bt', 'bluetooth', 'Bluetooth', qs.bt)}
+      ${btn('mute', qs.mute ? 'volume-off' : 'volume', 'Sessiz', qs.mute)}
+      ${btn('rotationLocked', qs.rotationLocked ? 'lock' : 'rotate', 'Döndürme kilidi', qs.rotationLocked, !qs.write)}
+      ${btn('autoBrightness', 'brightness-auto', 'Oto. parlaklık', qs.autoBrightness, !qs.write)}
+    </div>
+    <p class="qsLbl">Araç</p>
+    <div class="qsRow" style="grid-template-columns:repeat(4, 1fr)">${QS_CAR.map(([k, i, n]) => btn(k, i, n)).join('')}</div>`;
+}
+function openQs() {
+  if (qsOpen) return;
+  closeAppTray();
+  qsOpen = true;
+  renderQs();
+  $('qsPanel').classList.add('show');
+  if (DEVICE && YunusNative.qsState) YunusNative.qsState();
+  if (mapEmbedded) YunusNative.embedVisible('map', false);
+  if (sidePkg) YunusNative.embedVisible('side', false);
+}
+function closeQs() {
+  if (!qsOpen) return;
+  qsOpen = false;
+  $('qsPanel').classList.remove('show');
+  if (mapEmbedded && !current && !trayOpen) YunusNative.embedVisible('map', true);
+  if (sidePkg) embedSide();
+}
+let qsBrightT = 0;
+function qsSet(k, v) {
+  if (DEVICE) return YunusNative.qsSet(k, v);
+  qs[k] = k === 'brightness' ? v : !!v; renderQs();
+}
+$('qsBody').onclick = (e) => {
+  const b = e.target.closest('[data-qs]'); if (!b) return;
+  const k = b.dataset.qs, go = (f) => { closeQs(); f(); };
+  if (k === 'wifi') return go(() => openSetting('wifi'));
+  if (k === 'climate') return go(() => (DEVICE ? openCarApp(AC_SCREEN) : openCard('climate')));
+  if (k === 'carSettings') return go(() => (DEVICE ? openCarApp(CAR_SETTINGS) : openCard('controls')));
+  if (k === 'cam360') return go(() => (DEVICE ? openCarApp('com.byd.avc/.AutoVideoActivity') : openCard('camera')));
+  if (k === 'yunus') return go(() => openCard('controls'));
+  if (b.classList.contains('dis')) return;
+  qsSet(k, qs[k] ? 0 : 1);
+};
+$('qsBody').oninput = (e) => {
+  const r = e.target.closest('[data-qsr]'); if (!r) return;
+  const v = +r.value;
+  if (r.dataset.qsr === 'vol') {
+    S.vol = v; volIcon(); r.nextElementSibling.textContent = v;
+    if (DEVICE && YunusNative.volumeSet) YunusNative.volumeSet(v);
+    return;
+  }
+  r.nextElementSibling.textContent = v + '%';
+  qs.brightness = Math.round(v / 100 * 255); qs.autoBrightness = false;
+  clearTimeout(qsBrightT); qsBrightT = setTimeout(() => qsSet('brightness', qs.brightness), 60); // not on every pixel of the slide
+};
+// Pull down on the status bar to open, up on the grip to close; a tap outside closes it. A pull
+// that opened the panel does not also fire the shortcut it started on.
+let qsPull = null, qsPulled = false;
+$('topBar').addEventListener('pointerdown', (e) => { qsPull = e.clientY; qsPulled = false; });
+$('qsGrip').addEventListener('pointerdown', (e) => { qsPull = -e.clientY - 1; });
+addEventListener('pointermove', (e) => {
+  if (qsPull == null) return;
+  if (qsPull >= 0 && e.clientY - qsPull > 30 * stageScale) { qsPull = null; qsPulled = true; openQs(); }
+  else if (qsPull < 0 && -qsPull - 1 - e.clientY > 20 * stageScale) { qsPull = null; closeQs(); }
+});
+addEventListener('pointerup', () => { qsPull = null; });
+$('qsGrip').addEventListener('click', closeQs);
+$('topBar').addEventListener('click', (e) => { if (qsPulled) { qsPulled = false; e.stopPropagation(); } }, true);
+document.addEventListener('pointerdown', (e) => { if (qsOpen && !e.target.closest('#qsPanel,#topBar')) closeQs(); });
 function openCard(name) {
   if (name === 'apps') { if (trayOpen) closeAppTray(); else { closeCard(); openAppTray(); } return; }
   if (DEVICE && ['phone', 'camera', 'climate', 'music'].includes(name) && openCarCard(name)) return;
@@ -4438,6 +4554,7 @@ window.yunusCar = (m) => {
   if (m.net) { renderNet(m.net); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
   if (m.user) { carUser = m.user; renderProfile(); return; }
+  if (m.qs) { renderQs(m.qs); return; }
   if (m.perms) { perms = m.perms; if (current === 'controls' && CARDS.controls.tab === 'system') refreshCard(); return; }
   if (m.notifCount != null) { $('bellCount').textContent = m.notifCount > 0 ? (m.notifCount > 9 ? '9+' : m.notifCount) : ''; return; } // {name, photo} from the car's account
   if (m.tt) {

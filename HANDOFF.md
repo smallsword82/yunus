@@ -85,21 +85,13 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   kendi çubuğunu açıyordu. Artık cihazda sistemden gelen değişiklikte yalnız dock'taki ses tuşu
   güncelleniyor (`setVol`, launcher.html). Yunus'un dock tuşlarında yalnız Yunus'un çubuğu çıkıyor
   (araçta ekran görüntüsüyle doğrulandı). Kullanıcıya direksiyon tuşuyla denetmesini söyle.
-- **Yunus kontrol paneli (kullanıcı onayladı: "Evet, yap") — yerel kısım bitti, sayfa yok:**
-  - Hazır (MainActivity.kt): JS `qsState()` → sayfaya `{qs:{wifi, bt, mute, brightness (0–255),
-    autoBrightness, rotationLocked, write}}`; `qsSet(key, value)` anahtarlar bt / mute /
-    brightness / autoBrightness / rotationLocked (0/1). Parlaklık ve döndürme WRITE_SETTINGS
-    ister: `fixPermissions()` bunu ADB'den `appops set app.yunus.launcher WRITE_SETTINGS allow`
-    ile veriyor; `perms.write` de izin listesinde.
-  - Yapılacak (launcher.html): durum şeridinden aşağı çekince tüm pencerelerin üstünde açılan
-    panel (uygulama tepsisi gibi, gömülü pencereler `trayOpen` gibi gizlenir). Parlaklık ve ses
-    kaydırıcıları; Wi-Fi (durum, dokununca `com.byd.carsettings` Wi-Fi ekranı — Android 10'da
-    uygulama Wi-Fi'yi açıp kapatamaz), Bluetooth, sessiz, döndürme kilidi, otomatik parlaklık
-    düğmeleri; araç kısayolları: klima (AC ekranı), araç ayarları
-    (`com.byd.carsettings/.MainActivity`), 360° kamera (`com.byd.avc/.AutoVideoActivity`).
-    `m.qs` işleyicisi ve `permBlock()`'a "Sistem ayarları (parlaklık)" satırı (`perms.write`).
-    Aracın kendi paneli SystemUI `BydQSBar`; içindeki "kapı" düğmesi kabin lambası, kilit komutu yok.
-  - Sonra: araca kur, CDP ile dene, commit, `release/`'e kopyala.
+- **Yunus kontrol paneli — bitti, araçta denendi (30.10):** durum şeridinden aşağı çekince açılıyor
+  (`openQs`/`closeQs`/`renderQs`, launcher.html; gömülü pencereler tepsi gibi gizleniyor). Parlaklık
+  ve ses kaydırıcıları; Wi-Fi (dokununca Wi-Fi ayarı), Bluetooth, sessiz, döndürme kilidi, otomatik
+  parlaklık; araç: klima, araç ayarları, 360° kamera, Yunus ayarları. Araçta sessiz aç/kapa gerçek
+  çalıştı (dumpsys audio), dışarı dokununca kapanıyor. Not: en üst kenardan çekince BYD'nin kendi
+  çubukları da bir an kayıyor (Android tam ekran davranışı, kendiliğinden gizleniyor).
+  Kullanıcı görmedi: parlaklık kaydırıcısı ve döndürme kilidi araçta elle denenmedi.
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
