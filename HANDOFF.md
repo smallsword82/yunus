@@ -97,7 +97,7 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
 2. ~~Kilit~~ — kapandı (yukarıda "EN SON DURUM").
 3. ~~El freni + kemer~~ — **çözüldü (31.10).** Getter'lar: `Gearbox.getParkBrakeSwitch` (1 çekili) → `tt.epb`, durum
    çubuğunda gösteriliyor; `SafetyBelt.getSafetyBeltStatus(1)` (sürücü; 1 takılı, 0 değil) → `S.belts.drv`. Koltuk doluluğu
-   okunamadığından kemer ışığı yalnız **hız ≥ 5 km/s** iken yanar. `Instrument.getELECParkingState/Color` → 65535 (işe yaramaz).
+   okunamaz ama ekran yalnız araç açıkken çalıştığından kemer ışığı `belt1 == 0` iken hep yanar (hız şartı kullanıcı istemedi). `Instrument.getELECParkingState/Color` → 65535 (işe yaramaz).
    Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç park/şarjdaydı).
 4. **Radyo RDS logosu:** (müzik kapağı düzeldi) radyo (`com.byd.mediacenter`) RDS'ten istasyon logosu veriyor mu?
 5. **Harita hızı:** çifte yük + ortalama çözüldü (commit'siz). Kalan jank Yunus'un kendisi (~38 ms/kare, gfxinfo):

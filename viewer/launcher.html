@@ -1149,9 +1149,9 @@ const TELLTALES = [
   { id: 'fog', name: 'Arka sis lambası', color: 'amber', auto: () => S.fog, desc: 'Arka sis lambası açık.' },
   { id: 'brake', name: 'Fren/park sistemi arızası', color: 'red', desc: 'Fren hidroliği düşük ya da fren sistemi arızalı. Güvenli bir yerde hemen durun.' },
   { id: 'steer', name: 'Direksiyon sistemi arızası', color: 'red', desc: 'Direksiyon ağırlaşabilir. Güvenli bir yerde hemen durun.' },
-  // The car reports the driver's belt (SafetyBelt getter) but not whether a seat is taken, so
-  // an unbuckled driver lights it only on the move, as on Tesla.
-  { id: 'belt', name: 'Emniyet kemeri', color: 'red', auto: () => S.belts.drv === 0 && S.speed >= 5, desc: 'Sürücünün emniyet kemeri takılı değil.' },
+  // The driver's belt from the SafetyBelt getter (the head unit runs only with the car on, so
+  // someone is in the driver's seat).
+  { id: 'belt', name: 'Emniyet kemeri', color: 'red', auto: () => S.belts.drv === 0, desc: 'Sürücünün emniyet kemeri takılı değil.' },
   { id: 'coolant', name: 'Motor soğutma sıvısı aşırı ısındı', color: 'red', desc: 'Motor soğutması çok sıcak; durup kontrol ettirin.' },
   { id: 'plug', name: 'Şarj kablosu bağlı', color: 'red', auto: () => S.charging, desc: 'Yüksek voltaj şarj bağlantısı takılı.' },
   { id: 'lowv', name: '12 V sistem arızası', color: 'red', desc: 'Düşük voltaj beslemesi arızalı. Klima ve radyoyu kapatıp güvenli yerde durun.' },
