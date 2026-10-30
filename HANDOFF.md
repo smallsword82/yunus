@@ -1,7 +1,29 @@
 # Devir notu — Yunus (BYD Dolphin, DiLink 3)
 
-Tarih: 30.10.2026 (ikinci oturum) · Dal: `claude/live-vehicle-data`
-APK: `release/yunus-0.1-test.apk` · Son commit: `08423f2`
+Tarih: 30.10.2026 (üçüncü oturum sonu) · Dal: `claude/live-vehicle-data` · **PR: smallsword82/yunus#1** (push'lu)
+APK: `release/yunus-0.1-test.apk` · Son commit: `1c80e5e`
+
+## EN SON DURUM (yeni pencere buradan başlasın)
+
+**Commit'li + push'lu (PR #1):** `14629e6` şarj istasyonu+kablo sağ-ön köşede (kapı açılınca kabloya değmiyor) ·
+`c4c213e` müzik kartı kapağı şarkı değişince yenileniyor (`MediaBridge.art()` null'ı önbelleğe almıyor) ·
+`1c80e5e` kilit durumu okunuyor.
+
+**COMMIT'SİZ (çalışma ağacında, araçta doğrulandı — önce commit'le):**
+- `viewer/launcher.html`: 8 sn'lik MapLibre fallback timer'ı **cihazda kapalı** (`&& !(window.YunusNative && YunusNative.embedApp)`)
+  → açılışta önce Yunus haritası sonra Google Maps "çifte yük" bitti.
+- `MainActivity.kt` `AppEmbed.launchIfNew`: map slot'unda Maps açıldıktan **4,5 sn sonra my-location (◎) butonuna
+  sentetik dokunuş** (`t <display> 0/1 0 x y`, x = w−45dp, y = h−122dp) → araç ortalanır + takip modu. Araçta doğrulandı.
+- Embed çözünürlüğünü düşürme (renderScale 0.67) **denendi, kullanıcı SEVMEDİ, geri alındı**. Tekrar önerme.
+  Harita display'i zaten pencereyle birebir: `#map` (720,48) 1200×920, k=dpr×vvScale=1.
+
+**Kilit — kapandı:** OKUMA çalışıyor (DoorLock+Ota dinleyicisi, `Ota 0x40700008`: 1 açık / 2 kilitli, `CAR_HAL_KEEP`'te).
+KOMUT HAL'den **mümkün değil**: `set()` 0x80000400 döner; çalışan uygulama (`br.com.rory.electro`) BT telefon-anahtarı
+taklidiyle kilitliyor, gönderdiği `postEvent(1001, 0x48E00037, 1)` sadece durum yayını — bizden birebir aynısı kilitlemiyor.
+Gösterge salt-okunur. (Helper'da `lock`/`post` cmd kancaları duruyor, deney için.) Ayrıntı: memory `door-lock-read-gated-command`.
+
+**Navigasyon:** Google Maps nav modunda yatay düzen (paneller solda, araç sağ-altta) — normal, sorun değil.
+Test için `am start --display <id> -a VIEW -d 'google.navigation:q=…'` kullanılabilir.
 
 ## BU OTURUMUN ATILIMI: araç verisi gerçekten okunuyor VE kumanda ediliyor
 
@@ -72,15 +94,15 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
    `setAcTemperature(IIII)` (yarım-derece *2, zone/source/unit arg), `setAcWindLevel(II)` (source,level),
    `setAcControlMode(II)`, `setAcWindMode`, `setAcDefrostState(III)`. Kinex `HalAcListener` tam arg eşlemesini içeriyor
    (`denormalizeAcTemp: doubling`). Yardımcıya Permissive bağlamla ekle, her kontrolü araçta tek tek kalibre et.
-2. **Kilit:** `getDoorLockStatus(1)` → 0 (çalışmıyor). Kinex `HalDoorLockListener` (dinleyici) ile okuyor. Komut: DoorLock/Bodywork'te
-   setter yok; Kinex kilidi bodywork olayı `0x48E00037` ile yapıyor ama komutun kaynağı (Kinex UI) net değil. Daha fazla RE.
+2. ~~Kilit~~ — kapandı (yukarıda "EN SON DURUM").
 3. **El freni + kemer uyarı ışıkları — ENGELLİ.** `getELECParkingState` → 65535 (geçersiz); kemer getter'ı Instrument'ta yok;
    gösterge olayları (`0x2750001A` el freni, `0x28F0002C` kemer) yalnız değişince gelir (yeniden başlatınca kayıp);
    SafetyBelt sensörü `0x12D0003F` saniyede birkaç kez 1↔0 zıplıyor (güvenilmez). Seçenekler: (a) değişince yakala +
    `CAR_HAL_KEEP` ile sakla, (b) doğru getter'ı bul (`getELECParkingColor`? `get2in1Fault…`?). EPB `isWarning`'da
    `t.id !== 'epb'` ile gizli — göstermek için kaldır.
-4. **Müzik kapağı / radyo RDS logosu:** şarkı değişince kapak otomatik gelmiyor; radyo (`com.byd.mediacenter`) RDS'ten istasyon logosu/kapak veriyor mu?
-5. **Harita hızı:** kullanıcı "kasıyor" dedi — optimize.
+4. **Radyo RDS logosu:** (müzik kapağı düzeldi) radyo (`com.byd.mediacenter`) RDS'ten istasyon logosu veriyor mu?
+5. **Harita hızı:** çifte yük + ortalama çözüldü (commit'siz). Kalan jank Yunus'un kendisi (~38 ms/kare, gfxinfo):
+   kaynağı **3D araç WebGL'inin sürekli render'ı** — on-demand render / pixelRatio düşürme düşünülebilir. Maps kendisi ~105 ms/kare.
 6. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
 7. **Vites:** `getCurrentGear` paket/uid hatası (çözülmedi); cihazda vites `P` varsayılanda.
 

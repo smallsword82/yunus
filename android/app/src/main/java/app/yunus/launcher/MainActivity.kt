@@ -465,6 +465,18 @@ private class AppEmbed(private val activity: Activity, private val root: android
             slot.component = component
             // Not started after all: forget it, so choosing the app again retries the launch.
             shell.send("launch ${slot.displayId} $component") { activity.runOnUiThread { if (slot.component == component) slot.component = null } }
+            // The map app opens on its last view, not following the car. A tap on Google Maps'
+            // my-location button (bottom-right, ~45dp from the right, ~122dp up) a few seconds after
+            // launch centers it on the car and turns on follow mode, so the car stays centered.
+            if (name == "map") {
+                val d = slot.displayId
+                val bx = w - 45f * dpi / 160f; val by = h - 122f * dpi / 160f
+                root.postDelayed({
+                    if (slot.component != component || slot.displayId != d) return@postDelayed
+                    shell.send("t $d 0 0 $bx $by") // ACTION_DOWN
+                    root.postDelayed({ shell.send("t $d 1 0 $bx $by") }, 60) // ACTION_UP → a tap
+                }, 4500)
+            }
         }
         fun attach(texture: android.graphics.SurfaceTexture) {
             texture.setDefaultBufferSize(w, h)

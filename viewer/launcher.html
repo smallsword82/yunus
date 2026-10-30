@@ -2905,7 +2905,9 @@ function buildMap() {
     if (myPos || DEVICE) { dropDemoRoute(); map.once('load', dropDemoRoute); }
   } catch (e) { console.warn('map failed', e); }
 }
-setTimeout(() => { if (!mapEmbedded) startMap(); }, 8000);
+// On the car the embedded Maps (or mapEmbedFailed, if Maps isn't installed) fills the map area, so
+// don't flash Yunus's own MapLibre map first when the car's 3D model load pushes the embed past 8 s.
+setTimeout(() => { if (!mapEmbedded && !(window.YunusNative && YunusNative.embedApp)) startMap(); }, 8000);
 // On the car the map area is the real Google Maps app, run inside Yunus on a private virtual
 // display (see AppEmbed/ShellHelper in the app); Yunus's own map is the fallback and the desktop
 // preview's map. A Yunus card over the area hides Maps while it is open.
