@@ -326,6 +326,15 @@ private object CarWatch {
             val dev = c.getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx) ?: continue
             for (g in gets) polls.add(Poll(dev, c, g))
         } catch (t: Throwable) { System.err.println("watch getters $name: ${t.cause ?: t}") }
+        try {
+            val c = Class.forName("android.hardware.bydauto.instrument.BYDAutoInstrumentDevice")
+            instrumentDev = c.getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx)
+            var cls: Class<*>? = c
+            while (cls != null && featGet == null) {
+                featGet = try { cls.getDeclaredMethod("get", Integer.TYPE, Integer.TYPE).apply { isAccessible = true } } catch (_: Throwable) { null }
+                cls = cls.superclass
+            }
+        } catch (t: Throwable) { System.err.println("watch instrument: ${t.cause ?: t}") }
         poll()
     }
 
@@ -348,6 +357,15 @@ private object CarWatch {
         // never sends them; read the gun (2 = connected → show the cable) and the state.
         "charging.BYDAutoChargingDevice" to listOf(Get("chgGun", "getChargingGunState"), Get("chgState", "getChargingState"),
             Get("chgPower", "getChargingPower"), Get("restMin", "getChargingRestTime"))) // getChargingRestTime: [hour, minute]
+    // The cluster's warning lights (INSTRUMENT_* feature ids) come as events only when they change,
+    // so a light already on when Yunus starts would never show. Read them with the device's own
+    // get(deviceType, featureId) and hand them on as Instrument events: 1 on, 2 off, 3+ flashing.
+    private val LIGHTS = intArrayOf(0x2960000E, 0x29600026, 0x27500014, 0x2750002C, 0x28700014, 0x27500020, 0x2870000E,
+        0x2870002C, 0x2A60002C, 0x2A600026, 0x2A600032, 0x2B000008, 0x2A60001A, 0x2B00001A, 0x27500008, 0x2C000014,
+        0x28F0000E, 0x2B00000E)
+    private var instrumentDev: Any? = null
+    private var featGet: java.lang.reflect.Method? = null
+    private var lightsDead = false
     private class Poll(val dev: Any, val cls: Class<*>, val get: Get) { var dead = false }
     private val polls = ArrayList<Poll>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
@@ -367,7 +385,14 @@ private object CarWatch {
             val same = synchronized(last) { last.put("Get ${p.get.key}", line) == line }
             if (!same) send(line)
         } catch (t: Throwable) { p.dead = true; System.err.println("watch ${p.get.method}: ${t.cause ?: t}") }
-        if (polls.any { !it.dead }) main.postDelayed({ poll() }, 1000)
+        val inst = instrumentDev; val fg = featGet
+        if (inst != null && fg != null && !lightsDead) try {
+            for (id in LIGHTS) {
+                val v = fg.invoke(inst, 1007, id) as Int // BYDAUTO_DEVICE_INSTRUMENT
+                if (v in 0..15) event("Instrument", id, v) // 65535 and the like: no such light here
+            }
+        } catch (t: Throwable) { lightsDead = true; System.err.println("watch lights: ${t.cause ?: t}") }
+        if (polls.any { !it.dead } || !lightsDead) main.postDelayed({ poll() }, 1000)
     }
 
     private fun listen(ctx: android.content.Context, clsName: String) {

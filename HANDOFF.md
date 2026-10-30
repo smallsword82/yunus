@@ -98,6 +98,10 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
 3. ~~El freni + kemer~~ — **çözüldü (31.10).** Getter'lar: `Gearbox.getParkBrakeSwitch` (1 çekili) → `tt.epb`, durum
    çubuğunda gösteriliyor; `SafetyBelt.getSafetyBeltStatus(1)` (sürücü; 1 takılı, 0 değil) → `S.belts.drv`. Koltuk doluluğu
    okunamaz ama ekran yalnız araç açıkken çalıştığından kemer ışığı `belt1 == 0` iken hep yanar (hız şartı kullanıcı istemedi). `Instrument.getELECParkingState/Color` → 65535 (işe yaramaz).
+   **Gösterge ışıkları başlangıçta da okunuyor:** yardımcı `AbsBYDAutoDevice.get(1007, featureId)` ile 18 ışığı her saniye okuyup
+   `Instrument 0x…` olayı olarak gönderiyor (`ShellHelper.LIGHTS`). Okunabilenler: ABS, ESC, 12 V, hava yastığı, OK (2 = sönük),
+   batarya ısı/arıza, güç aktarma (0 = bilinmiyor). Ana uyarı, anahtar, TPMS, fren, direksiyon, soğutma, güç sınırı, park lambası,
+   ACC `get`'te 65535 döner → bunlar yalnız olayla gelir.
    Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç park/şarjdaydı).
 4. **Radyo RDS logosu:** (müzik kapağı düzeldi) radyo (`com.byd.mediacenter`) RDS'ten istasyon logosu veriyor mu?
 5. **Harita hızı:** çifte yük + ortalama çözüldü (commit'siz). Kalan jank Yunus'un kendisi (~38 ms/kare, gfxinfo):
