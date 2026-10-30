@@ -114,9 +114,10 @@ class MainActivity : Activity() {
                     if (intent == null || intent.resolveActivity(packageManager) == null) false else { startActivity(intent); true }
                 } catch (_: Throwable) { false }
 
-                // Commands to the car need BYD's signature permissions, which this app cannot hold.
+                // Commands to the car (window, sunshade) go to the shell helper, which runs them on
+                // the bodywork device with the permission-passing context (the way it reads them).
                 @JavascriptInterface
-                fun command(json: String) {}
+                fun command(json: String) { shell.send("cmd $json") }
 
                 // Shows the first installed of [packages] (comma separated) inside slot [slot] at
                 // x,y size w×h (page pixels = screen pixels); the page then gets

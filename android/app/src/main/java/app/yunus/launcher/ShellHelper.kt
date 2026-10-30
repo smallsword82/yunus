@@ -61,6 +61,7 @@ object ShellHelper {
             val line = reader.readLine() ?: break
             if (line == "watch") { CarWatch.subscribe(out); continue }
             if (line == "qsbar") { try { injector.openCarPanel() } catch (t: Throwable) { System.err.println("qsbar: $t") }; continue }
+            if (line.startsWith("cmd ")) { CarWatch.command(line.substring(4)); continue }
             try {
                 val fields = line.split(' ')
                 val display = fields.getOrNull(1)?.toIntOrNull() ?: continue
@@ -262,6 +263,7 @@ private object CarWatch {
     private val held = ArrayList<Any>()
     private val last = HashMap<String, String>()
     private var started = false
+    @Volatile private var bodyworkDev: Any? = null // for commands (windows, sunshade), set in listen()
     private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)
 
     /** A context whose permission checks all pass, so the HAL devices' own check does not refuse this
@@ -358,8 +360,39 @@ private object CarWatch {
         }
         reg.invoke(dev, proxy)
         held.add(dev)
+        if (clsName.contains("bodywork")) bodyworkDev = dev
         System.err.println("watch: listening to $tag")
         try { c.getMethod("getAllStatus").invoke(dev) } catch (_: Throwable) { }
+    }
+
+    /**
+     * A command from the page (JSON over the "cmd" line), run on the bodywork device with the
+     * permissive context, so the car acts. The state constants are read from the device class by
+     * name, so they are whatever this head unit's framework defines. Windows:
+     * {cmd:window, pos:FL|FR|RL|RR, open:0..100} → setBodyWindowCtrlState(area, CLOSE|HALF|OPEN_FULL).
+     * Sunshade: {cmd:sunshade, open:0|100} → setSunshadeState(SUNROOF_CLOSE|SUNROOF_OPEN).
+     */
+    fun command(json: String) = main.post {
+        val dev = bodyworkDev ?: run { System.err.println("cmd: no bodywork device"); return@post }
+        try {
+            val o = org.json.JSONObject(json)
+            val c = dev.javaClass
+            val k = { name: String -> c.getField(name).getInt(null) }
+            when (o.optString("cmd")) {
+                "window" -> {
+                    val area = mapOf("FL" to 1, "FR" to 2, "RL" to 3, "RR" to 4)[o.optString("pos")] ?: return@post
+                    val pct = o.optInt("open", 0)
+                    val state = if (pct <= 5) k("WINDOW_CLOSE") else if (pct >= 70) k("WINDOW_OPEN_FULL") else k("WINDOW_OPEN_HALF")
+                    val r = c.getMethod("setBodyWindowCtrlState", Integer.TYPE, Integer.TYPE).invoke(dev, area, state)
+                    System.err.println("cmd window $area -> $state = $r")
+                }
+                "sunshade" -> {
+                    val state = if (o.optInt("open", 0) <= 5) k("SUNROOF_CLOSE") else k("SUNROOF_OPEN")
+                    val r = c.getMethod("setSunshadeState", Integer.TYPE).invoke(dev, state)
+                    System.err.println("cmd sunshade -> $state = $r")
+                }
+            }
+        } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
     }
 
     private fun event(dev: String, type: Int, value: Any?) {
