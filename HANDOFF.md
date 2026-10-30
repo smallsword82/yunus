@@ -103,7 +103,9 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
    batarya ısı/arıza, güç aktarma (0 = bilinmiyor). Ana uyarı, anahtar, TPMS, fren, direksiyon, soğutma, güç sınırı, park lambası,
    ACC `get`'te 65535 döner → bunlar yalnız olayla gelir.
    Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç park/şarjdaydı).
-4. **Radyo RDS logosu:** (müzik kapağı düzeldi) radyo (`com.byd.mediacenter`) RDS'ten istasyon logosu veriyor mu?
+4. ~~Radyo logosu~~ — **yapıldı (30.10).** Radyo (`com.byd.mediacenter`) kapak göndermiyor (yalnız genel 60×60 `MEDIA_ICON`);
+   başlık RDS/DAB adı ("RDS SHOW RD", "DAB 03-KAFA RADYO"). Sayfa (`radioLogo`) adı temizleyip radio-browser.info'da (TR) arıyor,
+   logoyu `localStorage.radioLogos`'ta saklıyor. Show/Fenomen/Best bulunuyor; CNN Türk/Kafa'nın veritabanında logosu yok → uygulama simgesi.
 5. **Harita hızı:** çifte yük + ortalama çözüldü (commit'siz). Kalan jank Yunus'un kendisi (~38 ms/kare, gfxinfo):
    kaynağı **3D araç WebGL'inin sürekli render'ı** — on-demand render / pixelRatio düşürme düşünülebilir. Maps kendisi ~105 ms/kare.
 6. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.

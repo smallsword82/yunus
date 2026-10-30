@@ -2067,6 +2067,38 @@ const appLook = (pkg = '') => /spotify/.test(pkg) ? { icon: 'brand-spotify', col
   : /youtube/.test(pkg) ? { icon: 'brand-youtube', color: '#ff0033' }
   : /byd\.media|radio/.test(pkg) ? { icon: 'radio', color: '#e0832f' }
   : { icon: 'music', color: '#5f6670' };
+// The radio sends no cover, only the station name ("RDS SHOW RD", "DAB 06-CNN TURK"); look its logo up on
+// radio-browser.info by that name (Turkish stations), once per name, kept in localStorage.
+let radioLogos = {};
+try { radioLogos = JSON.parse(localStorage.getItem('radioLogos')) || {}; } catch {}
+const radioName = (t) => (t || '').toLocaleUpperCase('tr').replace(/^(RDS|DAB)\s+(\d+\s*-\s*)?/, '')
+  .replace(/(\s+(RD|RADYO|RADIO|FM|\d+[.,]\d+))+$/, '').trim();
+function radioLogo(m) {
+  if (m.art || !/byd\.mediacenter|radio|dab/.test(m.pkg || '')) return null;
+  const name = radioName(m.title);
+  if (name.length < 2 || /^(RADYO|RADIO|FM|AM|DAB)$/.test(name)) return null; // no RDS name yet
+  if (name in radioLogos) return radioLogos[name] || null;
+  radioLogos[name] = ''; // asked once; a miss stays a miss
+  const done = (url) => {
+    radioLogos[name] = url;
+    try { localStorage.setItem('radioLogos', JSON.stringify(radioLogos)); } catch {}
+    if (url && liveMedia) renderLiveMedia();
+  };
+  // Lower case without Turkish letters, so "CNN TURK" matches "Cnn Türk Radyo".
+  const fold = (t) => t.toLocaleLowerCase('tr').replace(/[çğıöşü]/g, (c) => 'cgiosu'['çğıöşü'.indexOf(c)]);
+  const want = fold(name);
+  fetch(`https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(want)}&countrycode=TR&limit=10&order=clickcount&reverse=true&hidebroken=true`)
+    .then((r) => r.json())
+    .then((list) => {
+      const hit = list.find((x) => x.favicon && fold(x.name).includes(want));
+      if (!hit) return done('');
+      const img = new Image(); // only a logo that really loads
+      img.onload = () => done(hit.favicon); img.onerror = () => done('');
+      img.src = hit.favicon;
+    })
+    .catch(() => { delete radioLogos[name]; }); // offline: ask again later
+  return null;
+}
 const livePos = () => Math.min(liveMedia.dur || Infinity, liveMedia.pos + (liveMedia.playing ? performance.now() - liveMedia.at : 0));
 function renderMedia() {
   if (liveMedia) return renderLiveMedia();
@@ -2094,7 +2126,8 @@ const failedApp = () => { const m = liveMedia, p = m && !m.playing && m.startFai
 function renderLiveMedia() {
   // Every app closed: the card keeps the last one (play starts it again), as in Kinex.
   const m = liveMedia.access && !liveMedia.pkg && liveMedia.last
-    ? { ...liveMedia, ...liveMedia.last, idle: true, title: '', artist: 'Çalmak için ▶ dokun' } : liveMedia;
+    ? { ...liveMedia, ...liveMedia.last, idle: true, title: '', artist: 'Çalmak için ▶ dokun' } : { ...liveMedia };
+  if (!m.art) m.art = radioLogo(m);
   const look = appLook(m.pkg);
   const label = !m.access ? 'İzin gerekli' : m.pkg ? m.app : 'Medya';
   $('srcBtn').innerHTML = `${m.access && m.pkg ? appIcon(m, 22) : `<i class="ti ti-${m.access ? 'music' : 'lock'}" style="color:var(--mu)"></i>`}${label}<i class="ti ti-chevron-down"></i>`;
