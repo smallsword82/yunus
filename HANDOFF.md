@@ -66,6 +66,9 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
    Ayrıca araçta doğrulanacak: lastik basıncı birimi (250 = 2,5 bar varsayıldı), şarj gücü kW mi,
    motor devri→hız katsayısı (`kmhPerRpm`), uyarı lambası kodları, kısayol paneli (uiautomator
    dump), yan kamera (kamera listesi / com.byd.avc gömme), SmartTube 3. pencere siyah ekran.
+   Sürücü adı/resmi: BYD hesap uygulaması `com.byd.accountservice`'in verisini bul
+   (`dumpsys package com.byd.accountservice` → provider'lar; ad + avatar) ve sayfaya
+   `{user:{name, photo}}` gönder (sayfa hazır; şimdilik ad Yunus › Ekran'dan, resim yerine baş harf).
 
 1. **Müzik kartı araçta:** kod hazır ve emülatörde doğrulandı (`MediaBridge.kt`: başlık, sanatçı,
    kapak, ilerleme, önceki/oynat/sonraki, kaynak seçici). Araçta Yunus'a bir kez **bildirim erişimi**

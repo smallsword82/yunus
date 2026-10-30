@@ -371,6 +371,11 @@ button { font-family:inherit; color:inherit; }
 #topBar { position:absolute; top:0; left:0; right:0; height:48px; display:flex; align-items:center; padding:0 28px; font-size:22px; font-weight:500; background:var(--pn); color:var(--tx); z-index:4; }
 #topBar > * + * { margin-left:26px; }
 #topBar #outTemp { color:var(--tx); }
+#profile { display:flex; align-items:center; cursor:pointer; }
+#profile:empty, #profile.hide { display:none; }
+#profPic { width:30px; height:30px; border-radius:50%; background:var(--ac) center/cover no-repeat; color:#fff; font-size:15px; font-weight:600;
+  display:flex; align-items:center; justify-content:center; flex:none; }
+#profName { margin-left:10px; font-size:20px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #topBar #netStat { margin-left:auto; }
 #car3d { position:absolute; top:0; right:0; bottom:0; left:0; }
 #fpsMeter { position:absolute; top:84px; left:36px; z-index:5; font:500 18px/1.3 ui-monospace,monospace; color:var(--mu); background:var(--cd); padding:6px 10px; border-radius:8px; pointer-events:none; display:none; }
@@ -793,6 +798,8 @@ button { font-family:inherit; color:inherit; }
     <div id="topBar">
       <span id="clockTxt"></span>
       <div id="outTemp">18°C</div>
+      <!-- The driver, as the car's own status bar shows the signed-in user: photo (or initial) and name. -->
+      <div id="profile"><span id="profPic"></span><span id="profName"></span></div>
       <!-- An icon shows only when there is that link (the car's own status bar is hidden while
            Yunus runs full screen). -->
       <div id="netStat"><i id="locInd" class="ti ti-location-filled hide"></i><i id="btInd" class="ti ti-bluetooth hide"></i><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span></div>
@@ -997,7 +1004,7 @@ const SETTING_DEFAULTS = {
   projector: 'yunus', projAlways: true, projAuto: false,
   speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
   rearMirror: true, sigEdge: false,
-  petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: true, fps: false, isHome: false,
+  driverName: '', petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: true, fps: false, isHome: false,
 };
 S.set = { ...SETTING_DEFAULTS };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('settings') || '{}')); } catch {}
@@ -3361,7 +3368,7 @@ const CARDS = {
       <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
     if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v != null && v < 2.2 ? 'low' : ''}">${pressNum(v)} ${pressUnit()}<span>${v != null && v < 2.2 ? 'Düşük basınç' : ''}</span></div>`;
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
-    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['tog', 'sigEdge', 'Sinyalde kenardan kamera penceresi (deneme)'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
+    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['tog', 'sigEdge', 'Sinyalde kenardan kamera penceresi (deneme)'], ['text', 'driverName', 'Sürücü adı (üst çubukta)'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
       <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
       <div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <button class="btn ${themeMode === 'auto' ? 'on' : ''}" data-theme="auto"><i class="ti ti-contrast"></i>Oto</button>
@@ -3905,7 +3912,7 @@ body.addEventListener('input', (e) => {
   const el = e.target;
   if (el.id === 'plateIn') { $('plateErr').textContent = ''; el.style.borderColor = ''; }
   if (el.dataset.fan !== undefined) { S.fan = +el.value; el.nextElementSibling.textContent = S.fan; }
-  if (el.dataset.sett) { S.set[el.dataset.sett] = el.value; saveSettings(); }
+  if (el.dataset.sett) { S.set[el.dataset.sett] = el.value; saveSettings(); if (el.dataset.sett === 'driverName') renderProfile(); }
   if (el.dataset.bsadj) {
     S.set.bsAdj[bsAdjSide][el.dataset.bsadj] = +el.value;
     el.nextElementSibling.textContent = el.value + el.dataset.unit;
@@ -4160,6 +4167,23 @@ volIcon();
 if (window.YunusNative && YunusNative.volumeRefresh) YunusNative.volumeRefresh(); // the system level
 if (window.YunusNative && YunusNative.statusRefresh) YunusNative.statusRefresh(); // Wi-Fi and mobile signal
 
+// ---------- driver in the status bar ----------
+// The car's signed-in user (name and photo, from the app when it can read the car's account) or the
+// name set in Yunus › Ekran; without a photo, the name's first letter on a round badge.
+let carUser = null;
+function renderProfile() {
+  const name = (carUser && carUser.name) || (S.set.driverName || '').trim(), pic = carUser && carUser.photo;
+  $('profile').classList.toggle('hide', !name && !pic);
+  $('profName').textContent = name;
+  $('profPic').style.backgroundImage = pic ? `url('${pic}')` : '';
+  $('profPic').textContent = pic ? '' : (name ? name.trim()[0].toLocaleUpperCase('tr-TR') : '');
+}
+renderProfile();
+// A tap opens the car's account screen, else Yunus's settings where the name is set.
+$('profile').onclick = () => {
+  if (window.YunusNative && YunusNative.openApp('com.byd.accountservice')) return;
+  openCard('controls');
+};
 // ---------- status bar: time, mobile and Wi-Fi (from the app's StatusBridge) ----------
 // Each is also a shortcut, as in Tesla: Wi-Fi / cellular open the Wi-Fi settings, the time the
 // date and time settings, the temperature the car's climate screen. Without a system screen for
@@ -4371,6 +4395,7 @@ window.yunusCar = (m) => {
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.net) { renderNet(m.net); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
+  if (m.user) { carUser = m.user; renderProfile(); return; } // {name, photo} from the car's account
   if (m.tt) {
     for (const id in m.tt) {
       const v = m.tt[id];
