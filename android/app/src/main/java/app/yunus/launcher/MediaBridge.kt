@@ -179,6 +179,23 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private val seen = HashSet(prefs.getStringSet("seen2", emptySet()).orEmpty())
     @Volatile private var apps: JSONArray? = null
     private var artData: String? = null
+    // The radio's DAB mode sends no cover; the station's own slides (logo, programme picture) are
+    // copied here by the shell helper (CarWatch.copyDabSlide). A slide older than the station
+    // switch is the previous station's, so it waits for a new one.
+    private val dabSlide = java.io.File("/data/local/tmp/yunus_dab.jpg")
+    private var dabTitle: String? = null
+    private var dabSince = 0L
+    private var dabShown = 0L
+    private fun isDab(pkg: String, title: String) = pkg == "com.byd.mediacenter" && title.startsWith("DAB")
+    private val slideCheck = object : Runnable {
+        override fun run() {
+            val c = current
+            if (c != null && isDab(c.packageName, c.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "")
+                && dabSlide.lastModified() != dabShown) send()
+            main.postDelayed(this, 3000)
+        }
+    }
+    init { main.postDelayed(slideCheck, 3000) }
 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { list -> use(list.orEmpty()) }
     private val callback = object : MediaController.Callback() {
@@ -367,16 +384,29 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private fun art(pkg: String, title: String, md: MediaMetadata?): String? {
         val key = "$pkg|$title"
         if (key == artKey && artData != null) return artData
+        if (isDab(pkg, title)) {
+            if (title != dabTitle) { dabTitle = title; dabSince = System.currentTimeMillis() - 5000 }
+            val t = dabSlide.lastModified()
+            dabShown = t
+            if (t < dabSince) return null
+            val dabKey = "$pkg|$title|$t"
+            if (dabKey == artKey && artData != null) return artData
+            artKey = dabKey
+            artData = try { android.graphics.BitmapFactory.decodeFile(dabSlide.path)?.let { jpegUrl(it) } } catch (_: Exception) { null }
+            return artData
+        }
         val bmp = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: md?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
         artKey = key
-        artData = bmp?.let {
-            val side = 240
-            val scaled = Bitmap.createScaledBitmap(it, side, side * it.height / maxOf(1, it.width), true)
-            val bytes = ByteArrayOutputStream().also { o -> scaled.compress(Bitmap.CompressFormat.JPEG, 82, o) }.toByteArray()
-            "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
-        }
+        artData = bmp?.let { jpegUrl(it) }
         return artData
+    }
+
+    private fun jpegUrl(b: Bitmap): String {
+        val side = 240
+        val scaled = Bitmap.createScaledBitmap(b, side, side * b.height / maxOf(1, b.width), true)
+        val bytes = ByteArrayOutputStream().also { o -> scaled.compress(Bitmap.CompressFormat.JPEG, 82, o) }.toByteArray()
+        return "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
     // Each app's own icon, so any music app looks right on the card without being known in advance.
@@ -389,6 +419,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private fun isMedia(pkg: String) = mediaKind.getOrPut(pkg) { isMediaApp(ctx, pkg) }
 
     fun close() {
+        main.removeCallbacks(slideCheck)
         browser?.disconnect()
         worker.shutdownNow()
         try { manager.removeOnActiveSessionsChangedListener(sessionsChanged) } catch (_: Exception) { }

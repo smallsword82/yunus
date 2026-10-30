@@ -372,7 +372,25 @@ private object CarWatch {
     private val polls = ArrayList<Poll>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
+    // DAB stations broadcast slides (the station logo, the programme's picture); the DAB service
+    // saves them in its own app folder, which Yunus can't read but shell (sdcard_rw) can. The newest
+    // is copied where the app can read it, for the music card (MediaBridge.DAB_SLIDE).
+    private val slideDir = java.io.File("/storage/emulated/0/Android/data/com.fd.service.dab/files/dab/slide")
+    private var slideSeen = 0L
+    private fun copyDabSlide() { try {
+        val f = slideDir.listFiles()?.maxByOrNull { it.lastModified() }
+        if (f != null && f.lastModified() != slideSeen) {
+            slideSeen = f.lastModified()
+            val tmp = java.io.File("/data/local/tmp/yunus_dab.tmp")
+            f.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
+            tmp.setReadable(true, false)
+            tmp.setLastModified(f.lastModified())
+            tmp.renameTo(java.io.File("/data/local/tmp/yunus_dab.jpg"))
+        }
+    } catch (_: Throwable) { } }
+
     private fun poll() {
+        copyDabSlide()
         for (p in polls) if (!p.dead) try {
             val m = if (p.get.arg == null) p.cls.getMethod(p.get.method) else p.cls.getMethod(p.get.method, Integer.TYPE)
             val raw = if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)
