@@ -320,7 +320,7 @@ class MainActivity : Activity() {
             postToPage(JSONObject().put("embedStatus", msg).toString())
         }) { line -> carFromHelper(line) }
         // Windows, sunshade and speed through the shell helper (read only), as Kinex reads them.
-        shell.send("watch")
+        shell.watch()
         embed = AppEmbed(this, root, shell)
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
@@ -631,6 +631,15 @@ private class ShellLink(private val ctx: android.content.Context, private val st
     } + "-" + ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime
     private var socket: Socket? = null
 
+    // Car values ("watch") are subscribed per connection: every new connection asks again, and a
+    // connection that drops (the helper restarted, after an update say) is made again, so the
+    // values never stop coming until Yunus restarts.
+    @Volatile private var watching = false
+    fun watch() {
+        watching = true
+        worker.execute { try { if (socket == null) connect() else write("watch") } catch (t: Throwable) { status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") } }
+    }
+
     /** Sends [line]; [failed] runs (on this link's thread) if the helper could not be reached. */
     fun send(line: String, failed: () -> Unit = {}) = worker.execute {
         try { write(line) } catch (_: Throwable) {
@@ -679,8 +688,19 @@ private class ShellLink(private val ctx: android.content.Context, private val st
         val reply = input.readLine()
         s.soTimeout = 0
         if (reply == "ok") {
+            if (watching) s.getOutputStream().apply { write("watch\n".toByteArray()); flush() }
             // Anything the helper sends back (car values from "watch") arrives on this connection.
-            Thread({ try { while (true) onLine(input.readLine() ?: break) } catch (_: Throwable) { } }, "yunus-shell-in").apply { isDaemon = true }.start()
+            Thread({
+                try { while (true) onLine(input.readLine() ?: break) } catch (_: Throwable) { }
+                // Dropped: connect again (once the helper is back) to keep the values coming.
+                if (watching) try {
+                    worker.execute {
+                        if (socket === s) socket = null
+                        Thread.sleep(1500)
+                        try { if (socket == null) connect() } catch (_: Throwable) { }
+                    }
+                } catch (_: Throwable) { } // closed with Yunus
+            }, "yunus-shell-in").apply { isDaemon = true }.start()
             s
         } else { s.close(); null }
     } catch (_: Throwable) { null }
