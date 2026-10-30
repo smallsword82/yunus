@@ -371,6 +371,24 @@ button { font-family:inherit; color:inherit; }
 .tg { width:62px; height:34px; border-radius:17px; background:var(--cd2); border:0; position:relative; cursor:pointer; flex:none; }
 .tg i { position:absolute; top:4px; left:4px; width:26px; height:26px; border-radius:50%; background:#fff; transition:left .2s; }
 .tg.on { background:var(--ac); } .tg.on i { left:32px; }
+/* Status-bar panels (Wi-Fi, Bluetooth, notifications): a sheet under the bar's right end. */
+#netPop { position:absolute; top:64px; right:20px; z-index:30; width:440px; max-height:720px; overflow:auto; padding:16px 18px 18px; border-radius:22px;
+  background:var(--cd); box-shadow:0 14px 44px rgba(0,0,0,.45); opacity:0; transform:translateY(-10px); pointer-events:none; transition:opacity .2s, transform .2s; }
+#netPop.show { opacity:1; transform:none; pointer-events:auto; }
+#netPop h5 { margin:0 0 12px; font-size:24px; font-weight:600; display:flex; align-items:center; gap:12px; }
+#netPop h5 .sp { flex:1; }
+#netPop h5 .ti { font-size:26px; color:var(--mu); cursor:pointer; }
+#netPop .row { display:flex; align-items:center; gap:14px; min-height:62px; padding:0 12px; border-radius:14px; cursor:pointer; font-size:21px; }
+#netPop .row:active { background:var(--cd2); }
+#netPop .row.on { background:var(--cd2); color:var(--ac); }
+#netPop .row .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#netPop .row small { display:block; font-size:15px; color:var(--mu); }
+#netPop .row > .ti { font-size:26px; }
+#netPop .row .lk { font-size:20px; color:var(--mu); }
+#netPop .join { display:flex; gap:8px; padding:4px 12px 12px; }
+#netPop .join input { flex:1; height:52px; border:0; border-radius:12px; padding:0 14px; font-size:20px; background:var(--bg); color:var(--tx); }
+#netPop .join button { height:52px; padding:0 18px; border:0; border-radius:12px; background:var(--ac); color:#fff; font-size:19px; }
+#netPop .empty { padding:18px 12px; color:var(--mu); font-size:19px; }
 .rng { display:flex; align-items:center; gap:12px; flex:none; }
 .rng input { width:260px; accent-color:var(--ac); }
 .rng b { min-width:64px; text-align:right; font-weight:500; }
@@ -927,6 +945,7 @@ button { font-family:inherit; color:inherit; }
   <div id="warnBanner" role="alert"></div>
 
   <div id="seatPop" role="dialog"></div>
+  <div id="netPop" role="dialog"></div>
   <div id="dockPick" role="dialog"></div>
   <div id="petMode"><div class="paw"><i class="ti ti-paw"></i></div><b id="petTemp">22°</b><p id="petMsg"></p>
     <span class="petInfo"><i class="ti ti-snowflake"></i> Klima açık · <i class="ti ti-battery-2"></i> <span id="petBatt">78%</span></span>
@@ -4437,7 +4456,8 @@ function openSetting(which) {
   if (!window.YunusNative) return;
   if (!(YunusNative.openSetting && YunusNative.openSetting(which))) openCarApp(CAR_SETTINGS);
 }
-$('wifiInd').onclick = $('mobInd').onclick = () => openSetting('wifi');
+$('mobInd').onclick = () => openSetting('wifi');
+$('wifiInd').onclick = () => openNetPop('wifi');
 $('btInd').onclick = () => openSetting('bluetooth');
 // The bell: the number of notifications; a tap pulls down the system's notification shade.
 $('bellInd').onclick = () => { if (window.YunusNative && YunusNative.openNotifications) YunusNative.openNotifications(); };
@@ -4460,6 +4480,60 @@ $('clockTxt').onclick = () => openSetting('date');
 function tickClock() { $('clockTxt').textContent = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); }
 tickClock(); setInterval(tickClock, 10000);
 // Levels 0–4, -1: none. Wi-Fi has four Tabler steps, mobile five bars.
+// Status-bar panels, as the car's own: Wi-Fi (switch, networks, join), … The car's data comes
+// from the shell helper ({wifi:{on, ssid, nets}}); off the car a sample list.
+let netPopKind = null, netJoin = null;
+const netData = { wifi: window.YunusNative ? null : { on: true, ssid: 'Ev', nets: [
+  { ssid: 'Ev', bars: 3, lock: true, saved: true, on: true }, { ssid: 'Telefon', bars: 2, lock: true, saved: true },
+  { ssid: 'Kafe_Misafir', bars: 1, lock: false }, { ssid: 'Komşu 5G', bars: 1, lock: true }] } };
+function openNetPop(kind) {
+  if (netPopKind === kind) return closeNetPop();
+  netPopKind = kind; netJoin = null;
+  if (kind === 'wifi') { carCmd('wifi'); carCmd('wifiScan'); }
+  renderNetPop();
+  $('netPop').classList.add('show');
+  if (mapEmbedded) YunusNative.embedVisible('map', false); // Maps is drawn above the page
+  if (sidePkg) YunusNative.embedVisible('side', false);
+}
+function closeNetPop() {
+  if (!netPopKind) return;
+  netPopKind = null; $('netPop').classList.remove('show');
+  if (mapEmbedded && !current && !trayOpen) YunusNative.embedVisible('map', true);
+  if (sidePkg) embedSide();
+}
+function renderNetPop() {
+  if (netPopKind !== 'wifi') return;
+  const w = netData.wifi;
+  const head = `<h5><i class="ti ti-wifi" style="color:var(--tx);cursor:default"></i>Wi-Fi<span class="sp"></span>
+    ${w && w.on ? '<i class="ti ti-refresh" data-np="scan" aria-label="Yenile"></i>' : ''}
+    <button class="tg ${w && w.on ? 'on' : ''}" data-np="wifiOn" aria-label="Wi-Fi"><i></i></button></h5>`;
+  let body;
+  if (!w) body = '<div class="empty">Okunuyor…</div>';
+  else if (!w.on) body = '<div class="empty">Wi-Fi kapalı</div>';
+  else if (!w.nets.length) body = '<div class="empty">Ağ aranıyor…</div>';
+  else body = w.nets.map((n, i) => `<div class="row ${n.on ? 'on' : ''}" data-net="${i}">
+      <i class="ti ${['ti-wifi-0', 'ti-wifi-1', 'ti-wifi-2', 'ti-wifi'][n.bars] || 'ti-wifi'}"></i>
+      <span class="nm">${escHtml(n.ssid)}<small>${n.on ? 'Bağlı' : n.saved ? 'Kayıtlı' : ''}</small></span>
+      ${n.lock ? '<i class="ti ti-lock lk"></i>' : ''}${n.on ? '<i class="ti ti-check"></i>' : ''}</div>
+      ${netJoin === n.ssid ? `<div class="join"><input id="netPass" type="password" placeholder="Şifre" autocomplete="off"><button data-np="join">Bağlan</button></div>` : ''}`).join('');
+  $('netPop').innerHTML = head + body;
+  if (netJoin) setTimeout(() => { const f = $('netPass'); if (f) f.focus(); }, 50);
+}
+$('netPop').addEventListener('click', (e) => {
+  const w = netData.wifi, t = e.target.closest('[data-np],[data-net]'); if (!t || !w) return;
+  if (t.dataset.np === 'wifiOn') { w.on = !w.on; if (!w.on) w.nets = []; carCmd('wifiOn', { on: w.on }); if (w.on) setTimeout(() => carCmd('wifiScan'), 1500); }
+  else if (t.dataset.np === 'scan') carCmd('wifiScan');
+  else if (t.dataset.np === 'join') { const pass = $('netPass').value; if (!pass) return; carCmd('wifiJoin', { ssid: netJoin, pass }); netJoin = null; }
+  else if (t.dataset.net != null) {
+    const n = w.nets[+t.dataset.net]; if (n.on) return;
+    if (n.lock && !n.saved) { netJoin = netJoin === n.ssid ? null : n.ssid; }
+    else { carCmd('wifiJoin', { ssid: n.ssid }); w.nets.forEach((x) => { x.on = false; }); }
+  }
+  renderNetPop();
+});
+document.addEventListener('pointerdown', (e) => {
+  if (netPopKind && !e.target.closest('#netPop,#netStat')) closeNetPop();
+});
 function renderNet(n) {
   const wifi = $('wifiInd'), mob = $('mobInd');
   // Always shown (crossed out when not joined), so its shortcut is there to join one.
@@ -4695,6 +4769,7 @@ window.yunusCar = (m) => {
   }
   if (m.volume) { systemVolume(m.volume); return; }
   if (m.net) { renderNet(m.net); return; }
+  if (m.wifi) { m.wifi.nets.sort((a, b) => b.on - a.on); netData.wifi = m.wifi; if (netPopKind === 'wifi') renderNetPop(); return; } // the joined one first
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
   if (m.user) { carUser = m.user; renderProfile(); return; }
   if (m.perms) { perms = m.perms; if (current === 'controls' && CARDS.controls.tab === 'system') refreshCard(); return; }

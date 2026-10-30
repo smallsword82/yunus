@@ -456,6 +456,7 @@ private object CarWatch {
      * Sunshade: {cmd:sunshade, open:0|100} → setSunshadeState(SUNROOF_CLOSE|SUNROOF_OPEN).
      */
     fun command(json: String) = main.post {
+        if (json.contains("\"cmd\":\"wifi")) return@post wifiCommand(json)
         if (json.contains("\"cmd\":\"ac") || json.contains("\"cmd\":\"wheelHeat") || json.contains("\"cmd\":\"seat\"")) return@post acCommand(json)
         val dev = bodyworkDev ?: run { System.err.println("cmd: no bodywork device"); return@post }
         try {
@@ -572,6 +573,78 @@ private object CarWatch {
                 "acAuto" -> call("setAcControlMode", arrayOf(0, if (o.optBoolean("on")) 0 else 1))
             }
         } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
+    }
+
+    /**
+     * Wi-Fi, through the wifi service itself as the shell (which holds NETWORK_SETTINGS and location,
+     * so it may switch Wi-Fi, scan, read the saved networks and join one; an app may not on
+     * Android 10). Replies go to the page as "msg {wifi:{on, ssid, nets:[…]}}".
+     * {cmd:wifi} → state and list; wifiOn {on}; wifiScan; wifiJoin {ssid, pass?}.
+     */
+    private val wifiSvc by lazy {
+        val b = Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java).invoke(null, "wifi") as android.os.IBinder
+        Class.forName("android.net.wifi.IWifiManager\$Stub").getMethod("asInterface", android.os.IBinder::class.java).invoke(null, b)!!
+    }
+    private fun wifi(name: String, vararg args: Any?): Any? =
+        wifiSvc.javaClass.methods.first { it.name == name && it.parameterTypes.size == args.size }.invoke(wifiSvc, *args)
+    private fun field(o: Any, name: String): Any? = try { o.javaClass.getField(name).get(o) } catch (_: Throwable) { null }
+    private fun saved(): List<Any> {
+        val slice = wifi("getConfiguredNetworks", SHELL) ?: return emptyList() // (the "privileged" list needs READ_WIFI_CREDENTIAL)
+        @Suppress("UNCHECKED_CAST")
+        return (slice.javaClass.getMethod("getList").invoke(slice) as? List<Any>).orEmpty()
+    }
+    private const val SHELL = "com.android.shell"
+    private fun unquote(s: String?) = s?.removeSurrounding("\"").orEmpty()
+
+    private fun wifiCommand(json: String) {
+        try {
+            val o = org.json.JSONObject(json)
+            when (o.optString("cmd")) {
+                "wifiOn" -> wifi("setWifiEnabled", SHELL, o.optBoolean("on"))
+                "wifiScan" -> { wifi("startScan", SHELL); main.postDelayed({ wifiReport() }, 3500) }
+                "wifiJoin" -> {
+                    val ssid = o.optString("ssid"); val pass = o.optString("pass", "")
+                    val known = saved().firstOrNull { unquote(field(it, "SSID") as? String) == ssid }
+                    val id = if (known != null && pass.isEmpty()) field(known, "networkId") as Int else {
+                        val c = Class.forName("android.net.wifi.WifiConfiguration").getConstructor().newInstance()
+                        c.javaClass.getField("SSID").set(c, "\"$ssid\"")
+                        val km = c.javaClass.getField("allowedKeyManagement").get(c) as java.util.BitSet
+                        if (pass.isEmpty()) km.set(0) /* NONE */ else c.javaClass.getField("preSharedKey").set(c, "\"$pass\"")
+                        wifi("addOrUpdateNetwork", c, SHELL) as Int
+                    }
+                    val r = id >= 0 && wifi("enableNetwork", id, true, SHELL) == true
+                    wifi("reconnect", SHELL)
+                    System.err.println("wifi join $ssid id=$id -> $r")
+                    main.postDelayed({ wifiReport() }, 4000)
+                }
+            }
+            main.postDelayed({ wifiReport() }, 600)
+        } catch (t: Throwable) { System.err.println("wifi $json: ${t.cause ?: t}") }
+    }
+
+    private fun wifiReport() {
+        try {
+            val on = wifi("getWifiEnabledState") == 3 // WIFI_STATE_ENABLED
+            val info = wifi("getConnectionInfo", SHELL)
+            val cur = info?.let { unquote(it.javaClass.getMethod("getSSID").invoke(it) as? String) }.orEmpty().takeIf { it != "<unknown ssid>" }.orEmpty()
+            val known = saved().map { unquote(field(it, "SSID") as? String) }.toSet()
+            val nets = org.json.JSONArray()
+            @Suppress("UNCHECKED_CAST")
+            val scan = (wifi("getScanResults", SHELL) as? List<Any>).orEmpty()
+            // One row per name, its strongest access point.
+            scan.groupBy { field(it, "SSID") as? String ?: "" }.filterKeys { it.isNotBlank() }
+                .map { (name, aps) -> name to aps.maxByOrNull { field(it, "level") as Int }!! }
+                .sortedByDescending { field(it.second, "level") as Int }
+                .forEach { (name, ap) ->
+                    val rssi = field(ap, "level") as Int
+                    val caps = field(ap, "capabilities") as? String ?: ""
+                    nets.put(org.json.JSONObject().put("ssid", name)
+                        .put("bars", android.net.wifi.WifiManager.calculateSignalLevel(rssi, 4))
+                        .put("lock", Regex("WPA|WEP|SAE|PSK|EAP").containsMatchIn(caps))
+                        .put("saved", name in known).put("on", name == cur))
+                }
+            send("msg " + org.json.JSONObject().put("wifi", org.json.JSONObject().put("on", on).put("ssid", cur).put("nets", nets)))
+        } catch (t: Throwable) { System.err.println("wifi report: ${t.cause ?: t}") }
     }
 
     private fun event(dev: String, type: Int, value: Any?) {

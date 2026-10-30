@@ -412,6 +412,7 @@ class MainActivity : Activity() {
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {
+        if (line.startsWith("msg ")) return postToPage(line.substring(4)) // a reply for the page as it is (Wi-Fi, …)
         val f = line.split(' ')
         if (f.size != 5 || f[0] != "ev") return
         val v = f[4].toDoubleOrNull() ?: return
