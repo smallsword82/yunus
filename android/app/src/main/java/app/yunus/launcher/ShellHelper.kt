@@ -316,7 +316,8 @@ private object CarWatch {
         // steering) and door-lock become readable and commandable from this shell process. Same
         // approach here; proven on the car, where Kinex reads and locks the Dolphin this way.
         val ctx: android.content.Context = Permissive(base)
-        for (name in listOf("bodywork.BYDAutoBodyworkDevice", "speed.BYDAutoSpeedDevice"))
+        for (name in listOf("bodywork.BYDAutoBodyworkDevice", "speed.BYDAutoSpeedDevice",
+                "doorlock.BYDAutoDoorLockDevice", "ota.BYDAutoOtaDevice"))
             try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
         // Also the getters Kinex reads, once a second (SOC, range and speed don't come as events
         // while parked). A getter that is refused is not asked again.
@@ -369,17 +370,25 @@ private object CarWatch {
     private fun listen(ctx: android.content.Context, clsName: String) {
         val c = Class.forName(clsName)
         val dev = c.getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx) ?: return
-        val reg = c.methods.firstOrNull { it.name == "registerListener" && it.parameterTypes.size == 1 && it.parameterTypes[0].isInterface } ?: return
-        val iface = reg.parameterTypes[0]
         val tag = clsName.substringAfterLast('.').removePrefix("BYDAuto").removeSuffix("Device")
+        if (clsName.contains("bodywork")) bodyworkDev = dev // for commands, even if no interface listener below
+        val reg = c.methods.firstOrNull { it.name == "registerListener" && it.parameterTypes.size == 1 && it.parameterTypes[0].isInterface }
+        if (reg == null) { System.err.println("watch: $tag has no interface registerListener"); return }
+        val iface = reg.parameterTypes[0]
         val proxy = java.lang.reflect.Proxy.newProxyInstance(iface.classLoader, arrayOf(iface)) { _, m, args ->
-            try { if (m.name == "onDataEventChanged" && args != null && args.size == 2) event(tag, (args[0] as? Int) ?: 0, args[1]) } catch (_: Throwable) { }
+            try {
+                if (m.name == "onDataEventChanged" && args != null && args.size == 2) event(tag, (args[0] as? Int) ?: 0, args[1])
+                else if (m.name == "onDataChanged" && args != null && args.size == 1) {
+                    val ev = args[0]
+                    val id = (try { ev?.javaClass?.getMethod("getEventType")?.invoke(ev) } catch (_: Throwable) { null }) as? Int ?: 0
+                    event(tag, id, try { ev?.javaClass?.getMethod("getValue")?.invoke(ev) } catch (_: Throwable) { null })
+                } else if (m.name.startsWith("on")) System.err.println("watch $tag ${m.name}(${args?.joinToString { it?.toString() ?: "null" } ?: ""})")
+            } catch (_: Throwable) { }
             when (m.returnType) { java.lang.Boolean.TYPE -> false; Integer.TYPE -> 0; else -> null }
         }
         reg.invoke(dev, proxy)
         held.add(dev)
-        if (clsName.contains("bodywork")) bodyworkDev = dev
-        System.err.println("watch: listening to $tag")
+        System.err.println("watch: listening to $tag (${iface.simpleName})")
         try { c.getMethod("getAllStatus").invoke(dev) } catch (_: Throwable) { }
     }
 
@@ -410,14 +419,52 @@ private object CarWatch {
                     val r = c.getMethod("setSunshadeState", Integer.TYPE).invoke(dev, pct)
                     System.err.println("cmd sunshade -> $pct = $r")
                 }
+                "lock" -> {
+                    // Whole-car lock/unlock through the Bodywork device's inherited set(deviceType, featureId, value):
+                    // BODYWORK_REMOTE_CONTROL_LOCK 0x18000009 / UNLOCK 0x18000008, Bodywork deviceType 1001.
+                    val on = o.optBoolean("on", true)
+                    val feature = if (o.has("feature")) o.getInt("feature") else if (on) 0x18000009 else 0x18000008
+                    val devType = o.optInt("type", 1001)
+                    val value = o.optInt("value", 1)
+                    var setM: java.lang.reflect.Method? = null
+                    var cls: Class<*>? = dev.javaClass
+                    while (cls != null && setM == null) {
+                        setM = try { cls.getDeclaredMethod("set", Integer.TYPE, Integer.TYPE, Integer.TYPE).apply { isAccessible = true } } catch (_: Throwable) { null }
+                        cls = cls.superclass
+                    }
+                    val r = setM?.invoke(dev, devType, feature, value)
+                    System.err.println("cmd lock on=$on type=$devType feature=0x${Integer.toHexString(feature)} value=$value -> $r (set=${setM != null})")
+                }
+                "post" -> {
+                    // Raw postEvent(device_type, event_type, value, obj) — how the third-party lock app
+                    // (br.com.rory.electro) drives the car: BODYWORK 1001 / 0x48E00037 / value 1 = lock, 0 = unlock.
+                    // set() is refused for this feature; postEvent is the channel that actually acts.
+                    val devType = o.optInt("type", 1001)
+                    val feature = o.getInt("feature")
+                    val value = o.optInt("value", 1)
+                    // The 4th arg carries the real payload; null posts nothing (returns true but no-op).
+                    // The lock app passes a BYDAutoEventValue(int), so build the same.
+                    val evObj = try { Class.forName("android.hardware.bydauto.BYDAutoEventValue").getConstructor(Integer.TYPE).newInstance(value) } catch (t: Throwable) { System.err.println("post: no BYDAutoEventValue: ${t.cause ?: t}"); null }
+                    var pm: java.lang.reflect.Method? = null
+                    var cls: Class<*>? = dev.javaClass
+                    while (cls != null && pm == null) {
+                        pm = try { cls.getDeclaredMethod("postEvent", Integer.TYPE, Integer.TYPE, Integer.TYPE, Any::class.java).apply { isAccessible = true } } catch (_: Throwable) { null }
+                        cls = cls.superclass
+                    }
+                    val r = pm?.invoke(dev, devType, feature, value, evObj)
+                    System.err.println("cmd post type=$devType feature=0x${Integer.toHexString(feature)} value=$value obj=${evObj != null} -> $r (m=${pm != null})")
+                }
             }
         } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
     }
 
     private fun event(dev: String, type: Int, value: Any?) {
         if (value == null) return
-        for ((f, k) in listOf("intValue" to "i", "floatValue" to "f", "doubleValue" to "d")) {
-            val v = try { value.javaClass.getField(f).get(value) as? Number } catch (_: Throwable) { null } ?: continue
+        // Normally a BYDAutoEventValue (intValue/floatValue/doubleValue); onDataChanged may hand a raw Number.
+        val cand: List<Pair<String, Number>> = if (value is Number) listOf("i" to value)
+            else listOf("intValue" to "i", "floatValue" to "f", "doubleValue" to "d").mapNotNull { (f, k) ->
+                (try { value.javaClass.getField(f).get(value) as? Number } catch (_: Throwable) { null })?.let { k to it } }
+        for ((k, v) in cand) {
             if (v.toDouble() in invalid) continue
             val id = String.format("0x%08X", type)
             val line = "ev $dev $id $k $v"
