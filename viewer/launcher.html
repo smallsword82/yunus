@@ -1447,7 +1447,6 @@ function onCarLoaded(gltf) {
   car.traverse((o) => { if (o.isMesh && /^Trunk/.test(o.name)) moving.trunk.push(o); });
   setupLamps(car);
   setupSunshade(car);
-  splitFrontWheels(car);
   if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, get map() { return map; } };
   placePlates(car);
   controls.target.copy(target);
@@ -1484,12 +1483,6 @@ function animateParts() {
   }
   a.flap += ((S.charging ? FLAP_OPEN : 0) - a.flap) * ease;
   if (moving.flap) moving.flap.rotation.y = a.flap;
-  // Front wheels follow the steering angle (steering-wheel degrees ÷ steering ratio).
-  if (frontWheelsReady) {
-    a.steer = (a.steer || 0) + ((S.steerAngle || 0) - (a.steer || 0)) * 0.2;
-    const rad = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(a.steer / STEER_RATIO, -45, 45)) * STEER_SIGN;
-    frontWheel.left.rotation.y = rad; frontWheel.right.rotation.y = rad;
-  }
   // The sunshade rolls back from the front edge of the glass towards the rear.
   if (SHADE.node) {
     a.shade = (a.shade || 0) + (S.sunshade / 100 - (a.shade || 0)) * 0.05;
@@ -1727,54 +1720,6 @@ function splitTailgate(car) {
     // Keep paint swaps (single/two-tone) working on the split-off roof/hood triangles too.
     if (upperMeshes.includes(o)) { m.userData.blackMat = o.userData.blackMat; upperMeshes.push(m); }
   }
-}
-
-// ---------- front wheels steer with the steering angle ----------
-// The model's four wheels are one merged mesh per part (tyre, rims, discs …), so there is no node
-// to turn. At load the front-wheel triangles are cut into two pivots (left, right) at each front
-// wheel's centre, and animateParts turns those pivots by the steering angle (BODYWORK steering
-// wheel value, ±780°) divided by the steering ratio. Front is +z in world space (verified on the car).
-const WHEEL_PART = /rim|tyre|tire|calip|disk|alloy|mudflap/i;
-const isWheelPart = (o) => o.isMesh && !/Door/.test(o.name) && (WHEEL_PART.test(o.name) || o.name === 'rubber_rubber1_0');
-const frontWheel = { left: new THREE.Group(), right: new THREE.Group() };
-let frontWheelsReady = false;
-const STEER_RATIO = 15, STEER_SIGN = -1; // ±780° wheel → road angle; sign flips if it turns the wrong way
-function splitFrontWheels(car) {
-  car.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(car), zMid = (box.min.z + box.max.z) / 2;
-  const v = new THREE.Vector3(), bb = { left: new THREE.Box3(), right: new THREE.Box3() }, parts = [];
-  car.traverse((o) => {
-    if (!isWheelPart(o)) return;
-    const g = o.geometry, pos = g.attributes.position;
-    const idx = g.index ? g.index.array : [...Array(pos.count).keys()];
-    const keep = [], side = { left: [], right: [] };
-    for (let i = 0; i < idx.length; i += 3) {
-      let cx = 0, cz = 0; const vs = [];
-      for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, idx[i + k]).applyMatrix4(o.matrixWorld); vs.push(v.clone()); cx += v.x; cz += v.z; }
-      if (cz / 3 <= zMid) { keep.push(idx[i], idx[i + 1], idx[i + 2]); continue; } // rear wheels (−z) stay put
-      const s = cx < 0 ? 'left' : 'right';
-      side[s].push(idx[i], idx[i + 1], idx[i + 2]);
-      vs.forEach((p) => bb[s].expandByPoint(p));
-    }
-    if (side.left.length || side.right.length) parts.push({ o, keep, side });
-  });
-  if (!parts.length) return;
-  for (const s of ['left', 'right']) if (!bb[s].isEmpty()) { frontWheel[s].position.copy(bb[s].getCenter(new THREE.Vector3())); scene.add(frontWheel[s]); frontWheel[s].updateMatrixWorld(true); }
-  const inv = { left: frontWheel.left.matrixWorld.clone().invert(), right: frontWheel.right.matrixWorld.clone().invert() };
-  for (const { o, keep, side } of parts) {
-    const base = o.geometry.clone();
-    o.geometry = base.clone(); o.geometry.setIndex(keep);
-    for (const s of ['left', 'right']) {
-      if (!side[s].length) continue;
-      const gg = base.clone(); gg.setIndex(side[s]);
-      const m = new THREE.Mesh(gg, o.material); // the material is shared by reference, so paint swaps still apply
-      m.name = o.name + '_fw_' + s;
-      m.matrixAutoUpdate = false;
-      m.matrix.copy(inv[s]).multiply(o.matrixWorld);
-      frontWheel[s].add(m);
-    }
-  }
-  frontWheelsReady = true;
 }
 
 // ---------- Turkish licence plates ----------
