@@ -77,8 +77,8 @@
         android:theme="@style/Theme.Yunus"
         android:hardwareAccelerated="true">
 
-        <!-- Test build: a normal app with a launcher icon, not yet a home screen
-             (no HOME category), so the BYD home screen stays as it is. -->
+        <!-- The car's home screen (HOME), and still an app with a launcher icon. Made the default
+             with `cmd package set-home-activity`; BYD's own home stays installed as the fallback. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -87,6 +87,11 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
