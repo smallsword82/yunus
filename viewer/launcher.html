@@ -2468,19 +2468,14 @@ function setCharge(v, fromCar) {
   refreshCard();
 }
 // Sunshade opening in percent (0 closed, 100 fully back), like the window percentages.
-// On the car the sunshade can be neither read nor moved by Yunus (BYD's signature): its button
-// opens the car's own sunshade screen, which shows where it is and moves it.
-const SHADE_SCREEN = 'com.byd.carsettings/com.byd.vehiclesettings.sunroof.view.SunRoofActivity';
 function setShade(p) {
   S.sunshade = Math.round(THREE.MathUtils.clamp(p, 0, 100));
-  $('hShade').innerHTML = DEVICE ? '<b>Ayarla</b><span>Tavan perdesi</span>'
-    : S.sunshade > 0 ? `<b>Kapat</b><span>Perde %${S.sunshade}</span>` : '<b>Aç</b><span>Tavan perdesi</span>';
+  $('hShade').innerHTML = S.sunshade > 0 ? `<b>Kapat</b><span>Perde %${S.sunshade}</span>` : '<b>Aç</b><span>Tavan perdesi</span>';
   refreshCard();
 }
 $('hTrunk').onclick = () => setTrunk(!S.trunk);
 $('hCharge').onclick = () => setCharge(!S.charging);
-$('hShade').onclick = () => (DEVICE ? openCarApp(SHADE_SCREEN) : setShade(S.sunshade > 0 ? 0 : 100));
-if (DEVICE) $('hShade').innerHTML = '<b>Ayarla</b><span>Tavan perdesi</span>';
+$('hShade').onclick = () => setShade(S.sunshade > 0 ? 0 : 100);
 
 // Dragging the glass on the model (as in Kinex): a side window follows the finger up and down,
 // the sunshade follows it along the roof, and either stays wherever it is let go. The finger
@@ -2546,8 +2541,7 @@ function placeGlassDots() {
       const toCam = cam.position.clone().sub(p).normalize();
       facing = k[1] === 'L' ? toCam.x > 0.35 : toCam.x < -0.35;
     }
-    // Not on the car: the windows' and sunshade's places are not readable there and Yunus can't move them.
-    const show = !DEVICE && !!p && facing && S.gear === 'P';
+    const show = !!p && facing && S.gear === 'P';
     el.style.opacity = show ? 1 : 0;
     el.style.pointerEvents = show ? 'auto' : 'none';
     if (!p) return;
@@ -3938,7 +3932,7 @@ body.addEventListener('click', (e) => {
     updateTelltales();
   }
   if (act === 'fog') S.fog = !S.fog;
-  if (act === 'shade') { if (DEVICE) return openCarApp(SHADE_SCREEN); if (S.gear === 'P') camTo('roof'); return setShade(S.sunshade > 0 ? 0 : 100); }
+  if (act === 'shade') { if (S.gear === 'P') camTo('roof'); return setShade(S.sunshade > 0 ? 0 : 100); }
   if (act === 'high') S.highBeam = !S.highBeam;
   if (act === 'resetSettings') { S.set = { ...SETTING_DEFAULTS }; saveSettings(); }
   refreshCard();

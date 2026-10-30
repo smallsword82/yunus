@@ -112,10 +112,6 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   Son düğme ve lamba değerleri `CAR_HAL_KEEP` ile saklanıp açılışta geri yükleniyor (araçta
   denendi: açık ve kapalı kayıtla doğru açıldı); hiç kayıt yoksa "otomatik" gece modunu izliyor.
   Not: `lowLamp`/`sideLamp` önceden `telemetryKeys`'te olmadığı için hiç işlenmiyordu, düzeltildi.
-- **Camlar/perde (30.10):** Yunus'un izni olan cihazlarda konumları yok (yalnız Bodywork, imzalı).
-  Araçta perde düğmesi BYD'nin güneşlik ekranını açıyor (`SunRoofActivity`, action
-  `android.intent.action.BYD_SUNROOF_AND_SUNSHADE`, durum + aç/kapat orada); cam/perde sürükleme
-  noktaları araçta gizli. BYD'de ayrı cam ekranı bulunamadı. `SkyCurtainActivity` = karartmalı tavan, Dolphin'de yok.
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
