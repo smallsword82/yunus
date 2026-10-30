@@ -133,9 +133,9 @@ class VolumeBridge(private val ctx: Context, private val emit: (String) -> Unit)
 }
 
 /**
- * Lets Yunus read the media sessions (Android hands them to an enabled notification listener), and
- * count the notifications for the status bar's bell: only how many there are (dismissable ones, not
- * Yunus's own), never their content. The owner enables it once in notification access.
+ * Lets Yunus read the media sessions (Android hands them to an enabled notification listener), count
+ * the notifications for the status bar's bell, and list them in the bell's panel (app, title, text,
+ * time; open, dismiss, clear all). The owner enables it once in notification access.
  */
 class MediaListener : NotificationListenerService() {
     companion object {
@@ -149,6 +149,33 @@ class MediaListener : NotificationListenerService() {
     } catch (_: Exception) { 0 }
 
     private fun report() { onCount?.invoke(count()) }
+
+    private fun shown() = activeNotifications.orEmpty().filter { it.isClearable && it.packageName != packageName }
+        .sortedByDescending { it.postTime }
+
+    /** The bell's panel: newest first, [{key, pkg, app, icon, title, text, time}]. */
+    fun list(): String = try {
+        val out = org.json.JSONArray()
+        shown().take(30).forEach { n ->
+            val x = n.notification.extras
+            out.put(org.json.JSONObject().put("key", n.key).put("pkg", n.packageName).put("app", appLabel(this, n.packageName))
+                .put("icon", icons.getOrPut(n.packageName) { appIconData(this, n.packageName) } ?: org.json.JSONObject.NULL)
+                .put("title", x.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() ?: "")
+                .put("text", (x.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT) ?: x.getCharSequence(android.app.Notification.EXTRA_TEXT))?.toString() ?: "")
+                .put("time", n.postTime))
+        }
+        out.toString()
+    } catch (_: Exception) { "[]" }
+    private val icons = HashMap<String, String?>()
+
+    /** Opens what the notification [key] points to (its own tap action), and lets it go if it asks to. */
+    fun open(key: String) {
+        val n = shown().firstOrNull { it.key == key } ?: return
+        try { n.notification.contentIntent?.send() } catch (_: Exception) { }
+        if (n.notification.flags and android.app.Notification.FLAG_AUTO_CANCEL != 0) cancelNotification(key)
+    }
+    fun dismiss(key: String) = try { cancelNotification(key) } catch (_: Exception) { }
+    fun clearAll() = try { cancelAllNotifications() } catch (_: Exception) { }
     override fun onListenerConnected() { instance = this; report() }
     override fun onListenerDisconnected() { if (instance === this) instance = null }
     override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification?) = report()

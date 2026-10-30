@@ -57,7 +57,9 @@ class StatusBridge(ctx: Context, private val emit: (String) -> Unit) {
     @Suppress("DEPRECATION")
     private fun btState(): Int = try {
         if (bt == null || !bt.isEnabled) -1
-        else if (intArrayOf(android.bluetooth.BluetoothProfile.A2DP, android.bluetooth.BluetoothProfile.HEADSET)
+        // The car is the phone's hands-free and music sink (HFP client 16, A2DP sink 11); the
+        // phone-side profiles are there for other head units.
+        else if (intArrayOf(16, 11, android.bluetooth.BluetoothProfile.A2DP, android.bluetooth.BluetoothProfile.HEADSET)
                 .any { bt.getProfileConnectionState(it) == android.bluetooth.BluetoothProfile.STATE_CONNECTED }) 1
         else 0
     } catch (_: SecurityException) { if (bt?.isEnabled == true) 0 else -1 } catch (_: Exception) { -1 }

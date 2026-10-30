@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     private lateinit var embed: AppEmbed
     private lateinit var volPop: VolumeOverlay
     private lateinit var media: MediaBridge
+    private lateinit var bt: BtBridge
     private lateinit var volume: VolumeBridge
     private lateinit var status: StatusBridge
 
@@ -118,6 +119,24 @@ class MainActivity : Activity() {
                 // the bodywork device with the permission-passing context (the way it reads them).
                 @JavascriptInterface
                 fun command(json: String) { shell.send("cmd $json") }
+
+                // The bell's panel: the notifications (see MediaListener.list), open, dismiss, clear all.
+                @JavascriptInterface
+                fun notifList(): String = MediaListener.instance?.list() ?: "null"
+                @JavascriptInterface
+                fun notifOpen(key: String) { MediaListener.instance?.open(key) }
+                @JavascriptInterface
+                fun notifDismiss(key: String) { MediaListener.instance?.dismiss(key) }
+                @JavascriptInterface
+                fun notifClear() { MediaListener.instance?.clearAll() }
+
+                // The status bar's Bluetooth panel (see BtBridge): the list comes back as {btList}.
+                @JavascriptInterface
+                fun btReport() = bt.report()
+                @JavascriptInterface
+                fun btSet(on: Boolean) = bt.set(on)
+                @JavascriptInterface
+                fun btConnect(addr: String, on: Boolean) = bt.connect(addr, on)
 
                 // Shows the first installed of [packages] (comma separated) inside slot [slot] at
                 // x,y size w×h (page pixels = screen pixels); the page then gets
@@ -275,6 +294,7 @@ class MainActivity : Activity() {
         embed = AppEmbed(this, root, shell)
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
+        bt = BtBridge(this, ::postToPage)
         volume = VolumeBridge(this, ::postToPage)
         status = StatusBridge(this, ::postToPage).also { it.start() }
         // The bell's count from the notification listener (only the number, never the content).
@@ -408,7 +428,7 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
     override fun onPause() { web.onPause(); super.onPause() }
-    override fun onDestroy() { carHal?.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {

@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Bluetooth on / connected for the status bar (normal permission up to Android 11). -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <!-- The Bluetooth panel switches Bluetooth and connects a paired phone (normal up to Android 11). -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <!-- The bell in the status bar pulls down the notification shade (normal permission). -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
     <!-- The car's signed-in user (name and photo) from BYD's account app (normal permission). -->
