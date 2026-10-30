@@ -158,6 +158,10 @@ class MainActivity : Activity() {
                 // (it is see-through there), so the pop-up shows over live Maps; after, Maps is on
                 // top again, fastest and taking its touches. Raised by Z, not moved: a TextureView
                 // taken out and put back loses its picture until the app draws again.
+                // The recent apps (BYD's bar with its key is off the screen); the shell sends the key.
+                @JavascriptInterface
+                fun recents() = shell.send("recents")
+
                 @JavascriptInterface
                 fun mapUnder(under: Boolean) = runOnUiThread { web.translationZ = if (under) 10f else 0f }
 
@@ -304,7 +308,7 @@ class MainActivity : Activity() {
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
         bt = BtBridge(this, ::postToPage)
-        edge = EdgeHome(this)
+        edge = EdgeHome(this) { shell.send("recents") }
         volume = VolumeBridge(this, ::postToPage)
         status = StatusBridge(this, ::postToPage).also { it.start() }
         // The bell's count from the notification listener (only the number, never the content).

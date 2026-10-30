@@ -688,7 +688,7 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
 .app span { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } /* long app names */
 
 /* dock */
-#dock { grid-column:1 / -1; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
+#dock { touch-action:none; /* a swipe up from its edge is ours (recents), not a page pan */ grid-column:1 / -1; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
 .dk:hover { background:var(--cd); }
 .dk .dolphin { width:78px; height:auto; }
@@ -4259,6 +4259,18 @@ setFan(S.fan, true); // initial value
 // Car button: the home key (BYD's bar is off the screen) — a tap closes whatever is open (card,
 // tray, pop-ups) and brings the car view back; hold for Yunus's settings.
 const CAR_SETTINGS = 'com.byd.carsettings/.MainActivity';
+// In Yunus too, a swipe up from the bottom edge held a moment opens the recent apps (over other
+// apps the same gesture is the native EdgeHome strip); let go early, it is the home key.
+(function edgeSwipe() {
+  let y0 = null, up = false, t = 0;
+  addEventListener('pointerdown', (e) => { const sy = (e.clientY - stage.getBoundingClientRect().top) / stageScale; y0 = sy > (PORTRAIT ? 1920 : 1080) - 24 ? e.clientY : null; up = false; });
+  addEventListener('pointermove', (e) => {
+    if (y0 === null || up || (y0 - e.clientY) / stageScale < 36) return;
+    up = true; t = setTimeout(() => { up = false; y0 = null; if (window.YunusNative && YunusNative.recents) YunusNative.recents(); }, 350);
+  });
+  const end = () => { if (up) { clearTimeout(t); goHome(); } y0 = null; up = false; };
+  addEventListener('pointerup', end); addEventListener('pointercancel', () => { clearTimeout(t); y0 = null; up = false; });
+})();
 function goHome() {
   closeNetPop(); closeSeatPop(); closeAppTray();
   if (current) closeCard();

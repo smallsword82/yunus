@@ -60,6 +60,7 @@ object ShellHelper {
         try { while (true) {
             val line = reader.readLine() ?: break
             if (line == "watch") { CarWatch.subscribe(out); continue }
+            if (line == "recents") { try { Runtime.getRuntime().exec(arrayOf("input", "keyevent", "187")) } catch (t: Throwable) { System.err.println("recents: $t") }; continue } // KEYCODE_APP_SWITCH
             if (line == "qsbar") { try { injector.openCarPanel() } catch (t: Throwable) { System.err.println("qsbar: $t") }; continue }
             if (line.startsWith("cmd ")) { CarWatch.command(line.substring(4)); continue }
             try {

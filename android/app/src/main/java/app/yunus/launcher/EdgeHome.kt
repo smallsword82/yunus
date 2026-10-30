@@ -11,10 +11,11 @@ import android.view.WindowManager
 /**
  * Back home from any app: BYD's bottom bar is pushed off the screen (wm overscan), so a thin,
  * invisible strip along the bottom edge, over the other apps, takes a swipe up and brings Yunus
- * (the home screen) back. It is there only while another app is in front (Yunus has its own dock),
- * and needs the "display over other apps" permission (granted once over ADB).
+ * (the home screen) back; swiped up and held there it opens the recent apps instead (as Android's
+ * gesture navigation does). It is there only while another app is in front (Yunus has its own
+ * dock), and needs the "display over other apps" permission (granted once over ADB).
  */
-class EdgeHome(private val ctx: Context) {
+class EdgeHome(private val ctx: Context, private val recents: () -> Unit) {
     private val wm = ctx.getSystemService(WindowManager::class.java)
     private var view: View? = null
     private val height = (22 * ctx.resources.displayMetrics.density).toInt()
@@ -23,11 +24,14 @@ class EdgeHome(private val ctx: Context) {
         if (view != null || !android.provider.Settings.canDrawOverlays(ctx)) return
         val v = View(ctx)
         var y0 = -1f
-        var fired = false
+        var up = false // past the threshold, waiting: let go → home, hold → recents
+        val hold = Runnable { if (up) { up = false; recents() } }
         v.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { y0 = ev.rawY; fired = false }
-                MotionEvent.ACTION_MOVE -> if (!fired && y0 - ev.rawY > height * 1.5f) { fired = true; home() }
+                MotionEvent.ACTION_DOWN -> { y0 = ev.rawY; up = false }
+                MotionEvent.ACTION_MOVE -> if (!up && y0 - ev.rawY > height * 1.5f) { up = true; v.postDelayed(hold, 350) }
+                MotionEvent.ACTION_UP -> { v.removeCallbacks(hold); if (up) { up = false; home() } }
+                MotionEvent.ACTION_CANCEL -> { v.removeCallbacks(hold); up = false }
             }
             true
         }
