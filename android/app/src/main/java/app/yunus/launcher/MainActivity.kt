@@ -109,6 +109,8 @@ class MainActivity : Activity() {
                     val action = when (which) {
                         "wifi" -> android.provider.Settings.ACTION_WIFI_SETTINGS
                         "date" -> android.provider.Settings.ACTION_DATE_SETTINGS
+                        "bluetooth" -> android.provider.Settings.ACTION_BLUETOOTH_SETTINGS
+                        "location" -> android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS
                         else -> null
                     }
                     val intent = action?.let { android.content.Intent(it).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }

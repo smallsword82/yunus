@@ -795,7 +795,7 @@ button { font-family:inherit; color:inherit; }
       <div id="outTemp">18°C</div>
       <!-- An icon shows only when there is that link (the car's own status bar is hidden while
            Yunus runs full screen). -->
-      <div id="netStat"><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span></div>
+      <div id="netStat"><i id="locInd" class="ti ti-location-filled hide"></i><i id="btInd" class="ti ti-bluetooth hide"></i><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span></div>
     </div>
     <div id="map"></div>
     <div class="floating" id="search"><i class="ti ti-search"></i>Nereye gidiyoruz?</div>
@@ -4169,6 +4169,8 @@ function openSetting(which) {
   if (!(YunusNative.openSetting && YunusNative.openSetting(which))) openCarApp(CAR_SETTINGS);
 }
 $('wifiInd').onclick = $('mobInd').onclick = () => openSetting('wifi');
+$('btInd').onclick = () => openSetting('bluetooth');
+$('locInd').onclick = () => openSetting('location');
 $('clockTxt').onclick = () => openSetting('date');
 function tickClock() { $('clockTxt').textContent = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); }
 tickClock(); setInterval(tickClock, 10000);
@@ -4180,6 +4182,9 @@ function renderNet(n) {
   mob.classList.toggle('hide', n.mobile < 0);
   if (n.mobile >= 0) mob.firstElementChild.className = 'ti ti-antenna-bars-' + (n.mobile + 1);
   mob.classList.toggle('off', n.mobile >= 0 && !n.online && n.wifi < 0);
+  // Bluetooth: hidden when off, dim when on, full when a phone is connected. Location: when on.
+  if (n.bt != null) $('btInd').className = 'ti ' + (n.bt < 0 ? 'hide' : n.bt > 0 ? 'ti-bluetooth-connected' : 'ti-bluetooth off');
+  if (n.loc != null) $('locInd').className = 'ti ti-location-filled' + (n.loc ? '' : ' hide');
 }
 // Slide a finger along a dock control to change it continuously; a tap still steps it once.
 // [stepPx]: page pixels per step; [onSlide]: called once when a slide starts.
