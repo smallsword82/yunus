@@ -1,23 +1,33 @@
 # Devir notu — Yunus (BYD Dolphin, DiLink 3)
 
 Tarih: 30.10.2026 (4. oturum sonu) · Dal: `claude/live-vehicle-data` · **PR: smallsword82/yunus#1**
-APK: `release/yunus-0.1-test.apk` (araçta kurulu = dalın ucu) · Çalışma ağacı temiz.
-**4. oturumun commit'leri push'lanmadı** — kullanıcı "şimdilik kalsın" dedi; sormadan push'lama.
+APK: `release/yunus-0.1-test.apk` (araçta kurulu = dalın ucu) · Çalışma ağacı temiz · **Hepsi push'lu** (kullanıcı istedi).
+Push'u kullanıcı açıkça isteyince yap; bu oturumdaki onay sonraki oturumlara geçmez.
 
 ## EN SON DURUM (yeni pencere buradan başlasın)
 
-Araçta her şey çalışıyor, kullanıcı günü kapattı ("bitirelim bugünlük"). Son istekler bitti:
+Araçta her şey çalışıyor; kullanıcı arabadan eve geçti, bilgisayar araçtan ayrıldı. Yunus ve yardımcısı bilgisayarsız çalışıyor
+(yardımcıyı Yunus kendi ADB istemcisiyle aracın kablosuz ADB'si üzerinden başlatıyor; açılışta 60 sn'ye kadar bekliyor).
+Bu oturumun son işleri:
 - Açılıştaki harita takılması çözüldü (aşağıda "Performans").
 - Apps penceresi Maps'i karartmıyor; Maps altta canlı kalıyor, pencere tek parça kapanıyor.
 - Far simgeleri gösterge gibi: AUTO'da park lambası da yanıyor, uzun far/selektörde kısa far simgesi mavi.
+- BYD sesli asistanı yeniden görünüyor (konuşma sürerken BYD üst çubuğu iniyor — aşağıda).
 
-**Açık / doğrulanmadı:**
+**Sonraki oturum evden mi araçtan mı?** Araç verisi, gömülü uygulamalar, BYD panelleri için araç + ADB gerekir
+(`adb connect 10.184.30.214:5555`, aynı ağda olmak gerek). Sayfa/tasarım işleri evde masaüstü önizlemede
+(`python -m http.server 8765 --directory viewer`, demo modu) ya da emülatörde yapılabilir; araca kurulum sonra.
+
+**Açık / doğrulanmadı (bir sonraki sürüşte):**
 1. **Şarj göstergesi araç yeniden başlatıldıktan sonra** — kullanıcı "veri almıyor" dedi. Sebep büyük olasılıkla yardımcının
    `watch` aboneliğinin kopmasıydı; `3c61d4a` ile her yeni bağlantıda yeniden gönderiliyor (yardımcı öldürülüp açılınca
-   değerlerin geri geldiği görüldü). Aracın tam yeniden başlatılmasından sonra şarj göstergesi **henüz görülmedi** — ilk fırsatta bak.
-2. **Push** — kullanıcı isteyince.
-3. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
-4. Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç hep park/şarjdaydı).
+   değerlerin geri geldiği görüldü). Aracın tam yeniden başlatılmasından sonra şarj göstergesi **henüz görülmedi**.
+2. İlk açılışta haritanın takılmadan geldiği soğuk açılışta (araç kapanıp açılınca) henüz görülmedi; Yunus yeniden başlatılınca ölçüldü.
+3. **Ekran dışındaki üst çubuğa bağlı başka BYD pencereleri:** sesli asistan gibi kendini durum çubuğu alanına koyan başka bir
+   BYD penceresi olursa o da görünmez kalır. Kullanıcı "X ekranda çıkmıyor ama çalışıyor" derse önce bunu düşün
+   (`dumpsys window windows` → `mFrame` y<0 mı).
+4. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
+5. Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç hep park/şarjdaydı).
 
 ## 4. oturumda yapılanlar (hepsi commit'li, araçta doğrulandı)
 
