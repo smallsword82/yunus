@@ -32,6 +32,12 @@ Araçta her şey çalışıyor, kullanıcı günü kapattı ("bitirelim bugünl�
   dock üstünde 2. kaydırma son uygulamalar (`recents` → KEYCODE_APP_SWITCH). Dock 7 sn sonra / dışarı dokununca gider;
   kartları `YunusNative.dockHome(card)` ile Yunus'u öne alır. İzin: `appops set app.yunus.launcher SYSTEM_ALERT_WINDOW allow`.
 - Yunus'un içinde: araç simgesi = ana sayfa (`goHome`), alt kenardan (56 px) yukarı kaydırma = son uygulamalar.
+- **BYD sesli asistanı:** kendi çubuğunu durum çubuğunun içine çiziyor (`com.byd.vrassistant`, TYPE_SYSTEM_ERROR, sol üst 24,8 dp —
+  `ViewLocationDispatcher.getParams`'ta sabit, kaynakla değiştirilemez), yani ekran dışında kalıyordu. Asistan `Settings.System`
+  `KEY_VOICE_DIALOGEVENT`'e `CONVERSATION_BEGIN`/`_END` yazıyor; `MainActivity.voiceLift()` bunu izler, konuşma sürerken yardımcıya
+  `voice 1` (`wm overscan 0,0,0,-90`, BYD üst çubuğu asistanla ekranda), bitince `voice 0` gönderir. Yunus'un penceresi kıpırdamaz.
+  Elle test: `am broadcast -a com.intent.action.StartVoice_From_Launcher -n com.byd.vrassistant/.receiver.HardKeyReceiver`
+  (kapat: `-a com.byd.vrassistant.ACTION_CANCEL`). Telefon görüşmesi sırasında deneme.
 - Ayrıntı: memory `byd-navbar-overscan`.
 
 **Klima dock'u** (aracın kendi simgeleri: `viewer/img/byd/` — 208 SystemUI simgesi, `ac_*.svg`, `wind_part_*.png`)

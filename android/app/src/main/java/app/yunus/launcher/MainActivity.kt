@@ -321,6 +321,8 @@ class MainActivity : Activity() {
         }) { line -> carFromHelper(line) }
         // Windows, sunshade and speed through the shell helper (read only), as Kinex reads them.
         shell.watch()
+        contentResolver.registerContentObserver(android.provider.Settings.System.getUriFor(VOICE_KEY), false, voiceObserver)
+        voiceLift()
         embed = AppEmbed(this, root, shell)
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
@@ -440,12 +442,30 @@ class MainActivity : Activity() {
     }
     @Volatile private var shellReady = false
 
+    // BYD's voice assistant draws its bar inside the status bar, which is above the screen in Yunus's
+    // mode: while it talks (it writes CONVERSATION_BEGIN / _END to this system setting) the helper
+    // brings the status bar back on the screen, and takes it up again after.
+    private val VOICE_KEY = "KEY_VOICE_DIALOGEVENT"
+    private var voiceLifted = false
+    private val voiceObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) = voiceLift()
+    }
+    private fun voiceLift() {
+        val talking = android.provider.Settings.System.getString(contentResolver, VOICE_KEY) == "CONVERSATION_BEGIN"
+        if (talking && !voiceLifted && barsOffScreen()) { voiceLifted = true; shell.send("voice 1") }
+        else if (!talking && (voiceLifted || (isDefaultHome() && !barsOffScreen()))) { // (or left down by a Yunus restart mid-talk)
+            voiceLifted = false
+            shell.send("voice 0")
+            window.decorView.postDelayed({ hideSystemBars() }, 800)
+        }
+    }
+
     private fun hideSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // On the car BYD's bars are pushed off the screen (wm overscan 0,-84,0,-90): then they are
         // left "shown" up there, out of sight, so a swipe shows nothing and the helper can pull the
         // status bar there to open the quick panel. Elsewhere they are hidden as usual.
-        if (barsOffScreen()) {
+        if (barsOffScreen() || voiceLifted) { // (down for the voice assistant for a moment: left as it is)
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN) // the theme's
             WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
             return
@@ -497,7 +517,7 @@ class MainActivity : Activity() {
         packageManager.resolveActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME), 0)
             ?.activityInfo?.packageName == packageName
     } catch (_: Throwable) { false }
-    override fun onDestroy() { carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { contentResolver.unregisterContentObserver(voiceObserver); carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {

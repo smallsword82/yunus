@@ -70,6 +70,14 @@ object ShellHelper {
                 if (!yunus) sh("input keyevent 3") // KEYCODE_HOME: over to DiLink's home
                 continue
             }
+            // "voice 1|0": BYD's voice assistant draws its bar inside the status bar (at 24,8 dp, fixed in
+            // its code), which Yunus's mode keeps above the screen: while it talks the status bar comes
+            // back on the screen, then goes back up. Yunus's own window stays where it is.
+            if (line.startsWith("voice ")) {
+                val c = if (line.endsWith("1")) "wm overscan 0,0,0,-90" else "wm overscan 0,-84,0,-90"
+                try { Runtime.getRuntime().exec(arrayOf("sh", "-c", c)).waitFor() } catch (t: Throwable) { System.err.println("$c: $t") }
+                continue
+            }
             if (line == "recents") { try { Runtime.getRuntime().exec(arrayOf("input", "keyevent", "187")) } catch (t: Throwable) { System.err.println("recents: $t") }; continue } // KEYCODE_APP_SWITCH
             if (line == "qsbar") { try { injector.openCarPanel() } catch (t: Throwable) { System.err.println("qsbar: $t") }; continue }
             if (line.startsWith("cmd ")) { CarWatch.command(line.substring(4)); continue }
