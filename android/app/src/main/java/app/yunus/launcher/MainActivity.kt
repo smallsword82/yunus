@@ -148,6 +148,13 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun mediaChoose(pkg: String) = runOnUiThread { media.choose(pkg) }
 
+                // Permission status for Yunus › Sistem, and the "İzinleri tazele" button.
+                @JavascriptInterface
+                fun permissions() = runOnUiThread { sendPermissions() }
+
+                @JavascriptInterface
+                fun fixPermissions() = runOnUiThread { this@MainActivity.fixPermissions() }
+
                 // Starts a music app's playback when none of it is open (the card's app list).
                 @JavascriptInterface
                 fun mediaStart(pkg: String) = runOnUiThread { media.start(pkg) }
@@ -249,7 +256,10 @@ class MainActivity : Activity() {
             }
         }
         val root = android.widget.FrameLayout(this).apply { addView(web) }
-        shell = ShellLink(this, { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }) { line -> carFromHelper(line) }
+        shell = ShellLink(this, { msg ->
+            shellReady = msg.contains("hazır")
+            postToPage(JSONObject().put("embedStatus", msg).toString())
+        }) { line -> carFromHelper(line) }
         // Windows, sunshade and speed through the shell helper (read only), as Kinex reads them.
         shell.send("watch")
         embed = AppEmbed(this, root, shell)
@@ -267,7 +277,9 @@ class MainActivity : Activity() {
         // construct the HAL devices — instrument, ac, doorlock, gearbox, charging, statistic... —
         // and register listeners; live values then arrive through the push path. The enforcing
         // getters stay locked behind BYD's signature _GET perms, which no third-party app can hold.
-        requestCarPermissions()
+        // Everything else Yunus needs is asked for here too (the first start after installing
+        // above all): location, and the music card's notification access (see fixPermissions).
+        fixPermissions()
         // Live vehicle data the way 3rd-party apps on this head unit do it (BYD Road Computer /
         // electro.app.br): read the BYDAuto HAL devices directly via listeners, in-process.
         carHal = CarHal(applicationContext, ::postToPage).also { it.start() }
@@ -321,7 +333,44 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Re-start the HAL reader so any devices unlocked by a fresh grant get listeners attached.
         if (requestCode == 1) { carHal?.close(); carHal = CarHal(applicationContext, ::postToPage).also { it.start() } }
+        sendPermissions()
     }
+
+    // ---------- permissions: what Yunus needs, and putting it right in one go ----------
+    private val listenerComponent get() = android.content.ComponentName(this, MediaListener::class.java).flattenToString()
+
+    private fun permissionState(): JSONObject {
+        val granted = { p: String -> checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED }
+        return JSONObject()
+            .put("car", CAR_COMMON_PERMS.count(granted)).put("carTotal", CAR_COMMON_PERMS.size)
+            .put("location", granted(android.Manifest.permission.ACCESS_FINE_LOCATION))
+            .put("media", media.hasAccess())
+            .put("adb", shellReady)
+    }
+
+    private fun sendPermissions() = postToPage(JSONObject().put("perms", permissionState()).toString())
+
+    /**
+     * Asks for everything missing: the car and location permissions through Android's own dialog,
+     * and the notification access the music card needs. BYD replaced that setting's screen with an
+     * "unsupported" page, so Yunus gives it to its own listener over its ADB connection (the one the
+     * owner approved for the shell helper): one fixed command, only for Yunus's own component.
+     */
+    private fun fixPermissions() {
+        requestCarPermissions()
+        if (!media.hasAccess()) Thread({
+            val ok = try {
+                DirectAdb("127.0.0.1", 5555, filesDir).use {
+                    it.connect()
+                    it.shell("cmd notification allow_listener $listenerComponent", 3)
+                }
+                true
+            } catch (t: Throwable) { false }
+            runOnUiThread { if (ok) media.refresh(); sendPermissions() }
+        }, "yunus-perms").apply { isDaemon = true }.start()
+        else sendPermissions()
+    }
+    @Volatile private var shellReady = false
 
     private fun hideSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)

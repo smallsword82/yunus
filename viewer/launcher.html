@@ -3346,7 +3346,7 @@ const CARDS = {
     const tabs = [['display', 'ti-device-desktop', 'Ekran'], ['conn', 'ti-cast', 'Harita ve telefon'],
       ['warnings', 'ti-alert-triangle', 'Uyarı lambaları'], ['system', 'ti-settings', 'Sistem']];
     let content = SETTINGS[tab] ? renderSettings(SETTINGS[tab]) : '';
-    if (tab === 'system') content = homeBlock() + content + maintBlock();
+    if (tab === 'system') content = homeBlock() + permBlock() + content + maintBlock();
     if (tab === 'conn' && DEVICE) content = navAppBlock() + projBlock();
     else if (tab === 'conn') content = navAppBlock() + content + `<button class="btn" data-do="phoneDemo" style="width:100%;margin-top:16px"><i class="ti ti-device-mobile"></i>Demo: telefon bağlandı</button>
       <p style="font-size:17px;color:var(--mu);margin-top:12px">"Yunus" seçiliyken CarPlay ve Android Auto ekrana bozulmadan oturur; aracın kendi kablosuz ve kablolu (USB) CarPlay/Android Auto'su kapanır. "Aracın kendi"ne dönünce geri gelir.</p>`;
@@ -3439,6 +3439,20 @@ const CARDS = {
       : APPS.map(([n, i, c]) => `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('')}</div>`;
   } },
 };
+// Yunus › Sistem: what Yunus is allowed to do, and a button that asks for anything missing again.
+let perms = null;
+function permBlock() {
+  if (!(window.YunusNative && YunusNative.fixPermissions)) return '';
+  if (!perms) YunusNative.permissions();
+  const p = perms || {}, row = (ok, name, note) => `<div class="setRow"><span>${name}<small style="display:block;font-size:16px;color:var(--mu)">${note}</small></span>
+    <i class="ti ti-${ok ? 'circle-check' : 'alert-circle'}" style="font-size:28px;color:${ok ? 'var(--ok)' : 'var(--dn)'}"></i></div>`;
+  return `<p style="font-size:22px;color:var(--mu);margin:0 0 6px">İzinler</p>
+    ${row(p.car === p.carTotal && p.carTotal > 0, 'Araç verileri', `${p.car == null ? '…' : p.car}/${p.carTotal || 16} izin`)}
+    ${row(!!p.location, 'Konum', 'Harita ve navigasyon')}
+    ${row(!!p.media, 'Müzik kartı', 'Bildirim erişimi (çalan müzik)')}
+    ${row(!!p.adb, 'Yardımcı (ADB)', 'Google Haritalar ve 3. pencere')}
+    <button class="btn" data-do="fixPerms" style="width:100%;margin:12px 0 22px"><i class="ti ti-refresh"></i>İzinleri tazele</button>`;
+}
 // The car's own CarPlay and Android Auto apps, when installed, for the settings' phone section.
 function projBlock() {
   const apps = deviceApps() || [];
@@ -3880,6 +3894,7 @@ body.addEventListener('click', (e) => {
   if (act === 'pet') return startPet();
   if (act === 'clean') return startClean();
   if (act === 'phoneDemo') return phoneConnected();
+  if (act === 'fixPerms') { YunusNative.fixPermissions(); return; }
   if (act === 'checkUpdate') { c.updMsg = 'Kontrol ediliyor…'; refreshCard(); setTimeout(() => { c.updMsg = 'Yunus 0.1 güncel.'; refreshCard(); }, 1200); return; }
   if (act === 'uploadLogs') {
     const alias = prompt('Gönderiminizi tanımak için bir takma ad yazın:');
@@ -4421,6 +4436,7 @@ window.yunusCar = (m) => {
   if (m.net) { renderNet(m.net); return; }
   if (m.deviceDark != null) { deviceThemeChanged(m.deviceDark); return; }
   if (m.user) { carUser = m.user; renderProfile(); return; }
+  if (m.perms) { perms = m.perms; if (current === 'controls' && CARDS.controls.tab === 'system') refreshCard(); return; }
   if (m.notifCount != null) { $('bellCount').textContent = m.notifCount > 0 ? (m.notifCount > 9 ? '9+' : m.notifCount) : ''; return; } // {name, photo} from the car's account
   if (m.tt) {
     for (const id in m.tt) {
