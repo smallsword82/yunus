@@ -262,13 +262,14 @@ button { font-family:inherit; color:inherit; }
 .mm .bar { height:33px; border-radius:3px; /* border-box: 5px track + 2×14px border */ background:var(--cd2); margin:-6px 0 -8px; overflow:hidden; border:14px solid transparent; border-left:0; border-right:0; background-clip:padding-box; touch-action:none; }
 .mm .bar div { height:100%; background:var(--tx); width:0; }
 .mm .ctl { display:flex; gap:28px; font-size:30px; }
-.mmCard #mmBg { position:absolute; top:0; left:0; right:0; bottom:0; background:center/cover no-repeat; opacity:0; transition:opacity .4s; }
+.mmCard #mmBg { position:absolute; top:0; left:0; right:0; bottom:0; background:center/cover no-repeat; opacity:0; transition:opacity .4s;
+  filter:blur(22px); transform:scale(1.25); } /* the cover's colours only; the cover itself is on the tile */
 .mmCard #mmBg::after { content:""; position:absolute; top:0; left:0; right:0; bottom:0; background:linear-gradient(90deg, rgba(0,0,0,.78), rgba(0,0,0,.45)); }
 .mmCard > :not(#mmBg) { position:relative; }
 .mmCard.hasArt #mmBg { opacity:1; }
 .mmCard.hasArt h4, .mmCard.hasArt .mm b, .mmCard.hasArt .mmRow { color:#fff; }
 .mmCard.hasArt .mm span { color:rgba(255,255,255,.78); }
-.mmCard.hasArt #mmArt { display:none; }
+.mmCard.hasArt #mmArt { box-shadow:0 6px 18px rgba(0,0,0,.45); }
 .mmCard.hasArt .srcBtn { background:rgba(255,255,255,.18); color:#fff; }
 .mmText { flex:1; min-width:0; }
 .mmBig { flex:none; width:68px; height:68px; border-radius:22px; border:0; cursor:pointer; font-size:32px; background:var(--tx); color:var(--pn); display:flex; align-items:center; justify-content:center; }
