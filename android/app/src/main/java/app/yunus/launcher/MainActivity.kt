@@ -48,7 +48,6 @@ private val CAR_COMMON_PERMS = arrayOf(
 
 class MainActivity : Activity() {
     private lateinit var web: WebView
-    private lateinit var halBridge: HalBridge
     private var carHal: CarHal? = null
     private lateinit var shell: ShellLink
     private lateinit var embed: AppEmbed
@@ -82,8 +81,6 @@ class MainActivity : Activity() {
             settings.loadWithOverviewMode = true
             settings.setGeolocationEnabled(true) // the map follows the car's GPS
             addJavascriptInterface(object {
-                @JavascriptInterface
-                fun status(): String = halBridge.statusJson()
             }, "YunusBridge")
             addJavascriptInterface(object {
                 // Opens one of the car's own screens, given as "package/.Activity".
@@ -251,7 +248,6 @@ class MainActivity : Activity() {
                     assetLoader.shouldInterceptRequest(request.url)
             }
         }
-        halBridge = HalBridge(assets, filesDir, ::postToPage)
         val root = android.widget.FrameLayout(this).apply { addView(web) }
         shell = ShellLink(this, { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }) { line -> carFromHelper(line) }
         // Windows, sunshade and speed through the shell helper (read only), as Kinex reads them.
@@ -266,8 +262,7 @@ class MainActivity : Activity() {
         setContentView(root)
         if (savedInstanceState == null) web.loadUrl("https://appassets.androidplatform.net/assets/launcher.html")
         else web.restoreState(savedInstanceState)
-        // halBridge (the Kinex HAL service over ADB) is no longer started: CarHal reads the car
-        // in-process, and the ADB connection is now used only for the shell helper (ShellLink).
+        // CarHal reads the car in-process; the ADB connection serves the shell helper (ShellLink).
         // Ask for the BYDAuto _COMMON permissions (dangerous/grantable) once. With them we can
         // construct the HAL devices — instrument, ac, doorlock, gearbox, charging, statistic... —
         // and register listeners; live values then arrive through the push path. The enforcing
@@ -354,7 +349,7 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
     override fun onPause() { web.onPause(); super.onPause() }
-    override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { carHal?.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {
@@ -529,115 +524,6 @@ private class ShellLink(private val ctx: android.content.Context, private val st
     } catch (_: Throwable) { null }
 
     fun close() { worker.shutdownNow(); try { socket?.close() } catch (_: Throwable) { } }
-}
-
-/**
- * Connects only to the loopback Kinex HAL service. It is deliberately read-only: no remote
- * command/call surface is exposed to JavaScript. The car's wireless ADB endpoint is expected at
- * 127.0.0.1:5555 and must have been enabled/paired by the owner.
- */
-private class HalBridge(private val assets: AssetManager, private val appFiles: File, private val emit: (String) -> Unit) {
-    companion object {
-        private const val ADB_HOST = "127.0.0.1"
-        private const val ADB_PORT = 5555
-        private const val HAL_HOST = "127.0.0.1"
-        private const val HAL_PORT = 19322
-        private const val MAX_FRAME = 2 * 1024 * 1024
-        private const val HAL_JAR_ASSET = "kinex_hal_api_service.jar"
-    }
-
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "yunus-hal").apply { isDaemon = true } }
-    private val running = AtomicBoolean(false)
-    @Volatile private var connection = "Bekleniyor"
-    @Volatile private var detail = ""
-    @Volatile private var activeHalSocket: Socket? = null
-    private var task: Future<*>? = null
-
-    fun start() {
-        if (!running.compareAndSet(false, true)) return
-        task = worker.submit {
-            while (running.get()) {
-                try {
-                    connection = "ADB bağlantısı deneniyor"
-                    publishStatus()
-                    val adb = DirectAdb(ADB_HOST, ADB_PORT, appFiles)
-                    adb.use {
-                        it.connect()
-                        val localJar = File(appFiles, HAL_JAR_ASSET)
-                        if (!localJar.exists()) assets.open(HAL_JAR_ASSET).use { input -> localJar.outputStream().use { output -> input.copyTo(output) } }
-                        it.pushIfNeeded(localJar, "/data/local/tmp/yunus_hal_api_service.jar")
-                        it.shell("CLASSPATH=/data/local/tmp/yunus_hal_api_service.jar app_process / com.lexwah.kinex.hal.HalApiServiceMain $HAL_PORT >/dev/null 2>&1 &", 2)
-                        connection = "HAL servisi bekleniyor"
-                        publishStatus()
-                        readHal()
-                    }
-                } catch (t: Throwable) {
-                    detail = t.message ?: t.javaClass.simpleName
-                    connection = "Bağlantı yok"
-                    publishStatus()
-                    try { Thread.sleep(5000) } catch (_: InterruptedException) { }
-                }
-            }
-        }
-    }
-
-    fun statusJson(): String = JSONObject().put("adb", connection).put("detail", detail).toString()
-
-    private fun publishStatus() {
-        emit(JSONObject().put("bridge", JSONObject().put("adb", connection).put("detail", detail)).toString())
-    }
-
-    private fun readHal() {
-        Socket().use { socket ->
-            activeHalSocket = socket
-            socket.connect(InetSocketAddress(HAL_HOST, HAL_PORT), 3000)
-            socket.soTimeout = 0
-            val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
-            connection = "HAL bağlı; el sıkışma gerekli"
-            publishStatus()
-            // The framing is known (big-endian int byte count + UTF-8 JSON), but Kinex's
-            // handshake seed/proof is not yet verified. Do not invent a handshake or report live.
-            // Handshake fields must be taken from the verified Kinex client protocol before
-            // sending anything. Keep this connection diagnostic-only until that is decoded.
-            while (running.get()) {
-                val message = readFrame(input)
-                detail = message.toString()
-                when (message.optString("type")) {
-                    "event" -> {
-                        // Raw service events are retained for diagnosis until the event schema and
-                        // field units have been validated on the Dolphin. No guessed field mapping.
-                        emit(JSONObject().put("halEvent", message).toString())
-                    }
-                    "error" -> {
-                        connection = "HAL protokol hatası"
-                        detail = message.optString("error", "HAL error")
-                        publishStatus()
-                    }
-                    else -> {
-                        connection = "HAL yanıtı alındı; veri eşlemesi bekliyor"
-                        publishStatus()
-                    }
-                }
-            }
-            activeHalSocket = null
-        }
-    }
-
-    private fun readFrame(input: DataInputStream): JSONObject {
-        val length = input.readInt()
-        require(length in 1..MAX_FRAME) { "Geçersiz HAL çerçeve boyutu: $length" }
-        val bytes = ByteArray(length)
-        input.readFully(bytes)
-        return JSONObject(String(bytes, StandardCharsets.UTF_8))
-    }
-
-    fun close() {
-        running.set(false)
-        try { activeHalSocket?.close() } catch (_: Exception) { }
-        task?.cancel(true)
-        worker.shutdownNow()
-        try { worker.awaitTermination(2, TimeUnit.SECONDS) } catch (_: InterruptedException) { }
-    }
 }
 
 /** Minimal ADB-over-TCP transport, authenticated with the app's own RSA key (see AdbAuth). */

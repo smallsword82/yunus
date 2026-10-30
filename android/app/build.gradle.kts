@@ -18,8 +18,9 @@ android {
     // Test build: the web prototype in ../viewer is the app's assets, served to a WebView.
     sourceSets["main"].assets.srcDir("../../viewer")
     androidResources {
-        // Leave out the unsplit fallback model and leftovers the page doesn't load.
-        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!dolphin.glb:!kinex_nav_style.json:!index.html"
+        // Leave out the unsplit fallback model and leftovers the page doesn't load: unused fonts and
+        // images, and the Draco decoder (only the Draco fallback model needed it; the shipped model is plain).
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!dolphin.glb:!kinex_nav_style.json:!index.html:!ElmsSans*:!seat.png:!*_close.webp:!<dir>draco:!kinex_hal_api_service.jar"
     }
 
     compileOptions {

@@ -1,29 +1,30 @@
 # Devir notu — Yunus (BYD Dolphin, DiLink 3)
 
-Tarih: 29.10.2026 · Dal: `claude/live-vehicle-data` · Son commit: `30c03b4`
+Tarih: 30.10.2026 · Dal: `claude/live-vehicle-data`
 
 ## Durum özeti
 
-Yunus, araçta native 1920×1080 çalışan Tesla tarzı bir launcher (WebView + `viewer/launcher.html`).
-Araç verisi canlı okunuyor, Google Maps harita alanının içinde çalışıyor. Kök/BYD imzası gerekmiyor.
+APK: `release/yunus-0.1-test.apk` (30.10.2026, emülatörde baştan sona denendi: açılış 0,8 sn,
+~110 MB bellek, sayfada hata yok, ANR yok). Kontrol sırasında: aracın Chrome 74'ünde tanınmayan
+CSS (`color-mix`, iki eksik flex-gap yedeği) düzeltildi; kullanılmayan HalBridge kodu silindi ve
+Kinex'in jar'ı, kullanılmayan fontlar/görseller ve Draco çözücü APK'dan çıkarıldı.
 
 | Konu | Durum |
 |---|---|
-| Açılış süresi | ✅ Araba ~1.5 sn'de ekranda (önceki açılışın görüntüsü), 3B ~3.9 sn |
-| Kapılar, bagaj (3B animasyon) | ✅ araçta doğrulandı |
-| Farlar, uzun far, sinyaller, dörtlüler | ✅ araçta doğrulandı |
-| Klima açık/kapalı, fan, sıcaklık, direksiyon ısıtma | ✅ araçta doğrulandı (sadece gösterim) |
-| Menzil, dış sıcaklık | ✅ canlı |
-| Rejen, direksiyon modu, sürücü koltuk ısıtma | ⚠️ eşlendi, Yunus'ta canlı görülmedi |
-| Vites, pil % | ⚠️ eşlendi, değişince gelir — sürüşte doğrulanacak |
-| Hız, tüketim, ICC, hız tabelası | ❌ sürüşte yakalanıp eşlenecek |
-| Kilit, kör nokta | ❌ okunamıyor (BYD imzalı cihazlar) |
-| Google Maps harita alanında | ✅ otomatik açılıyor, dokunma/kaydırma çalışıyor |
-| Ayarlar | ✅ araba butonu → aracın ayarları; basılı tut → Yunus ayarları |
-| Müzik kartı (medya oturumları) | ✅ emülatörde YouTube Music + YouTube ile doğrulandı (kapak, ikon, sarma, kaynak seçici); araçta radyo/Bluetooth/Spotify denenecek |
-| Yunus Harita navigasyonu | ✅ arama (Photon/OSM), rota (OSRM), adım adım yönlendirme, Türkçe sesli komut, Ev/İş/son aramalar, kaçınma, menzil uyarısı, "Uygulamada aç" — önizleme + emülatörde (ses) doğrulandı; araçta sürüşte denenecek |
-| Navigasyon uygulaması seçimi | ✅ Yunus ayarları → Harita ve telefon (Yunus Harita, Google Maps, Yandex…) |
-| Ses (dock) | ✅ sistem medya sesine bağlı, parmakla kaydırma — emülatörde doğrulandı, araçta denenecek |
+| 3B araç: kapılar, bagaj, farlar, sinyaller | ✅ araçta doğrulandı |
+| Klima, fan, sıcaklık, direksiyon ısıtma | ✅ araçta (gösterim; dokununca aracın ekranı açılır) |
+| Menzil, dış sıcaklık, vites, pil % | ✅ canlı (park halinde SOC/menzil için yardımcı getter'ı bekleniyor) |
+| Hız, güç çubuğu (gaz/rejen), toplam km | ⚠️ eşlendi; hız motor devrinden (katsayı sürüşte ayarlanacak) |
+| Şarj durumu + Tesla tarzı şarj görünümü | ⚠️ eşlendi, emülatörde taklitle doğrulandı |
+| Uyarı lambaları (20), lastik basınçları | ⚠️ gösterge verisinden eşlendi, araçta görülecek |
+| Camlar, perde, direksiyon açısı, kilit durumu, park halinde SOC | ⚠️ kabuk yardımcısı Kinex yöntemiyle okumayı deniyor — araçta ilk iş |
+| Kilitleme (komut), kör nokta, gerçek yan kamera | ❌ BYD imzası / BYD uygulaması gerekiyor (plan aşağıda) |
+| Harita alanı: Google Maps / Yunus Harita, 3B binalar, şarj istasyonları, navigasyon | ✅ |
+| 3 pencere, sürükleyerek boyut, 3. pencerede gerçek uygulamalar, kapatma | ✅ emülatörde |
+| Dikey mod (alt alta pencereler, 2 sıra alt bar, üstte durum şeridi) | ✅ emülatörde |
+| Durum şeridi: kilit, saat, sıcaklık, sürücü, konum, BT, Wi-Fi, şebeke, zil | ✅ (sürücü adı şimdilik ayarlardan) |
+| Müzik kartı (Android tarzı), son kullanılan uygulamalar, tepsi | ✅ emülatörde |
+| Ses çubuğu (pencerelerin üstünde, yerel çizim) | ✅ emülatörde |
 
 ## Bilinmesi gerekenler
 

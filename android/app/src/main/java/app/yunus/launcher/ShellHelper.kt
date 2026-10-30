@@ -29,6 +29,7 @@ object ShellHelper {
     private val COMPONENT = Regex("[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+")
 
     @JvmStatic
+    @Suppress("DEPRECATION") // prepareMainLooper: this is a process of its own (app_process), its main looper is ours
     fun main(args: Array<String>) {
         val port = args[0].toInt()
         val token = args[1]

@@ -82,6 +82,8 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 .app > * + * { margin-top:10px; }
 #dock > * + * { margin-left:12px; }
 #dockApps > * + * { margin-left:14px; }
+#dockRecent > * + * { margin-left:14px; }
+#navPanel .acts > * { margin:0 10px 10px 0; } /* wraps: margins on every item */
 #dockPick button > * + * { margin-top:8px; }
 .tempCtl > * + * { margin-left:2px; }
 .seatDk .lv > * + * { margin-left:3px; }
@@ -353,7 +355,7 @@ button { font-family:inherit; color:inherit; }
 .homeBox .head b { display:block; font-size:23px; font-weight:500; }
 .homeBox .head span { font-size:18px; color:var(--mu); }
 .homeBox .state { margin-left:auto; padding:6px 12px; border-radius:12px; font-size:17px; white-space:nowrap; }
-.homeBox .state.yes { color:var(--ok); background:color-mix(in srgb, var(--ok) 15%, transparent); }
+.homeBox .state.yes { color:var(--ok); background:rgba(48,164,108,.15); background:color-mix(in srgb, var(--ok) 15%, transparent); }
 .homeBox .state.no { color:#ffb020; background:rgba(255,176,32,.14); }
 .homeBox .acts { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
 .homeBox .acts .btn { background:var(--cd2); font-size:19px; padding:14px; }
@@ -528,7 +530,7 @@ button { font-family:inherit; color:inherit; }
 /* Navigation on Yunus's own map: the search / route panel and, while navigating, the turn banner. */
 #navPanel { top:72px; left:24px; right:112px; max-width:580px; box-sizing:border-box; max-height:calc(100% - 198px); overflow:auto; padding:16px; z-index:3; color:var(--tx); }
 #navPanel input { width:100%; height:66px; border:0; border-radius:14px; padding:0 22px; background:var(--cd2); color:var(--tx); font:400 24px Inter,sans-serif; outline:none; }
-#navPanel .acts { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+#navPanel .acts { display:flex; flex-wrap:wrap; margin-top:12px; }
 #navPanel .acts > * { margin:0 10px 0 0; }
 #navPanel .acts .btn { padding:14px 18px; font-size:19px; background:var(--cd2); }
 #navPanel .acts .btn.on { background:var(--ac); color:#fff; }
@@ -669,10 +671,12 @@ button { font-family:inherit; color:inherit; }
 /* Climate keys (seats, demisters, air direction): raised tiles with a soft top highlight; a key
    that is working takes its colour (orange heat, blue cooling/air) with a glow. */
 .clim { position:relative; width:80px; height:80px; border-radius:20px; color:var(--tx); opacity:.92;
+  background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)) var(--cd); /* Chrome 74: no color-mix */
   background:linear-gradient(180deg, color-mix(in srgb, var(--cd) 100%, #fff 6%), var(--cd));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 6px rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.05);
   transition:transform .12s, background .25s, box-shadow .25s, color .25s; }
-.clim:hover { background:linear-gradient(180deg, color-mix(in srgb, var(--cd2) 100%, #fff 6%), var(--cd2)); }
+.clim:hover { background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)) var(--cd2);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--cd2) 100%, #fff 6%), var(--cd2)); }
 .clim:active { transform:scale(.93); }
 .clim svg { width:46px; height:46px; color:inherit; }
 .clim.heat, .clim.lit { color:#ff8a4c; opacity:1; border-color:rgba(255,138,76,.45);
@@ -2439,6 +2443,7 @@ function setCharge(v, fromCar) {
   $('hCharge').style.color = v ? 'var(--ok)' : '';
   $('hCharge').querySelector('span').textContent = v ? 'Şarj ediliyor' : 'Şarj portu';
   if (v) camTo('charge');
+  else if (S.gear === 'P' && !current) camTo('default'); // back to the usual view after charging
   refreshCard();
 }
 // Sunshade opening in percent (0 closed, 100 fully back), like the window percentages.
@@ -4183,6 +4188,7 @@ if (window.YunusNative && YunusNative.statusRefresh) YunusNative.statusRefresh()
 // needs BYD's signature); in the preview a tap toggles it, as before.
 let lockKnown = false;
 $('lockInd').onclick = () => { if (!DEVICE) setLock(!S.locked); };
+if (!DEVICE) setLock(S.locked); // the preview starts with its demo state shown
 // ---------- driver in the status bar ----------
 // The car's signed-in user (name and photo, from the app when it can read the car's account) or the
 // name set in Yunus › Ekran; without a photo, the name's first letter on a round badge.
