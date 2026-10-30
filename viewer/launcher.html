@@ -1186,7 +1186,7 @@ function updateTelltales() {
   const box = $('telltales'), fit = 18;
   const shown = lit.length > fit ? lit.slice(0, fit - 1) : lit;
   const hidden = lit.slice(shown.length);
-  const key = lit.map((t) => t.id).join() + '|' + shown.length;
+  const key = lit.map((t) => t.id + (halTT[t.id] && halTT[t.id].flash ? '*' : '')).join() + '|' + shown.length; // * flashing
   if (box.dataset.key !== key) {
     box.dataset.key = key;
     box.innerHTML = shown.map(ttHtml).join('') + (hidden.length
