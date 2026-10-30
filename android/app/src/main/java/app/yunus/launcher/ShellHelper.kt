@@ -20,6 +20,9 @@ import java.net.Socket
  *   launch <display> <package>/<activity>              start that activity on the display
  *   close <display>                                     close the apps running on the display
  *   t <display> <action> <id> <x> <y> [<id> <x> <y> …]   inject a touch event into the display
+ *   watch                                               send the car's window, sunshade and speed
+ *                                                       values on this connection (read only)
+ * Car values come back as lines "ev <Device> 0x<id> <i|f|d> <value>".
  */
 object ShellHelper {
     private const val OWNER = "app.yunus.launcher"
@@ -30,12 +33,18 @@ object ShellHelper {
         val port = args[0].toInt()
         val token = args[1]
         val injector = TouchInjector()
-        ServerSocket(port, 4, InetAddress.getByName("127.0.0.1")).use { server ->
-            while (true) {
-                val client = server.accept()
-                Thread { serve(client, token, injector) }.start()
+        // The main thread runs a looper (the car's listeners call back through it, as in Kinex's
+        // daemon); connections are served on their own threads.
+        android.os.Looper.prepareMainLooper()
+        Thread {
+            ServerSocket(port, 4, InetAddress.getByName("127.0.0.1")).use { server ->
+                while (true) {
+                    val client = server.accept()
+                    Thread { serve(client, token, injector) }.start()
+                }
             }
-        }
+        }.start()
+        android.os.Looper.loop()
     }
 
     private fun serve(client: Socket, token: String, injector: TouchInjector) = client.use {
@@ -43,8 +52,10 @@ object ShellHelper {
         val reader = client.getInputStream().bufferedReader()
         if (reader.readLine() != token) return
         client.getOutputStream().apply { write("ok\n".toByteArray()); flush() }
-        while (true) {
+        val out = client.getOutputStream()
+        try { while (true) {
             val line = reader.readLine() ?: break
+            if (line == "watch") { CarWatch.subscribe(out); continue }
             try {
                 val fields = line.split(' ')
                 val display = fields.getOrNull(1)?.toIntOrNull() ?: continue
@@ -55,7 +66,7 @@ object ShellHelper {
                     "close" -> close(display)
                 }
             } catch (t: Throwable) { System.err.println("$line: $t") } // goes to the helper's log file
-        }
+        } } finally { CarWatch.unsubscribe(out) }
     }
 
     // Fixed argument lists (no shell): keep the display upright, stop the app's task elsewhere,
@@ -206,5 +217,107 @@ private object Tasks {
         val m = atm.javaClass.methods.firstOrNull { it.name == "moveRootTaskToDisplay" }
             ?: atm.javaClass.getMethod("moveStackToDisplay", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
         m.invoke(atm, id, display)
+    }
+}
+
+/**
+ * Read-only: the car's window and sunshade positions (Bodywork) and its speed (Speed), which an app
+ * can't get (their devices need BYD's signature permissions), heard here as the shell user with a
+ * system context, the way Kinex's HAL daemon does. Nothing is set on the car. Each value change is
+ * sent to the subscribed connections as "ev <Device> 0x<id> <i|f|d> <value>".
+ */
+private object CarWatch {
+    private val subscribers = java.util.concurrent.CopyOnWriteArrayList<java.io.OutputStream>()
+    private val held = ArrayList<Any>()
+    private val last = HashMap<String, String>()
+    private var started = false
+    private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)
+
+    fun subscribe(out: java.io.OutputStream) {
+        subscribers.add(out)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (!started) { started = true; start() }
+            else synchronized(last) { last.values.forEach { send(it) } } // the newcomer gets the current values
+        }
+    }
+
+    fun unsubscribe(out: java.io.OutputStream) { subscribers.remove(out) }
+
+    private fun start() {
+        val ctx = try {
+            val at = Class.forName("android.app.ActivityThread")
+            val thread = at.getMethod("systemMain").invoke(null)
+            at.getMethod("getSystemContext").invoke(thread) as android.content.Context
+        } catch (t: Throwable) { System.err.println("watch: no system context: $t"); return }
+        for (name in listOf("bodywork.BYDAutoBodyworkDevice", "speed.BYDAutoSpeedDevice"))
+            try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
+        // Also the getters Kinex reads, once a second (SOC, range and speed don't come as events
+        // while parked). A getter that is refused is not asked again.
+        for ((name, gets) in GETTERS) try {
+            val c = Class.forName("android.hardware.bydauto.$name")
+            val dev = c.getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx) ?: continue
+            for (g in gets) polls.add(Poll(dev, c, g))
+        } catch (t: Throwable) { System.err.println("watch getters $name: ${t.cause ?: t}") }
+        poll()
+    }
+
+    // Device → (key sent, getter, its int argument or null).
+    private class Get(val key: String, val method: String, val arg: Int? = null)
+    private val GETTERS = listOf(
+        "speed.BYDAutoSpeedDevice" to listOf(Get("speed", "getCurrentSpeed")),
+        "gearbox.BYDAutoGearboxDevice" to listOf(Get("gear", "getCurrentGear")),
+        "statistic.BYDAutoStatisticDevice" to listOf(Get("soc", "getElecPercentageValue"), Get("range", "getElecDrivingRangeValue"),
+            Get("odo", "getTotalMileageValue")),
+        "bodywork.BYDAutoBodyworkDevice" to listOf(Get("steer", "getSteeringWheelValue", 1), // BODYWORK_CMD_STEERING_WHEEL_ANGEL
+            Get("winFL", "getWindowOpenPercent", 1), Get("winFR", "getWindowOpenPercent", 2),
+            Get("winRL", "getWindowOpenPercent", 3), Get("winRR", "getWindowOpenPercent", 4),
+            Get("shade", "getSunroofWindowblindPosition")))
+    private class Poll(val dev: Any, val cls: Class<*>, val get: Get) { var dead = false }
+    private val polls = ArrayList<Poll>()
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private fun poll() {
+        for (p in polls) if (!p.dead) try {
+            val m = if (p.get.arg == null) p.cls.getMethod(p.get.method) else p.cls.getMethod(p.get.method, Integer.TYPE)
+            val v = (if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)) as? Number ?: continue
+            if (v.toDouble() in invalid) continue
+            val line = "ev Get ${p.get.key} d ${v.toDouble()}"
+            val same = synchronized(last) { last.put("Get ${p.get.key}", line) == line }
+            if (!same) send(line)
+        } catch (t: Throwable) { p.dead = true; System.err.println("watch ${p.get.method}: ${t.cause ?: t}") }
+        if (polls.any { !it.dead }) main.postDelayed({ poll() }, 1000)
+    }
+
+    private fun listen(ctx: android.content.Context, clsName: String) {
+        val c = Class.forName(clsName)
+        val dev = c.getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx) ?: return
+        val reg = c.methods.firstOrNull { it.name == "registerListener" && it.parameterTypes.size == 1 && it.parameterTypes[0].isInterface } ?: return
+        val iface = reg.parameterTypes[0]
+        val tag = clsName.substringAfterLast('.').removePrefix("BYDAuto").removeSuffix("Device")
+        val proxy = java.lang.reflect.Proxy.newProxyInstance(iface.classLoader, arrayOf(iface)) { _, m, args ->
+            try { if (m.name == "onDataEventChanged" && args != null && args.size == 2) event(tag, (args[0] as? Int) ?: 0, args[1]) } catch (_: Throwable) { }
+            when (m.returnType) { java.lang.Boolean.TYPE -> false; Integer.TYPE -> 0; else -> null }
+        }
+        reg.invoke(dev, proxy)
+        held.add(dev)
+        System.err.println("watch: listening to $tag")
+        try { c.getMethod("getAllStatus").invoke(dev) } catch (_: Throwable) { }
+    }
+
+    private fun event(dev: String, type: Int, value: Any?) {
+        if (value == null) return
+        for ((f, k) in listOf("intValue" to "i", "floatValue" to "f", "doubleValue" to "d")) {
+            val v = try { value.javaClass.getField(f).get(value) as? Number } catch (_: Throwable) { null } ?: continue
+            if (v.toDouble() in invalid) continue
+            val id = String.format("0x%08X", type)
+            val line = "ev $dev $id $k $v"
+            synchronized(last) { if (last.put("$dev $id", line) == line) return }
+            send(line)
+            return
+        }
+    }
+
+    private fun send(line: String) {
+        for (o in subscribers) try { synchronized(o) { o.write("$line\n".toByteArray()); o.flush() } } catch (_: Throwable) { subscribers.remove(o) }
     }
 }

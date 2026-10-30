@@ -239,7 +239,9 @@ class MainActivity : Activity() {
         }
         halBridge = HalBridge(assets, filesDir, ::postToPage)
         val root = android.widget.FrameLayout(this).apply { addView(web) }
-        shell = ShellLink(this) { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }
+        shell = ShellLink(this, { msg -> postToPage(JSONObject().put("embedStatus", msg).toString()) }) { line -> carFromHelper(line) }
+        // Windows, sunshade and speed through the shell helper (read only), as Kinex reads them.
+        shell.send("watch")
         embed = AppEmbed(this, root, shell)
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
@@ -337,6 +339,16 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
     override fun onPause() { web.onPause(); super.onPause() }
     override fun onDestroy() { carHal?.close(); halBridge.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+
+    // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
+    private fun carFromHelper(line: String) {
+        val f = line.split(' ')
+        if (f.size != 5 || f[0] != "ev") return
+        val v = f[4].toDoubleOrNull() ?: return
+        val key = when (f[3]) { "i" -> "int"; "f" -> "float"; else -> "double" }
+        val o = JSONObject().put("dev", f[1]).put("type", f[2]).put(key, if (key == "int") v.toInt() else v)
+        postToPage(JSONObject().put("carHal", o).toString())
+    }
 
     private fun postToPage(message: String) {
         runOnUiThread {
@@ -436,7 +448,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
  * helper is not running it is started over Yunus's own ADB connection to the car (127.0.0.1:5555;
  * the owner approves Yunus's key once on the screen). Lines are sent in order on one thread.
  */
-private class ShellLink(private val ctx: android.content.Context, private val status: (String) -> Unit) {
+private class ShellLink(private val ctx: android.content.Context, private val status: (String) -> Unit, private val onLine: (String) -> Unit = {}) {
     companion object { private const val PORT = 19340 }
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "yunus-shell").apply { isDaemon = true } }
     // The app's install time is part of it, so after an update the old helper (old code) is
@@ -490,9 +502,14 @@ private class ShellLink(private val ctx: android.content.Context, private val st
         s.tcpNoDelay = true
         s.getOutputStream().apply { write("$token\n".toByteArray()); flush() }
         s.soTimeout = 2000
-        val reply = s.getInputStream().bufferedReader().readLine()
+        val input = s.getInputStream().bufferedReader()
+        val reply = input.readLine()
         s.soTimeout = 0
-        if (reply == "ok") s else { s.close(); null }
+        if (reply == "ok") {
+            // Anything the helper sends back (car values from "watch") arrives on this connection.
+            Thread({ try { while (true) onLine(input.readLine() ?: break) } catch (_: Throwable) { } }, "yunus-shell-in").apply { isDaemon = true }.start()
+            s
+        } else { s.close(); null }
     } catch (_: Throwable) { null }
 
     fun close() { worker.shutdownNow(); try { socket?.close() } catch (_: Throwable) { } }

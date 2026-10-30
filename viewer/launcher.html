@@ -4298,7 +4298,7 @@ const CAR_HAL_MAP = {
   // Driving: the Speed device is signature-locked, so speed comes from the front motor's rpm
   // (ENGINE_FRONT_MOTOR_SPEED) times km/h per rpm, from the Dolphin's tyre and reduction ratio,
   // to be calibrated against the cluster on a drive. ENGINE_POWER: kW, -100..300 (regen below 0).
-  'Engine 0x44100008': (v) => ({ speed: Math.round(Math.abs(v) * KMH_PER_RPM) }),
+  'Engine 0x44100008': (v) => (realSpeed ? {} : { speed: Math.round(Math.abs(v) * KMH_PER_RPM) }),
   'Engine 0x14400020': (v) => ({ powerKw: v }),
   'Statistic 0x4A502010': (v) => ({ odo: v }), // STATISTIC_TOTAL_MILEAGE, km
   // Charging: CHARGING_BATTERY_STATE_* (1 charging, 2 finished, 13 paused, …), the gun
@@ -4314,6 +4314,18 @@ const CAR_HAL_MAP = {
   'Bodywork 0x38800020': (v) => ({ windows: { RL: v } }),
   'Bodywork 0x4B900018': (v) => ({ windows: { RR: v } }),
   'Bodywork 0x41A00010': (v) => ({ sunshade: v }),
+  // Through the shell helper's getters (as Kinex reads them), when this car allows it:
+  'Get speed': (v) => { realSpeed = true; return { speed: Math.round(v) }; },
+  'Get gear': (v) => (({ 1: 'P', 2: 'R', 3: 'N', 4: 'D', 6: 'D' })[v] ? { gear: ({ 1: 'P', 2: 'R', 3: 'N', 4: 'D', 6: 'D' })[v] } : {}),
+  'Get soc': (v) => ({ soc: v }),
+  'Get range': (v) => ({ range: v }),
+  'Get odo': (v) => ({ odo: v }),
+  'Get steer': (v) => ({ steerAngle: v }), // degrees, ±780
+  'Get winFL': (v) => ({ windows: { FL: v } }),
+  'Get winFR': (v) => ({ windows: { FR: v } }),
+  'Get winRL': (v) => ({ windows: { RL: v } }),
+  'Get winRR': (v) => ({ windows: { RR: v } }),
+  'Get shade': (v) => ({ sunshade: v }),
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
@@ -4322,7 +4334,7 @@ const CAR_HAL_MAP = {
 // so after a cold start the car would otherwise not say its battery, range or settings for a while.
 // km/h per front-motor rpm: wheel 0.632 m (205/55 R16), reduction ~11 → π·0.632/11·60/1000.
 // Kept in localStorage 'kmhPerRpm' once calibrated on a drive.
-let KMH_PER_RPM = 0.0108;
+let KMH_PER_RPM = 0.0108, realSpeed = false;
 try { KMH_PER_RPM = +localStorage.getItem('kmhPerRpm') || KMH_PER_RPM; } catch {}
 const CAR_HAL_KEEP = ['Statistic 0x4A502010', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
   'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400010', 'Ac 0x4040001C'];
@@ -4388,7 +4400,7 @@ window.yunusCar = (m) => {
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
     'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
-    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'sunshade'];
+    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'sunshade', 'steerAngle'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
@@ -4399,6 +4411,7 @@ window.yunusCar = (m) => {
   if (m.trunk != null && m.trunk !== S.trunk) setTrunk(m.trunk, true);
   if (m.windows) Object.assign(S.windows, m.windows);
   if (m.sunshade != null) setShade(m.sunshade);
+  if (m.steerAngle != null) S.steerAngle = m.steerAngle;
   if (m.chargePort != null && m.chargePort !== S.charging) setCharge(m.chargePort, true);
   if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
   if (m.tyres) Object.assign(S.tyres, m.tyres);
