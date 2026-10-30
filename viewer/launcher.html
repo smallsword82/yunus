@@ -1149,7 +1149,9 @@ const TELLTALES = [
   { id: 'fog', name: 'Arka sis lambası', color: 'amber', auto: () => S.fog, desc: 'Arka sis lambası açık.' },
   { id: 'brake', name: 'Fren/park sistemi arızası', color: 'red', desc: 'Fren hidroliği düşük ya da fren sistemi arızalı. Güvenli bir yerde hemen durun.' },
   { id: 'steer', name: 'Direksiyon sistemi arızası', color: 'red', desc: 'Direksiyon ağırlaşabilir. Güvenli bir yerde hemen durun.' },
-  { id: 'belt', name: 'Emniyet kemeri', color: 'red', desc: 'Bir koltukta emniyet kemeri takılı değil.' },
+  // The car reports the driver's belt (SafetyBelt getter) but not whether a seat is taken, so
+  // an unbuckled driver lights it only on the move, as on Tesla.
+  { id: 'belt', name: 'Emniyet kemeri', color: 'red', auto: () => S.belts.drv === 0 && S.speed >= 5, desc: 'Sürücünün emniyet kemeri takılı değil.' },
   { id: 'coolant', name: 'Motor soğutma sıvısı aşırı ısındı', color: 'red', desc: 'Motor soğutması çok sıcak; durup kontrol ettirin.' },
   { id: 'plug', name: 'Şarj kablosu bağlı', color: 'red', auto: () => S.charging, desc: 'Yüksek voltaj şarj bağlantısı takılı.' },
   { id: 'lowv', name: '12 V sistem arızası', color: 'red', desc: 'Düşük voltaj beslemesi arızalı. Klima ve radyoyu kapatıp güvenli yerde durun.' },
@@ -1161,6 +1163,7 @@ const TELLTALES = [
 ];
 S.faults = {};
 S.fog = false;
+S.belts = {};
 const ttColor = (t) => (typeof t.color === 'function' ? t.color() : t.color);
 // On the car the instrument cluster reports its warning lights (CAR_HAL_MAP → {tt:{id: value}});
 // a light it has reported follows the car, the others their rule or (preview) the demo faults.
@@ -1168,9 +1171,9 @@ const halTT = {};
 const ttLit = (t) => (t.id in halTT ? halTT[t.id].on : t.auto ? t.auto() : !!S.faults[t.id]);
 const ttFault = (t) => (t.id in halTT ? halTT[t.id].on : !t.auto && !!S.faults[t.id]);
 const ttHtml = (t) => `<div class="tt ${ttColor(t)}${halTT[t.id] && halTT[t.id].flash ? ' flash' : ''}" title="${t.name}">${t.text ? `<b>${t.text()}</b>` : ICONS[t.id]}</div>`;
-// The status bar shows only active warnings (amber and red). Always-on information lights (OK,
-// drive mode, AVH standby, park brake in P, ...) stay in the Warnings list, as on Tesla.
-const isWarning = (t) => ['amber', 'red'].includes(ttColor(t)) && t.id !== 'epb';
+// The status bar shows only active warnings (amber and red), and the park brake while it is on.
+// Always-on information lights (OK, drive mode, AVH standby, ...) stay in the Warnings list.
+const isWarning = (t) => ['amber', 'red'].includes(ttColor(t));
 let dismissedAlert = null;
 function updateTelltales() {
   // Red ones first, two columns of nine at most; beyond that the last ones fold into a "+N"
@@ -4474,6 +4477,9 @@ const CAR_HAL_MAP = {
   'Get soc': (v) => ({ soc: v }),
   'Get range': (v) => ({ range: v }),
   'Get odo': (v) => ({ odo: v }),
+  // The cluster's park-brake and belt lights come as events only on change; these are read every second.
+  'Get parkSw': (v) => ({ tt: { epb: v === 1 ? 1 : 2 } }), // getParkBrakeSwitch: 1 applied, 0 released
+  'Get belt1': (v) => ({ belts: { drv: v } }), // getSafetyBeltStatus(MAIN): 1 buckled, 0 not, 2 invalid
   'Get steer': (v) => ({ steerAngle: v }), // degrees, ±780
   'Get winFL': (v) => ({ windows: { FL: v } }),
   'Get winFR': (v) => ({ windows: { FR: v } }),
@@ -4570,7 +4576,7 @@ window.yunusCar = (m) => {
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
     'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
-    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle'];
+    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle', 'belts'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
   if (m.speed != null) S.speed = m.speed;
@@ -4582,6 +4588,7 @@ window.yunusCar = (m) => {
   if (m.windows) Object.assign(S.windows, m.windows);
   if (m.sunshade != null) setShade(m.sunshade);
   if (m.steerAngle != null) S.steerAngle = m.steerAngle;
+  if (m.belts) Object.assign(S.belts, m.belts);
   if (m.chargePort != null && m.chargePort !== S.charging) setCharge(m.chargePort, true);
   if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
   if (m.tyres) Object.assign(S.tyres, m.tyres);

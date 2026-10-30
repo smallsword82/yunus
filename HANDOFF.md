@@ -95,11 +95,10 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
    `setAcControlMode(II)`, `setAcWindMode`, `setAcDefrostState(III)`. Kinex `HalAcListener` tam arg eşlemesini içeriyor
    (`denormalizeAcTemp: doubling`). Yardımcıya Permissive bağlamla ekle, her kontrolü araçta tek tek kalibre et.
 2. ~~Kilit~~ — kapandı (yukarıda "EN SON DURUM").
-3. **El freni + kemer uyarı ışıkları — ENGELLİ.** `getELECParkingState` → 65535 (geçersiz); kemer getter'ı Instrument'ta yok;
-   gösterge olayları (`0x2750001A` el freni, `0x28F0002C` kemer) yalnız değişince gelir (yeniden başlatınca kayıp);
-   SafetyBelt sensörü `0x12D0003F` saniyede birkaç kez 1↔0 zıplıyor (güvenilmez). Seçenekler: (a) değişince yakala +
-   `CAR_HAL_KEEP` ile sakla, (b) doğru getter'ı bul (`getELECParkingColor`? `get2in1Fault…`?). EPB `isWarning`'da
-   `t.id !== 'epb'` ile gizli — göstermek için kaldır.
+3. ~~El freni + kemer~~ — **çözüldü (31.10).** Getter'lar: `Gearbox.getParkBrakeSwitch` (1 çekili) → `tt.epb`, durum
+   çubuğunda gösteriliyor; `SafetyBelt.getSafetyBeltStatus(1)` (sürücü; 1 takılı, 0 değil) → `S.belts.drv`. Koltuk doluluğu
+   okunamadığından kemer ışığı yalnız **hız ≥ 5 km/s** iken yanar. `Instrument.getELECParkingState/Color` → 65535 (işe yaramaz).
+   Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç park/şarjdaydı).
 4. **Radyo RDS logosu:** (müzik kapağı düzeldi) radyo (`com.byd.mediacenter`) RDS'ten istasyon logosu veriyor mu?
 5. **Harita hızı:** çifte yük + ortalama çözüldü (commit'siz). Kalan jank Yunus'un kendisi (~38 ms/kare, gfxinfo):
    kaynağı **3D araç WebGL'inin sürekli render'ı** — on-demand render / pixelRatio düşürme düşünülebilir. Maps kendisi ~105 ms/kare.

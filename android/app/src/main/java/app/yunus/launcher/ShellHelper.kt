@@ -333,7 +333,10 @@ private object CarWatch {
     private class Get(val key: String, val method: String, val arg: Int? = null)
     private val GETTERS = listOf(
         "speed.BYDAutoSpeedDevice" to listOf(Get("speed", "getCurrentSpeed")),
-        "gearbox.BYDAutoGearboxDevice" to listOf(Get("gear", "getCurrentGear")),
+        // The park-brake and seat-belt lights arrive as events only on change, so read them too
+        // (Instrument's getELECParkingState/Color answer 65535, invalid, on the Dolphin).
+        "gearbox.BYDAutoGearboxDevice" to listOf(Get("gear", "getCurrentGear"), Get("parkSw", "getParkBrakeSwitch")), // 1 applied
+        "safetybelt.BYDAutoSafetyBeltDevice" to listOf(Get("belt1", "getSafetyBeltStatus", 1)), // SAFETY_BELT_AREA_MAIN; 1 buckled, 0 not
         "doorlock.BYDAutoDoorLockDevice" to listOf(Get("lock", "getDoorLockStatus", 1)), // driver's door: 1 unlocked, 2 locked
         "statistic.BYDAutoStatisticDevice" to listOf(Get("soc", "getElecPercentageValue"), Get("range", "getElecDrivingRangeValue"),
             Get("odo", "getTotalMileageValue")),
