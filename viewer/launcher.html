@@ -4896,6 +4896,9 @@ function setThemeMode(mode) {
 }
 function deviceThemeChanged(dark) { deviceDark = dark; if (themeMode === 'auto') applyThemeMode(); }
 if (darkQuery && !nativeNight) darkQuery.addListener((e) => deviceThemeChanged(e.matches));
+// The day/night change does not always reach the app as a configuration change (seen on the
+// car at dusk: the car went dark, Yunus stayed light), so ask the car now and then as well.
+if (nativeNight) setInterval(() => { const d = !!YunusNative.isNight(); if (d !== deviceDark) deviceThemeChanged(d); }, 15000);
 applyThemeMode();
 applyPerf();
 </script>
