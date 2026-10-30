@@ -2962,8 +2962,9 @@ setTimeout(() => { if (!mapEmbedded && !(window.YunusNative && YunusNative.embed
 // On the car the map area is the real Google Maps app, run inside Yunus on a private virtual
 // display (see AppEmbed/ShellHelper in the app); Yunus's own map is the fallback and the desktop
 // preview's map. A Yunus card over the area hides Maps while it is open.
-let mapEmbedded = false;
+let mapEmbedded = false, mapAreaStarted = false, helperWait = 0;
 function startMapArea() {
+  mapAreaStarted = true;
   if (!(window.YunusNative && YunusNative.embedApp)) return startMap();
   if (S.set.navApp === 'yunus') { // Yunus's own map with its navigation, chosen in the settings
     if (mapEmbedded) { mapEmbedded = false; YunusNative.embedVisible('map', false); }
@@ -4602,7 +4603,15 @@ window.yunusCar = (m) => {
   if (m.redraw) { wake(800); return; } // back in front: draw again
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
-    if (/yok|durdu/.test(m.embedStatus)) mapEmbedFailed(); // the shell helper could not run
+    // At power-on the shell helper comes up a few seconds late (wireless ADB starts late). Keep the
+    // map area for the chosen navigation app and embed it once the helper is ready, instead of
+    // showing Yunus's own map first; that only if the helper never comes.
+    if (/hazır/.test(m.embedStatus)) {
+      clearTimeout(helperWait); helperWait = 0;
+      if (mapAreaStarted && S.set.navApp !== 'yunus') startMapArea(); // (before that, the car's load starts it)
+    } else if (/yok|durdu/.test(m.embedStatus) && !helperWait) {
+      helperWait = setTimeout(() => { helperWait = 0; if (!/hazır/.test(window.YunusEmbedStatus)) mapEmbedFailed(); }, 60000);
+    }
     return;
   }
   if (m.halEvent) { window.YunusLastHalEvent = m.halEvent; return; }
