@@ -90,10 +90,12 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
 
 ## Açık işler (öncelik sana göre; kullanıcı sonuç görmek ister, kısa-net ilerle)
 
-1. **Klima (AC) kontrolü** (kullanıcı çok istedi). Okuma çalışıyor (acOn/acTemp/fan, CarHal). Kontrol: AC setter'ları
-   `setAcTemperature(IIII)` (yarım-derece *2, zone/source/unit arg), `setAcWindLevel(II)` (source,level),
-   `setAcControlMode(II)`, `setAcWindMode`, `setAcDefrostState(III)`. Kinex `HalAcListener` tam arg eşlemesini içeriyor
-   (`denormalizeAcTemp: doubling`). Yardımcıya Permissive bağlamla ekle, her kontrolü araçta tek tek kalibre et.
+1. ~~Klima~~ — **yapıldı (30.10), araçta doğrulandı.** Yardımcı `CarWatch.acCommand` (AC cihazı, Permissive bağlam; ilk arg hep
+   kaynak 0): `start/stop`, `setAcTemperature(0, °C tam 17..33, 0, 1)` (34..66 verince araç 33 yapıyor!), `setAcWindLevel(0, 1..7)`,
+   `setAcWindMode(0, 1 yüz 2 yüz+ayak 3 ayak 4 ayak+cam 5 cam 6 hepsi 7 yüz+cam)`, `setAcDefrostState(0, 1 ön/2 arka, 0/1)`,
+   `setAcCycleMode(0, 1 iç hava)`, `setAcControlMode(0, 0 oto)`. Durum olayları: güç `0x40400010`, fan `0x4040001C`, sıcaklık
+   `0x40400028`, iç hava `0x40400014`, hava yönü `0x40400018`, ön buğu `0x40400016`, arka `0x43400031`, dış `0x40400038`.
+   Sayfa: dock sıcaklık/fan (araçta 1° adım, kaydırınca 400 ms sonra gönderir), sıcaklığa basılı tut = aç/kapa, hava yönü, buğu, iç hava.
 2. ~~Kilit~~ — kapandı (yukarıda "EN SON DURUM").
 3. ~~El freni + kemer~~ — **çözüldü (31.10).** Getter'lar: `Gearbox.getParkBrakeSwitch` (1 çekili) → `tt.epb`, durum
    çubuğunda gösteriliyor; `SafetyBelt.getSafetyBeltStatus(1)` (sürücü; 1 takılı, 0 değil) → `S.belts.drv`. Koltuk doluluğu
@@ -103,6 +105,10 @@ aracın raporladığı gerçek konuma animasyonla gelir (komut sonrası). Önizl
    batarya ısı/arıza, güç aktarma (0 = bilinmiyor). Ana uyarı, anahtar, TPMS, fren, direksiyon, soğutma, güç sınırı, park lambası,
    ACC `get`'te 65535 döner → bunlar yalnız olayla gelir.
    Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç park/şarjdaydı).
+- **Bu oturumun sonu (30.10):** 12 V ışığı kaldırıldı (`0x2A600026` araç hazırken hep 1, göstergede lamba yok); vites
+  `getGearboxAutoModeType` ile; uyarı ışıkları başlangıçta `get(1007, id)` ile okunuyor; DAB'da kapak = istasyonun slaytı
+  (yardımcı `/sdcard/Android/data/com.fd.service.dab/files/dab/slide/` en yenisini `/data/local/tmp/yunus_dab.jpg`'ye kopyalar);
+  açılışta yardımcı geç gelirse Yunus haritası açılmıyor, yardımcıyı 60 sn bekliyor. Araç arıza kodları (DTC) Yunus'tan silinemez.
 4. ~~Radyo logosu~~ — **yapıldı (30.10).** Radyo (`com.byd.mediacenter`) kapak göndermiyor (yalnız genel 60×60 `MEDIA_ICON`);
    başlık RDS/DAB adı ("RDS SHOW RD", "DAB 03-KAFA RADYO"). Sayfa (`radioLogo`) adı temizleyip radio-browser.info'da (TR) arıyor,
    logoyu `localStorage.radioLogos`'ta saklıyor. Show/Fenomen/Best bulunuyor; CNN Türk/Kafa'nın veritabanında logosu yok → uygulama simgesi.

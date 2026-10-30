@@ -3437,7 +3437,7 @@ const CARDS = {
       <div class="grid" style="align-content:start">
         <button class="btn ${S.ac ? 'on' : ''}" data-do="ac"><i class="ti ti-snowflake"></i>${S.ac ? 'Klima açık' : 'Klima kapalı'}</button>
         <button class="btn" data-do="auto"><i class="ti ti-wand"></i>Otomatik</button>
-        <button class="btn" data-do="recirc"><i class="ti ti-refresh"></i>İç hava</button>
+        <button class="btn ${S.recirc ? 'on' : ''}" data-do="recirc"><i class="ti ti-refresh"></i>İç hava</button>
         <div class="fan"><i class="ti ti-propeller"></i><input type="range" min="1" max="7" value="${S.fan}" data-fan><b>${S.fan}</b></div>
         <div class="seats">${[['driver', 'Sürücü'], ['pass', 'Yolcu']].map(([k, label]) => {
           const st = S.seats[k], lv = (n, kind) => `<div class="lv">${[1, 2].map((i) => `<span class="${i <= n ? 'on' : ''}"></span>`).join('')}</div>`;
@@ -3941,7 +3941,12 @@ body.addEventListener('click', (e) => {
     c.tab = t.dataset.tab;
     if (S.gear === 'P') camTo({ tyres: 'overhead', windows: 'left', doors: 'left', mirrors: 'left', charge: 'right', locks: 'actions', quick: 'actions' }[c.tab] || 'default');
   }
-  if (t.dataset.flow) { S.flow[t.dataset.flow] = !S.flow[t.dataset.flow]; renderAirFlow(); }
+  if (t.dataset.flow) {
+    S.flow[t.dataset.flow] = !S.flow[t.dataset.flow];
+    if (!S.flow.face && !S.flow.foot && !S.flow.defrost) S.flow[t.dataset.flow] = true; // air goes somewhere
+    if (S.live) carCmd('acFlow', { mode: flowMode(S.flow) });
+    renderAirFlow();
+  }
   if (t.dataset.theme) setThemeMode(t.dataset.theme);
   if (t.dataset.paint) {
     S.paintId = t.dataset.paint;
@@ -3991,9 +3996,10 @@ body.addEventListener('click', (e) => {
     renderSeatDock();
   }
   const act = t.dataset.do;
-  if (act === 'tup') setTemp(S.temp + 0.5);
-  if (act === 'tdn') setTemp(S.temp - 0.5);
+  if (act === 'tup') setTemp(S.temp + (S.live ? 1 : 0.5));
+  if (act === 'tdn') setTemp(S.temp - (S.live ? 1 : 0.5));
   if (act === 'ac') { if (S.live) return carCmd('acPower', { on: !S.ac }); S.ac = !S.ac; }
+  if (act === 'recirc') { S.recirc = !S.recirc; if (S.live) carCmd('acCycle', { inside: S.recirc }); }
   if (act === 'lock') return setLock(!S.locked);
   if (act === 'trunk') return setTrunk(!S.trunk);
   if (act === 'charge') return setCharge(!S.charging);
@@ -4067,18 +4073,24 @@ body.addEventListener('input', (e) => {
 });
 
 // ---------- dock ----------
-// On the car the climate is shown from the car's own values; Yunus cannot command it (that needs
-// BYD's signature), so a tap on the car opens its climate screen instead.
+// On the car the climate is read from the car and commanded through the shell helper (its AC
+// device, see CarWatch.acCommand). A slide sends only where it stops, not every step.
 const AC_SCREEN = 'com.byd.airconditioning/.mainactivity.FullScreenMainActivity';
+const acTimers = {};
+const acSend = (cmd, args, wait = 400) => { clearTimeout(acTimers[cmd]); acTimers[cmd] = setTimeout(() => carCmd(cmd, args), wait); };
 function renderTemp() { // with the climate off the set temperature stays, dimmed (as on Tesla)
   $('tVal').textContent = S.temp.toFixed(1) + '°';
   $('tVal').style.opacity = S.ac === false ? 0.35 : '';
 }
+let acSentAt = -1e9; // when Yunus last sent a temperature (none yet)
 function setTemp(v, fromCar) {
-  if (S.live && !fromCar) return openCarApp(AC_SCREEN);
-  S.temp = Math.min(30, Math.max(16, v)); renderTemp(); seatAuto(); if (current === 'climate') refreshCard(); }
-$('tUp').onclick = () => setTemp(S.temp + 0.5);
-$('tDn').onclick = () => setTemp(S.temp - 0.5);
+  if (fromCar && performance.now() - acSentAt < 3000) return; // our own change still on its way
+  if (S.live) v = Math.round(v); // the car takes whole degrees
+  S.temp = Math.min(S.live ? 33 : 30, Math.max(S.live ? 17 : 16, v)); renderTemp(); seatAuto(); if (current === 'climate') refreshCard();
+  if (S.live && !fromCar) { acSentAt = performance.now(); acSend('acTemp', { c: S.temp }); }
+}
+$('tUp').onclick = () => setTemp(S.temp + (S.live ? 1 : 0.5));
+$('tDn').onclick = () => setTemp(S.temp - (S.live ? 1 : 0.5));
 // Hold the temperature to switch the climate off and on, as on Tesla. A hold does not also open
 // the climate card that a tap opens.
 let tHold = 0, tHeld = false;
@@ -4086,7 +4098,7 @@ $('tVal').addEventListener('pointerdown', () => {
   tHeld = false;
   tHold = setTimeout(() => {
     tHeld = true;
-    if (S.live) return openCarApp(AC_SCREEN);
+    if (S.live) return carCmd('acPower', { on: S.ac === false });
     S.ac = S.ac === false; renderTemp(); if (current === 'climate') refreshCard();
   }, 600);
 });
@@ -4094,7 +4106,11 @@ $('tVal').addEventListener('pointerdown', () => {
 $('tVal').addEventListener('click', (e) => { if (tHeld) { tHeld = false; e.stopPropagation(); } }, true);
 // Fan speed 0-7, 0 is off (as the car's own bar).
 function setFan(v, fromCar) {
-  if (S.live && !fromCar) return openCarApp(AC_SCREEN);
+  if (S.live && !fromCar) { // 0 is the climate off; a level turns it on
+    v = Math.min(7, Math.max(0, v));
+    if (v === 0) carCmd('acPower', { on: false });
+    else acSend('acFan', { level: v });
+  }
   S.fan = Math.min(7, Math.max(0, v));
   $('fVal').innerHTML = `${S.fan}<i class="ti ti-propeller"></i>`;
   $('fVal').style.opacity = S.fan === 0 ? 0.35 : ''; // off, dimmed like the temperature
@@ -4224,6 +4240,8 @@ function renderDefrost() {
 }
 // Air direction: a seated figure with an arrow to the face, the feet and the windscreen; the
 // arrows in use are lit. Each tap steps face → face + feet → feet → feet + windscreen.
+// AC_WINDMODE_*: 1 face, 2 face+feet, 3 feet, 4 feet+screen, 5 screen, 6 all three, 7 face+screen.
+const flowMode = (f) => (f.face ? (f.foot ? (f.defrost ? 6 : 2) : f.defrost ? 7 : 1) : f.foot ? (f.defrost ? 4 : 3) : 5);
 const FLOW_STEPS = [{ face: true, foot: false, defrost: false }, { face: true, foot: true, defrost: false },
   { face: false, foot: true, defrost: false }, { face: false, foot: true, defrost: true }];
 function renderAirFlow() {
@@ -4237,12 +4255,14 @@ function renderAirFlow() {
 $('airFlow').onclick = () => {
   const i = FLOW_STEPS.findIndex((s) => s.face === S.flow.face && s.foot === S.flow.foot && s.defrost === S.flow.defrost);
   S.flow = { ...FLOW_STEPS[(i + 1) % FLOW_STEPS.length] };
+  if (S.live) carCmd('acFlow', { mode: flowMode(S.flow) });
   if (S.defrost) { S.defrost = false; preDefrost = null; } // choosing a direction ends the demister
   renderDefrost();
   if (current === 'climate') refreshCard();
 };
 $('defFront').onclick = () => {
   S.defrost = !S.defrost;
+  if (S.live) carCmd('acDefrost', { area: 1, on: S.defrost }); // the car runs its own demister program
   if (S.defrost) { preDefrost = { flow: { ...S.flow }, fan: S.fan, ac: S.ac }; S.flow = { face: false, foot: false, defrost: true }; S.fan = 7; S.ac = true; }
   else if (preDefrost) { S.flow = preDefrost.flow; S.fan = preDefrost.fan; S.ac = preDefrost.ac; }
   renderDefrost();
@@ -4257,8 +4277,9 @@ $('wheelHeat').onclick = () => {
 };
 $('defRear').onclick = () => {
   S.rearDefrost = !S.rearDefrost;
+  if (S.live) carCmd('acDefrost', { area: 2, on: S.rearDefrost });
   clearTimeout(rearTimer);
-  if (S.rearDefrost) rearTimer = setTimeout(() => { S.rearDefrost = false; renderDefrost(); }, 15 * 60e3);
+  if (S.rearDefrost && !S.live) rearTimer = setTimeout(() => { S.rearDefrost = false; renderDefrost(); }, 15 * 60e3);
   renderDefrost();
 };
 renderSeatDock();
@@ -4395,10 +4416,9 @@ function dockSlider(el, stepPx, get, set, onSlide) {
   el.addEventListener('click', (e) => { if (sliding) { sliding = false; e.stopPropagation(); } }, true);
 }
 for (const id of ['vDn', 'vIcon', 'vUp']) dockSlider($(id), 14, () => S.vol, (v) => setVol(v));
-// Temperature (half degrees) and fan: on the car Yunus cannot set them (a tap opens the car's
-// climate screen), so sliding works off the car only.
-dockSlider($('tVal').parentElement, 22, () => S.temp * 2, (h) => { if (!S.live) setTemp(h / 2); }, () => clearTimeout(tHold));
-dockSlider($('fanCtl'), 30, () => S.fan, (v) => { if (!S.live) setFan(v); });
+// Temperature (half degrees) and fan: slide on the key.
+dockSlider($('tVal').parentElement, 22, () => S.temp * 2, (h) => setTemp(h / 2), () => clearTimeout(tHold));
+dockSlider($('fanCtl'), 30, () => S.fan, (v) => setFan(v));
 // A change from elsewhere (steering-wheel keys, the car's bar) shows on the key; the slider pops up
 // only when the level really changed, not for the first report.
 let volKnown = false;
@@ -4546,6 +4566,11 @@ const CAR_HAL_MAP = {
   'Ac 0x40400010': (v) => ({ acOn: v === 1 }), // AC_POWER_STATE
   'Ac 0x4040001C': (v) => ({ fan: v }), // AC_WIND_LEVEL, 0 off
   'Ac 0x40400028': (v) => ({ acTemp: v }), // AC_TEMP_MAIN, °C
+  'Ac 0x40400038': (v) => ({ outside: v }), // AC_TEMP_OUT, °C
+  'Ac 0x40400014': (v) => ({ climate: { recirc: v === 1 } }), // AC_CYCLE_MODE: 1 inside air
+  'Ac 0x40400018': (v) => (v >= 1 && v <= 7 ? { climate: { flowMode: v } } : {}), // AC_WIND_MODE (see flowMode)
+  'Ac 0x40400016': (v) => ({ climate: { defrost: v === 1 } }), // AC_DEFROST_FRONT_STATE
+  'Ac 0x43400031': (v) => ({ climate: { rearDefrost: v === 1 } }), // AC_DEFROST_REAR_STATE
 };
 // Values that change slowly are kept across restarts: most events only arrive when they change,
 // so after a cold start the car would otherwise not say its battery, range or settings for a while.
@@ -4633,7 +4658,7 @@ window.yunusCar = (m) => {
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
-    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'seats', 'faults',
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
     'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle', 'belts'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
@@ -4674,6 +4699,15 @@ window.yunusCar = (m) => {
   if (m.acOn != null) { S.ac = m.acOn; renderTemp(); }
   if (m.acTemp != null) setTemp(m.acTemp, true);
   if (m.fan != null) setFan(m.fan, true);
+  if (m.climate) { // the car's own climate settings, whoever changed them
+    const c = m.climate;
+    if (c.recirc != null) S.recirc = c.recirc;
+    if (c.defrost != null) S.defrost = c.defrost;
+    if (c.rearDefrost != null) S.rearDefrost = c.rearDefrost;
+    if (c.flowMode != null) S.flow = { face: [1, 2, 6, 7].includes(c.flowMode), foot: [2, 3, 4, 6].includes(c.flowMode), defrost: [4, 5, 6, 7].includes(c.flowMode) };
+    renderDefrost();
+    if (current === 'climate') refreshCard();
+  }
   if (m.outside != null) { S.outside = Math.round(m.outside); $('outTemp').textContent = `${S.outside}°C`; seatAuto(); }
   if (m.seats) {
     for (const [k, v] of Object.entries(m.seats)) { Object.assign(S.seats[k], v); seatsSent[k] = `${S.seats[k].heat}/${S.seats[k].vent}`; }

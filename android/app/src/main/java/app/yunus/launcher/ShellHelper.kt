@@ -264,6 +264,7 @@ private object CarWatch {
     private val last = HashMap<String, String>()
     private var started = false
     @Volatile private var bodyworkDev: Any? = null // for commands (windows, sunshade), set in listen()
+    @Volatile private var acDev: Any? = null // for the climate commands, set in start()
     private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)
 
     /** A context whose permission checks all pass, so the HAL devices' own check does not refuse this
@@ -326,6 +327,10 @@ private object CarWatch {
             val dev = c.getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx) ?: continue
             for (g in gets) polls.add(Poll(dev, c, g))
         } catch (t: Throwable) { System.err.println("watch getters $name: ${t.cause ?: t}") }
+        try {
+            acDev = Class.forName("android.hardware.bydauto.ac.BYDAutoAcDevice")
+                .getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx)
+        } catch (t: Throwable) { System.err.println("watch ac: ${t.cause ?: t}") }
         try {
             val c = Class.forName("android.hardware.bydauto.instrument.BYDAutoInstrumentDevice")
             instrumentDev = c.getMethod("getInstance", android.content.Context::class.java).invoke(null, ctx)
@@ -448,6 +453,7 @@ private object CarWatch {
      * Sunshade: {cmd:sunshade, open:0|100} → setSunshadeState(SUNROOF_CLOSE|SUNROOF_OPEN).
      */
     fun command(json: String) = main.post {
+        if (json.contains("\"cmd\":\"ac")) return@post acCommand(json)
         val dev = bodyworkDev ?: run { System.err.println("cmd: no bodywork device"); return@post }
         try {
             val o = org.json.JSONObject(json)
@@ -502,6 +508,38 @@ private object CarWatch {
                     val r = pm?.invoke(dev, devType, feature, value, evObj)
                     System.err.println("cmd post type=$devType feature=0x${Integer.toHexString(feature)} value=$value obj=${evObj != null} -> $r (m=${pm != null})")
                 }
+            }
+        } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
+    }
+
+    /**
+     * Climate, on the AC device with the permissive context. Every setter takes the control source
+     * first (0, AC_CTRL_SOURCE_UI_KEY, as the car's own screen). acPower {on} → start/stop;
+     * acTemp {c} → setAcTemperature(area 0 both, whole °C 17..33, source, unit 1 °C; the
+     * framework also lets 34..66 through, but the Dolphin takes that as 33);
+     * acFan {level 1..7} → setAcWindLevel; acFlow {mode} → setAcWindMode (1 face, 2 face+feet,
+     * 3 feet, 4 feet+screen, 5 screen); acDefrost {area 1 front / 2 rear, on} → setAcDefrostState;
+     * acCycle {inside} → setAcCycleMode (1 inside air); acAuto {on} → setAcControlMode (0 auto).
+     */
+    private fun acCommand(json: String) {
+        val dev = acDev ?: run { System.err.println("cmd: no ac device"); return }
+        try {
+            val o = org.json.JSONObject(json)
+            val c = dev.javaClass
+            val i = Integer.TYPE
+            val call = { name: String, args: Array<Int> ->
+                val m = c.getMethod(name, *Array(args.size) { i })
+                val r = m.invoke(dev, *args)
+                System.err.println("cmd ac $name(${args.joinToString()}) = $r")
+            }
+            when (o.optString("cmd")) {
+                "acPower" -> call(if (o.optBoolean("on")) "start" else "stop", arrayOf(0))
+                "acTemp" -> call("setAcTemperature", arrayOf(0, Math.round(o.optDouble("c", 22.0)).toInt().coerceIn(17, 33), 0, 1))
+                "acFan" -> call("setAcWindLevel", arrayOf(0, o.optInt("level", 1).coerceIn(1, 7)))
+                "acFlow" -> call("setAcWindMode", arrayOf(0, o.optInt("mode", 1).coerceIn(1, 7)))
+                "acDefrost" -> call("setAcDefrostState", arrayOf(0, o.optInt("area", 1), if (o.optBoolean("on")) 1 else 0))
+                "acCycle" -> call("setAcCycleMode", arrayOf(0, if (o.optBoolean("inside")) 1 else 0))
+                "acAuto" -> call("setAcControlMode", arrayOf(0, if (o.optBoolean("on")) 0 else 1))
             }
         } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
     }
