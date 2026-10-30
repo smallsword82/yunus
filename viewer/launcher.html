@@ -2062,12 +2062,13 @@ function renderLiveMedia() {
     : m.access && m.icon ? `<div id="mmArt" class="art fallback"><img src="${m.icon}" alt="" style="width:56%;height:56%;border-radius:22%"></div>`
     : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`;
   $('mmTitle').textContent = !m.access ? 'Müzik kartı için bildirim erişimi ver' : m.pkg ? (m.title || m.app) : 'Çalan bir şey yok';
-  $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (failedApp() ? `${failedApp()} arka planda başlamadı · açmak için başlığa dokun` : m.error || m.artist || m.album || '') : '';
+  $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (failedApp() ? `${failedApp()} arka planda başlamadı · ▶ ile çal` : m.error || m.artist || m.album || '') : '';
   $('mmPlay').innerHTML = `<i class="ti ti-player-${m.playing ? 'pause' : 'play'}"></i>`;
   $('mmProg').parentElement.style.visibility = m.dur > 0 ? '' : 'hidden'; // radio has no length
   if (m.dur > 0 && !mmSeeking) $('mmProg').style.width = (livePos() / m.dur * 100) + '%';
   setCardArt(m.access && m.art, m.playing);
 }
+let startWanted = null; // the app last picked in the list to start
 function openSrcPop() {
   if (liveMedia && liveMedia.access) {
     // The apps with a media session; picking one makes the card follow and control it.
@@ -2097,7 +2098,7 @@ $('srcPop').onclick = (e) => {
     $('srcPop').classList.remove('show');
     // A video app has nothing to resume on its own: it opens in the third window to pick a video.
     const a = (liveMedia.apps || []).find((x) => x.pkg === st.dataset.start);
-    if (a && a.video) openInSide(a.pkg); else YunusNative.mediaStart(st.dataset.start);
+    if (a && a.video) openInSide(a.pkg); else { startWanted = st.dataset.start; YunusNative.mediaStart(startWanted); }
     return;
   }
   const b = e.target.closest('[data-src]'); if (!b) return;
@@ -4441,6 +4442,9 @@ window.yunusCar = (m) => {
   }
   if (m.media) {
     liveMedia = { ...m.media, at: performance.now() };
+    // An app picked to start that would not play in the background opens in the third window,
+    // to press play there.
+    if (startWanted && liveMedia.startFailed === startWanted) { openInSide(startWanted); startWanted = null; }
     // The music app joins the recent apps when it starts playing (not on every position update).
     if (liveMedia.playing && liveMedia.pkg !== playingPkg) useApp(liveMedia.pkg);
     playingPkg = liveMedia.playing ? liveMedia.pkg : null;

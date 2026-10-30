@@ -289,11 +289,13 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         if (pkg == last) keys.forEach { ctx.getSystemService(android.media.AudioManager::class.java).dispatchMediaKeyEvent(it) }
         else {
             val receiver = android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON).setPackage(pkg)
-            ctx.packageManager.queryBroadcastReceivers(receiver, 0).firstOrNull()?.activityInfo?.let { target ->
-                receiver.component = ComponentName(target.packageName, target.name)
-                receiver.addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-                keys.forEach { ctx.sendBroadcast(android.content.Intent(receiver).putExtra(android.content.Intent.EXTRA_KEY_EVENT, it)) }
-            }
+            // No receiver either (BYD's Spotify shell, com.vivid.music.byd): it can't be started
+            // unseen, so the card says so at once and the page opens the app.
+            val target = ctx.packageManager.queryBroadcastReceivers(receiver, 0).firstOrNull()?.activityInfo
+                ?: run { startFailed = pkg; send(); return }
+            receiver.component = ComponentName(target.packageName, target.name)
+            receiver.addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            keys.forEach { ctx.sendBroadcast(android.content.Intent(receiver).putExtra(android.content.Intent.EXTRA_KEY_EVENT, it)) }
         }
         checkStarted(pkg)
     }
@@ -317,7 +319,8 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         val c = current
         if (c != null && c.packageName != last) { last = c.packageName; prefs.edit().putString("last", last).apply() }
         if (sessions.filter { !isBluetoothApp(it.packageName) }.any { seen.add(it.packageName) }) { prefs.edit().putStringSet("seen2", HashSet(seen)).apply(); apps = null }
-        if (startFailed != null && sessions.any { it.playbackState?.state == PlaybackState.STATE_PLAYING }) startFailed = null
+        // Cleared once that app plays (not when another one does: the radio may be on meanwhile).
+        if (startFailed != null && sessions.any { it.packageName == startFailed && it.playbackState?.state == PlaybackState.STATE_PLAYING }) startFailed = null
         val now = c?.let { Snap(it.packageName, it.metadata, it.playbackState) }
         val all = sessions.map { Snap(it.packageName, it.metadata, it.playbackState) }
         val lastPkg = last

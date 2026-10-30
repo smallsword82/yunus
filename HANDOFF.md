@@ -93,6 +93,14 @@ Sayfada `CAR_HAL_MAP` bunları telemetriye çeviriyor.
   almıyor, yardımcının ana ekranda yaptığı tek şey bu. `cmd statusbar expand-settings` /
   `expandSettingsPanel` BYD'de bildirimleri açıyor, paneli değil. BYD paneli açıkken kabuk o
   pencereye dokunamıyor ("Injecting to another application"): kapatmak `cmd statusbar collapse`.
+- **Işıklar araçta denendi (30.10):** sinyal (0x38A0002C: 2 sol, 4 sağ, 6 dörtlü), far düğmesi
+  (1–4), kemer lambası (0x28F0002C: 2 sönük, 5 yanıp sönüyor) doğru. Düğme "otomatik"te gündüz kısa
+  far yanmıyor: artık lambaların kendisi okunuyor (LOW_BEAM 0x38A0000A, SIDE 0x38A00008). **Uzun far
+  (0x38A0000C) hiç gelmedi** — far düğmesi kısa fardayken tekrar denenecek.
+- **Müzik kartı "Başlat" (30.10):** listedeki "Spotify" BYD'nin kabuğu `com.vivid.music.byd`
+  (asıl oynatıcı `com.spotify.music` / SpotifySDK); ne tarayıcı servisi ne medya tuşu alıcısı var.
+  Arka planda başlamayan uygulama artık 3. pencerede açılıyor (`startWanted`); radyo çalarken
+  `startFailed` silinmiyor. YT Music ReVanced da arka planda başlamadı → 3. pencerede açıldı, kart onu takip etti.
 - Chrome 74 kuralları unutulmasın: `color-mix`, flex `gap`, `??`, `Promise.any`, `min()` yok.
 
 0. **Araçta ilk iş — kabuk yardımcısının araç okuması (Kinex yöntemi):** Yunus açılınca yardımcıya
