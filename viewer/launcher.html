@@ -1773,9 +1773,32 @@ const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(char
   const path = new THREE.CatmullRomCurve3([
     port.clone().add(new THREE.Vector3(-0.08, -0.02, 0)), new THREE.Vector3(port.x - 0.4, port.y - 0.04, port.z - 0.03),
     new THREE.Vector3(port.x - 0.6, 0.5, port.z - 0.1), new THREE.Vector3(port.x - 0.62, 0.035, port.z - 0.45),
-    new THREE.Vector3(port.x - 0.55, 0.035, port.z - 1.4), new THREE.Vector3(port.x - 0.6, 0.035, port.z - 2.6)]);
+    new THREE.Vector3(port.x - 0.55, 0.035, port.z - 1.6), new THREE.Vector3(port.x - 0.6, 0.035, port.z - 3.0),
+    new THREE.Vector3(port.x - 0.66, 0.2, port.z - 3.62), new THREE.Vector3(port.x - 0.68, 0.42, port.z - 3.76)]);
   const cableMat = new THREE.MeshStandardMaterial({ color: 0x25282d, roughness: 0.6 });
   chargeGear.add(new THREE.Mesh(new THREE.TubeGeometry(path, 60, 0.032, 10, false), cableMat));
+  // The charging station the cable comes from: a pedestal behind the car's right side, its front
+  // (screen and status light) towards the camera.
+  {
+    const st = new THREE.Group();
+    st.position.set(port.x - 0.68, 0, port.z - 3.92); // just behind the car's rear, clear of it
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe9ecef, roughness: 0.45, metalness: 0.1 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2e34, roughness: 0.5 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.25, 0.26), bodyMat); body.position.y = 0.625; st.add(body);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.34), darkMat); base.position.y = 0.03; st.add(base);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.05, 0.3), darkMat); cap.position.y = 1.27; st.add(cap);
+    // Front panel faces −x (the camera side): a dark screen and a green status strip.
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.16), new THREE.MeshBasicMaterial({ color: 0x15181c }));
+    screen.rotation.y = -Math.PI / 2; screen.position.set(-0.171, 0.98, 0); st.add(screen);
+    const ledMat = new THREE.MeshBasicMaterial({ color: 0x35e07a, transparent: true, opacity: 0.9 });
+    const led = new THREE.Mesh(new THREE.PlaneGeometry(0.035, 0.42), ledMat);
+    led.rotation.y = -Math.PI / 2; led.position.set(-0.171, 0.62, 0); st.add(led);
+    // Holster where the cable leaves the pedestal.
+    const holster = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 16), darkMat);
+    holster.rotation.x = Math.PI / 2; holster.position.set(0, 0.42, 0.16); st.add(holster);
+    chargeGear.add(st);
+    chargeGear.userData.ledMat = ledMat;
+  }
   // The plug body at the flap, pointing out of the car (−x is the car's right).
   const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.18, 20), cableMat);
   plug.rotation.z = Math.PI / 2; plug.position.copy(port).add(new THREE.Vector3(-0.07, 0, 0));
@@ -1795,7 +1818,7 @@ const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(char
     m.scale.set(1, 1, 2.6); // stretched along the cable
     chargeGear.add(m); pulses.push(m);
   }
-  chargeGear.userData = { glowMat, glow, path, pulses };
+  Object.assign(chargeGear.userData, { glowMat, glow, path, pulses });
 }
 // The glow breathes while charging (steady once full).
 function stepChargeGlow(now) {
@@ -1803,6 +1826,7 @@ function stepChargeGlow(now) {
   const k = S.chargeState === 2 ? 1 : 0.55 + 0.45 * Math.sin(now / 420);
   chargeGear.userData.glowMat.opacity = 0.35 + 0.6 * k;
   chargeGear.userData.glow.intensity = 0.4 + 1.2 * k;
+  chargeGear.userData.ledMat.opacity = 0.4 + 0.55 * k; // the station's light breathes with the plug
   // Pulses flow only while energy goes in (not when full or paused).
   const { path, pulses } = chargeGear.userData, flowing = S.chargeState !== 2 && S.chargeState !== 13;
   pulses.forEach((m, i) => {
