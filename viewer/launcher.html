@@ -3936,7 +3936,25 @@ function endSideDrag(e) {
 addEventListener('pointerup', endSideDrag);
 addEventListener('pointercancel', endSideDrag);
 
-function refreshCard() { if (current) { fitCard(); body.innerHTML = CARDS[current].render.call(CARDS[current]); } }
+// The card is drawn again on every car report (seats, climate, … each second): unchanged, it is left
+// alone; changed, its scrolled lists keep their place (else a list snaps back to the top under
+// the finger).
+let cardHtml = '', cardKey = '';
+function refreshCard() {
+  if (!current) return;
+  fitCard();
+  const html = CARDS[current].render.call(CARDS[current]);
+  if (html === cardHtml && body.innerHTML) return;
+  const key = current + '|' + (CARDS[current].tab || ''), same = key === cardKey; // another card or tab starts at the top
+  cardKey = key;
+  // Scrolled lists by their place in the card (the same after a redraw of the same tab).
+  const kept = [];
+  if (same) [].forEach.call(body.querySelectorAll('*'), (e, i) => { if (e.scrollTop > 0) kept.push([i, e.scrollTop]); });
+  const top = body.scrollTop;
+  body.innerHTML = cardHtml = html;
+  if (kept.length) { const all = body.querySelectorAll('*'); kept.forEach(([i, t]) => { if (all[i]) all[i].scrollTop = t; }); }
+  body.scrollTop = same ? top : 0;
+}
 // The card takes the map window's width; below 860 design px it switches to its narrow layout.
 function fitCard() { card.classList.toggle('narrow', card.getBoundingClientRect().width / stageScale < 860); }
 // On the device the dock's Phone, Camera, Climate and Music open the car's own apps: BYD's phone
