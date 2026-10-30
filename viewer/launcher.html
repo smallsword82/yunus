@@ -4581,10 +4581,17 @@ function openNetPop(kind) {
   popTouch(true);
 }
 // A pop-up over live Maps: Maps goes under the (see-through) page while one is open, then back on top.
+// Maps comes back on top only once the pop-up has faded out; at once, the part over Maps would vanish
+// while the rest still fades (the tray "closing in pieces").
+let popBackAt = 0;
 function popTouch(open) {
-  const any = !!(open || netPopKind || seatPopFor || trayOpen);
-  if (window.YunusNative && YunusNative.mapUnder) YunusNative.mapUnder(any);
-  if (sidePkg) { if (any) YunusNative.embedVisible('side', false); else embedSide(); } // the third window is still on top
+  const any = () => !!(open || netPopKind || seatPopFor || trayOpen);
+  clearTimeout(popBackAt);
+  const apply = () => {
+    if (window.YunusNative && YunusNative.mapUnder) YunusNative.mapUnder(any());
+    if (sidePkg) { if (any()) YunusNative.embedVisible('side', false); else embedSide(); } // the third window is still on top
+  };
+  if (any()) apply(); else popBackAt = setTimeout(apply, 280);
 }
 function closeNetPop() {
   if (!netPopKind) return;
