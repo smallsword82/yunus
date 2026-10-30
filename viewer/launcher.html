@@ -711,11 +711,11 @@ button { font-family:inherit; color:inherit; }
 .clim.lit .ico, .clim.heat .ico {
   background:linear-gradient(0deg, currentColor 0%, currentColor 45%, rgba(255,255,255,.8) 50%, currentColor 55%, currentColor 100%);
   background-size:100% 300%; animation:shineUp 1.8s linear infinite; }
-#recirc.lit .ico, .clim.vent .ico {
+.clim.vent .ico {
   background:linear-gradient(90deg, currentColor 0%, currentColor 45%, rgba(255,255,255,.8) 50%, currentColor 55%, currentColor 100%);
   background-size:300% 100%; animation:shineAcross 1.6s linear infinite; }
 .clim:not(.seatDk).lit .ico { animation-name:shineUp, keyPop; animation-duration:1.8s, .4s; animation-timing-function:linear, ease-out; animation-iteration-count:infinite, 1; }
-#recirc.lit .ico { animation-name:shineAcross, keyPop; animation-duration:1.6s, .4s; }
+#recirc.lit .ico { background:currentColor; animation:none; } /* the icon itself says inside/outside air */
 @media (prefers-reduced-motion: reduce) { .clim .ico { animation:none !important; } }
 #airFlow .on { color:#3e6ae1; }
 #airFlow path[class]:not(.on) { opacity:.4; } /* the unused directions stay faint, as on Tesla */
