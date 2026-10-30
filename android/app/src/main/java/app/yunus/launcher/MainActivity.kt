@@ -54,6 +54,7 @@ class MainActivity : Activity() {
     private lateinit var volPop: VolumeOverlay
     private lateinit var media: MediaBridge
     private lateinit var bt: BtBridge
+    private lateinit var edge: EdgeHome
     private lateinit var volume: VolumeBridge
     private lateinit var status: StatusBridge
 
@@ -303,6 +304,7 @@ class MainActivity : Activity() {
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
         bt = BtBridge(this, ::postToPage)
+        edge = EdgeHome(this)
         volume = VolumeBridge(this, ::postToPage)
         status = StatusBridge(this, ::postToPage).also { it.start() }
         // The bell's count from the notification listener (only the number, never the content).
@@ -458,8 +460,9 @@ class MainActivity : Activity() {
     }
 
     // Back from the notification-access setting, the music card may now read the media sessions.
-    override fun onResume() { super.onResume(); web.onResume(); media.refresh() }
-    override fun onPause() { web.onPause(); super.onPause() }
+    // The swipe-up-for-home strip is over the other apps only (Yunus has its own dock).
+    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide() }
+    override fun onPause() { web.onPause(); edge.show(); super.onPause() }
     override fun onDestroy() { carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.

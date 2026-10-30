@@ -4256,15 +4256,20 @@ $('fVal').addEventListener('click', (e) => { if (fHeld) { fHeld = false; e.stopP
 $('fUp').onclick = () => setFan(S.fan + 1);
 $('fDn').onclick = () => setFan(S.fan - 1);
 setFan(S.fan, true); // initial value
-// Car button: tap for the car's own settings, hold for Yunus's settings. Off the car (no
-// YunusNative) a tap opens Yunus's settings too.
+// Car button: the home key (BYD's bar is off the screen) — a tap closes whatever is open (card,
+// tray, pop-ups) and brings the car view back; hold for Yunus's settings.
 const CAR_SETTINGS = 'com.byd.carsettings/.MainActivity';
+function goHome() {
+  closeNetPop(); closeSeatPop(); closeAppTray();
+  if (current) closeCard();
+  if (S.gear === 'P' && !S.charging) camTo('default');
+}
 let carHold = 0, carHeld = false;
 $('carBtn').addEventListener('pointerdown', () => { carHeld = false; carHold = setTimeout(() => { carHeld = true; openCard('controls'); }, 500); });
 ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $('carBtn').addEventListener(ev, () => clearTimeout(carHold)));
 $('carBtn').addEventListener('click', () => {
   if (carHeld) { carHeld = false; return; }
-  if (!openCarApp(CAR_SETTINGS)) openCard('controls');
+  goHome();
 });
 
 // Seat climate, two levels each (the Dolphin's seats have two). Tap a seat: heat 2 → 1 → off. Hold it: a panel with heating,
