@@ -334,7 +334,8 @@ private object CarWatch {
             Get("shade", "getSunroofWindowblindPosition")),
         // The charge events only arrive on change, so a car already plugged in when Yunus started
         // never sends them; read the gun (2 = connected → show the cable) and the state.
-        "charging.BYDAutoChargingDevice" to listOf(Get("chgGun", "getChargingGunState"), Get("chgState", "getChargingState")))
+        "charging.BYDAutoChargingDevice" to listOf(Get("chgGun", "getChargingGunState"), Get("chgState", "getChargingState"),
+            Get("chgPower", "getChargingPower"))) // kW (double); rest hour/minute arrive as events
     private class Poll(val dev: Any, val cls: Class<*>, val get: Get) { var dead = false }
     private val polls = ArrayList<Poll>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
