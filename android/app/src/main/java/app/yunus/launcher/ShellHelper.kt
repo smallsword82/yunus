@@ -289,7 +289,15 @@ private object CarWatch {
         subscribers.add(out)
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             if (!started) { started = true; start() }
-            else synchronized(last) { last.values.forEach { send(it) } } // the newcomer gets the current values
+            else {
+                // Yunus restarted while the helper kept running: send the current values straight to
+                // this new connection (not broadcast, which a stale old connection could disrupt),
+                // and re-prime the listener snapshots so a full fresh set flows.
+                synchronized(last) {
+                    for (line in last.values) try { synchronized(out) { out.write("$line\n".toByteArray()); out.flush() } } catch (_: Throwable) { subscribers.remove(out); return@post }
+                }
+                for (dev in held) try { dev.javaClass.getMethod("getAllStatus").invoke(dev) } catch (_: Throwable) { }
+            }
         }
     }
 
