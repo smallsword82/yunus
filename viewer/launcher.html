@@ -4471,7 +4471,8 @@ const CAR_HAL_MAP = {
   'Instrument 0x2870000E': (v) => ({ tt: { steer: v } }), // STEERING_SYS_FAILURE_WARN_LIGHT
   'Instrument 0x2870002C': (v) => ({ tt: { coolant: v } }), // COOLANT_TEMP_HIGH_WARN_LIGHT
   'Instrument 0x2A60002C': (v) => ({ tt: { plug: v } }), // POWER_BATTERY_CHARGE_CONNECT_INDICATOR
-  'Instrument 0x2A600026': (v) => ({ tt: { lowv: v } }), // LOW_POWER_BATTERY_WARN_LIGHT (12 V)
+  // LOW_POWER_BATTERY_WARN_LIGHT 0x2A600026 is not the Dolphin's 12 V lamp: it reads 1 whenever the
+  // car is ready (2 while parked charging) with no light on the cluster, so it is not shown.
   'Instrument 0x2A600032': (v) => ({ tt: { hvhot: v } }), // POWER_BATTERY_HEAT_WARN_LIGHT
   'Instrument 0x2B000008': (v) => ({ tt: { hvfault: v } }), // POWER_BAT_FAILURE_WARN_LIGHT
   'Instrument 0x2A60001A': (v) => ({ tt: { powertrain: v } }), // POWER_SYS_FAILURE_WARN_LIGHT

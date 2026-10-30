@@ -363,7 +363,7 @@ private object CarWatch {
     // so a light already on when Yunus starts would never show. Read them with the device's own
     // get(deviceType, featureId) and hand them on as Instrument events: 1 on, 2 off, 3+ flashing.
     private val LIGHTS = intArrayOf(0x2960000E, 0x29600026, 0x27500014, 0x2750002C, 0x28700014, 0x27500020, 0x2870000E,
-        0x2870002C, 0x2A60002C, 0x2A600026, 0x2A600032, 0x2B000008, 0x2A60001A, 0x2B00001A, 0x27500008, 0x2C000014,
+        0x2870002C, 0x2A60002C, 0x2A600032, 0x2B000008, 0x2A60001A, 0x2B00001A, 0x27500008, 0x2C000014,
         0x28F0000E, 0x2B00000E)
     private var instrumentDev: Any? = null
     private var featGet: java.lang.reflect.Method? = null
