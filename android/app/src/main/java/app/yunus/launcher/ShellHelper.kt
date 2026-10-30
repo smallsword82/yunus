@@ -358,6 +358,9 @@ private object CarWatch {
         // Seat heat and ventilation (1 off, 2 low, 3 high): their events come only on change.
         "setting.BYDAutoSettingDevice" to listOf(Get("seatH1", "getSeatHeatingState", 1), Get("seatH2", "getSeatHeatingState", 2),
             Get("seatV1", "getSeatVentilatingState", 1), Get("seatV2", "getSeatVentilatingState", 2)),
+        // Lamps (getLightStatus: 1 side, 2 low, 3 high; 1 on) and the knob on AUTO: events only on change.
+        "light.BYDAutoLightDevice" to listOf(Get("lampSide", "getLightStatus", 1), Get("lampLow", "getLightStatus", 2),
+            Get("lampHigh", "getLightStatus", 3), Get("drl", "getDayRunningLightState")),
         "safetybelt.BYDAutoSafetyBeltDevice" to listOf(Get("belt1", "getSafetyBeltStatus", 1)), // SAFETY_BELT_AREA_MAIN; 1 buckled, 0 not
         "doorlock.BYDAutoDoorLockDevice" to listOf(Get("lock", "getDoorLockStatus", 1)), // driver's door: 1 unlocked, 2 locked
         "statistic.BYDAutoStatisticDevice" to listOf(Get("soc", "getElecPercentageValue"), Get("range", "getElecDrivingRangeValue"),
@@ -421,6 +424,12 @@ private object CarWatch {
             for (id in LIGHTS) {
                 val v = fg.invoke(inst, 1007, id) as Int // BYDAUTO_DEVICE_INSTRUMENT
                 if (v in 0..15) event("Instrument", id, v) // 65535 and the like: no such light here
+            }
+            // The light knob (LIGHT_KNOB_CURRENT_GEAR, 1 off 2 AUTO 3 park 4 low) and the daytime
+            // lights, read the same way on the light device's type (BYDAUTO_DEVICE_LIGHT 1004).
+            for (id in intArrayOf(0x13300023, 0x4FE0000E)) {
+                val v = fg.invoke(inst, 1004, id) as Int
+                if (v in 0..15) event("Light", id, v)
             }
         } catch (t: Throwable) { lightsDead = true; System.err.println("watch lights: ${t.cause ?: t}") }
         if (polls.any { !it.dead } || !lightsDead) main.postDelayed({ poll() }, 1000)

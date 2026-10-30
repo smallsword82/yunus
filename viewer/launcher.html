@@ -439,7 +439,13 @@ button { font-family:inherit; color:inherit; }
 #beamInd svg { width:40px; height:28px; fill:none; stroke:var(--cd2); stroke-width:2.6; stroke-linecap:round; }
 #beamInd svg path:first-child { fill:var(--cd2); }
 #indLow.on { stroke:#2fd06a; } #indLow.on path:first-child { fill:#2fd06a; }
-#indHigh.on { stroke:#3d8bff; } #indHigh.on path:first-child { fill:#3d8bff; }
+#indLow.high { stroke:#3e8bff; } #indLow.high path:first-child { fill:#3e8bff; }
+#indPark path:nth-child(2) { fill:var(--cd2); }
+#indPark.on { stroke:#2fd06a; } #indPark.on path:nth-child(-n+2) { fill:#2fd06a; } /* position lamps (knob on park) */
+/* The knob on AUTO: an A in the lamp, as on the car's own tell-tale. */
+#indLow .a { display:none; fill:var(--pn); stroke:none; font:700 13px Inter,sans-serif; }
+#indLow.auto .a { display:block; }
+#indLow.auto { stroke:#2fd06a; } #indLow.auto path:first-child { fill:#2fd06a; } /* the cluster's AUTO lamp is lit */
 /* Rear camera while driving (as on Cybertruck): a wide, thin strip above the car shaped and
    mirrored like the interior rear-view mirror. Placed each frame above the car (placeRearCam). */
 #rearCam { position:absolute; left:0; top:0; width:360px; height:90px; z-index:3; border-radius:46px / 40px; overflow:hidden; background:#000;
@@ -508,7 +514,7 @@ button { font-family:inherit; color:inherit; }
 /* With the car's Maps in the map area, Yunus's own map controls (search, recent place, buttons)
    are not shown: they would only appear while Maps steps aside for a pop-up. */
 #stage.mapsIn #mapWrap > .floating { display:none !important; }
-/* …and the page is see-through there: Maps lies under the page (so pop-ups show over it live). */
+/* …and the page is see-through there, for Maps to show through under a pop-up (see popTouch). */
 html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.mapsIn #map { background:transparent; }
 #carPanel { overflow:clip; }
 #map { position:absolute; top:56px; right:0; bottom:0; left:0; background:#1a1c20; }
@@ -817,8 +823,8 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
       </div>
       <div id="beamInd" title="Demo: uzun far için dokun">
         <!-- Standard low / high beam tell-tales: lamp body with dipped or straight rays. -->
-        <svg id="indLow" viewBox="0 0 40 28" aria-label="Kısa far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6 3 10M14 12 3 16M14 18 3 22"/></svg>
-        <svg id="indHigh" viewBox="0 0 40 28" aria-label="Uzun far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6H2M14 11H2M14 17H2M14 22H2"/></svg>
+        <svg id="indPark" viewBox="0 0 40 28" aria-label="Park lambası"><path d="M17 7a7 7 0 0 0 0 14z"/><path d="M23 7a7 7 0 0 1 0 14z"/><path d="M8 8 3.5 6M8 14H3M8 20l-4.5 2M32 8l4.5-2M32 14h5M32 20l4.5 2"/></svg>
+        <svg id="indLow" viewBox="0 0 40 28" aria-label="Kısa far"><path d="M22 3c8 0 13 5 13 11s-5 11-13 11c-2 0-3-2-3-11s1-11 3-11z"/><path d="M14 6 3 10M14 12 3 16M14 18 3 22"/><text class="a" x="27.5" y="19.2" text-anchor="middle">A</text></svg>
       </div>
       <div class="batt" id="battBox"><span style="color:var(--mu)" id="rangeTxt">312 km</span><div class="cell"><div style="width:78%" id="socBar"></div><i class="ti ti-bolt" id="battBolt"></i></div><span id="socTxt">78%</span></div>
     </div>
@@ -1754,7 +1760,7 @@ function updateLamps(now) {
     h.userData.level += (target - h.userData.level) * 0.25;
     h.material.opacity = h.userData.level * facingCamera(h);
   });
-  glow(lamps.drlBar, 0xf4f7ff, L.low ? 1.8 : 2.6);
+  glow(lamps.drlBar, 0xf4f7ff, S.drl === false && !L.park ? 0 : L.low ? 2.4 : 3.4); // daytime LEDs (the car says when they are off)
   glow(lamps.low, 0xfff6e8, L.low ? 3 : 0);
   glow(lamps.high, 0xeef4ff, L.high ? 3.5 : 0);
   glow(lamps.lens, 0xffffff, L.high ? 0.45 : L.low ? 0.25 : 0);
@@ -1781,7 +1787,9 @@ function updateLamps(now) {
 // Status bar tell-tales, like the ones on the instrument cluster.
 function updateBeamIndicators(L) {
   $('indLow').classList.toggle('on', L.low && !L.high);
-  $('indHigh').classList.toggle('on', L.high);
+  $('indLow').classList.toggle('high', !!L.high); // high beam: the same lamp, in blue
+  $('indPark').classList.toggle('on', L.park && !L.low);
+  $('indLow').classList.toggle('auto', S.lights === 'auto');
 }
 function splitTailgate(car) {
   car.updateMatrixWorld(true);
@@ -4506,9 +4514,9 @@ function openNetPop(kind) {
   $('netPop').classList.add('show');
   popTouch(true);
 }
-// A pop-up over live Maps (it lies under the page): touches stay with the page while one is open.
+// A pop-up over live Maps: Maps goes under the (see-through) page while one is open, then back on top.
 function popTouch(open) {
-  if (window.YunusNative && YunusNative.mapTouch) YunusNative.mapTouch(!open && !netPopKind && !seatPopFor);
+  if (window.YunusNative && YunusNative.mapUnder) YunusNative.mapUnder(!!(open || netPopKind || seatPopFor));
   if (sidePkg) { if (open) YunusNative.embedVisible('side', false); else if (!netPopKind && !seatPopFor) embedSide(); } // the third window is still on top
 }
 function closeNetPop() {
@@ -4674,10 +4682,17 @@ const CAR_HAL_MAP = {
   'Instrument 0x26100017': (v) => ({ doors: { RR: v === 1 } }),
   'Instrument 0x26100018': (v) => ({ trunk: v === 1 }), // LUGGAGE_DOOR_STATE
   // LIGHT_KNOB_CURRENT_GEAR: 1 off, 2 parking lights, 3 auto, 4 low beam.
-  'Light 0x13300023': (v) => ({ lights: ['off', 'park', 'auto', 'on'][v - 1] }),
+  // LIGHT_KNOB_CURRENT_GEAR, read off the car by turning the knob: 1 off, 2 AUTO, 3 park, 4 low beam.
+  'Light 0x13300023': (v) => (v >= 1 && v <= 4 ? { lights: ['off', 'auto', 'park', 'on'][v - 1] } : {}),
   'Light 0x38A0000C': (v) => ({ highBeam: v === 1 }), // LIGHT_HIGH_BEAM_LIGHT
   // The lamps themselves (1 on, 0 off): with the knob on auto the low beams are off in daylight.
   'Light 0x38A0000A': (v) => ({ lowLamp: v === 1 }), // LIGHT_LOW_BEAM_LIGHT
+  // The lamps read every second (getLightStatus 1 side / 2 low / 3 high: 1 on), and the daytime lights.
+  'Get lampSide': (v) => (v === 0 || v === 1 ? { sideLamp: v === 1 } : {}),
+  'Get lampLow': (v) => (v === 0 || v === 1 ? { lowLamp: v === 1 } : {}),
+  'Get lampHigh': (v) => (v === 0 || v === 1 ? { highBeam: v === 1 } : {}),
+  'Get drl': (v) => (v === 1 || v === 2 ? { drl: v === 1 } : {}), // getDayRunningLightState: 1 on, 2 off
+  'Light 0x4FE0000E': (v) => (v === 1 || v === 2 ? { drl: v === 1 } : {}), // LIGHT_LEFT_DAYTIME_LIGHT_STATE
   'Light 0x38A00008': (v) => ({ sideLamp: v === 1 }), // LIGHT_SIDE_LIGHT
   // LIGHT_TURN_SIGNAL_LIGHT: 1 off, 2/3 left, 4/5 right, 6-9 hazard and emergency flashing.
   'Light 0x38A0002C': (v) => ({ signal: v === 2 || v === 3 ? 'left' : v === 4 || v === 5 ? 'right' : null, hazard: v >= 6 }),
@@ -4880,7 +4895,7 @@ window.yunusCar = (m) => {
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
-    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'drl', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
     'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle', 'belts'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
@@ -4917,6 +4932,7 @@ window.yunusCar = (m) => {
   if (m.highBeam != null) S.highBeam = m.highBeam;
   if (m.lowLamp != null) S.lowLamp = m.lowLamp;
   if (m.sideLamp != null) S.sideLamp = m.sideLamp;
+  if (m.drl != null) S.drl = m.drl;
   if (m.fog != null) S.fog = m.fog;
   if (m.acOn != null) { S.ac = m.acOn; renderTemp(); setFan(S.fan, true); } // the fan stops turning with the climate off
   if (m.acTemp != null) setTemp(m.acTemp, true);
