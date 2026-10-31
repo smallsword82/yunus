@@ -101,3 +101,33 @@ Cihaz sınıfları (`getInstance(context)` ile alınıyor) ve dinleyiciler:
   Face ID / parmak izi / PIN ile korumak öneriliyor.
 - Varsayılan launcher için Kinex, sistemin ana ekran seçim penceresini açıyor
   ("Open the system home app chooser to set Kinex or another launcher as the default.").
+
+## Kilitleme: Kinex'in gömülü köprüsünde komut YOK (tersine mühendislik, bu oturum)
+Repodaki üç Kinex jar'ı (`kinex_hal_api_service.jar`, `kinex_shell_helper.jar`, `kinex_cluster_service.jar`)
+`classes.dex` içeriyor; `androguard` ile sınıf/metot/string listesi çıkarıldı (bkz. `scratchpad/dex/`, bu
+oturumun geçici klasörü — tekrarlamak gerekirse aynı adımlar).
+
+- **DiLink 3 (Dolphin) tarafı** (`hal/classes.dex`, paket `com.lexwah.kinex.hal`, sınıflar R8 ile
+  `a/`, `b/` altında tek harfe kısaltılmış): string havuzunda `android.hardware.bydauto.doorlock.*`
+  için yalnızca **`AbsBYDAutoDoorLockListener`** geçiyor — okuma. `BYDAutoDoorLockDevice` adı hiç
+  geçmiyor. Tüm `set*` metot adları (`setAcTemperature`, `setBodyWindowCtrlState`, `setSunshadeState`,
+  `setSeatHeatingState`, `setSteeringWheelHeatingState`, ... — tam liste bu oturumun notlarında) arasında
+  kilitle ilgili **tek bir tane yok**. Yani Kinex, Dolphin'i HAL üzerinden kilitlemiyor/açmıyor —
+  yalnızca durumu okuyor (bizim de yaptığımız gibi).
+- **DiLink 5 tarafı** (`HalDl5Bodywork`, `com.ts.lib.caradapter.body.CarBodyManager` sarmalıyor):
+  `rpcSetDoorState` var ama gövdesi **stub** — `CarBodyManager.getDoorState(int)` okuyup
+  `"method":"dl5_door_state_read_only"`, `"note":"DL5 door control mechanism needs device validation"`
+  döndürüyor; hiçbir setter çağırmıyor. Kinex'in DL5 kapı kontrolü de üretimde değil.
+- **Sonuç:** Remote Link'in telefon tarafında görünen `lock`/`unlock` komut adları muhtemelen ya başka
+  bir donanım yoluyla (telefon-anahtarı BLE) ya da hiç tamamlanmamış bir özellik. Kinex'in paket içi
+  HAL köprüsü kilit/açma KOMUTU içermiyor — bizim `1c80e5e`'de bulduğumuzla (set() reddediliyor,
+  postEvent kilitlemiyor, gerçek kilit BT telefon-anahtarı taklidiyle oluyor) aynı duvara çarpıyor.
+
+**Yeni, henüz denenmemiş iz** (Kinex'te değil, aracın kendi `introspect-dilink3.txt` dökümünde):
+`android.hardware.bydauto.setting.BYDAutoSettingDevice` sınıfında ayrı bir çift var:
+`int getDoorLock()` / `int setDoorLock(int)` + dinleyicide `onDoorLockChanged(int)`. Bu, okunan
+`doorlock.BYDAutoDoorLockDevice` (salt okunur) ve denenmiş `Bodywork.set()`/`postEvent()`'ten
+(ikisi de başarısız) FARKLI bir üçüncü yol — Setting cihazının diğer set'leri (`setSteeringWheelHeatingState`
+gibi) düz `getMethod` ile çalışıyor, imza kontrolü onlarda engel değil. `ShellHelper.kt`'ye
+`{cmd:"lockViaSetting", value:0|1}` komutu eklendi (bu oturum), bir sonraki araç ziyaretinde denenmeli;
+sonucu `adb shell cat /data/local/tmp/yunus_helper.log`'da `cmd lockViaSetting ... -> ...` satırı verecek.

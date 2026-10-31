@@ -28,6 +28,15 @@ Bu oturumun son işleri:
    (`dumpsys window windows` → `mFrame` y<0 mı).
 4. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
 5. ~~Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü~~ — **sürüşte doğrulandı, çalışıyor.**
+6. **Kilit komutu, yeni iz:** Kinex'in kendi HAL köprüsü tersine mühendislikle incelendi (bu oturum,
+   `KINEX_NOTLARI.md`'de ayrıntı) — Kinex de DL3'te kilidi yalnız okuyor, komut yok; DL5'te de stub.
+   Daha önce denenen `Bodywork.set()` (reddedildi) ve `postEvent()` (kilitlemiyor, yalnız durum
+   yayını) dışında üçüncü bir yol eklendi: `Setting` cihazının `getDoorLock()`/`setDoorLock(int)`
+   çifti, henüz araçta denenmedi. `ShellHelper.kt`'ye `{cmd:"lockViaSetting", value:0|1}` eklendi;
+   derleyip kurduktan sonra sayfadan `YunusNative.command('{"cmd":"lockViaSetting","value":1}')`
+   ile tetiklenebilir, sonuç `adb shell cat /data/local/tmp/yunus_helper.log`'da "cmd lockViaSetting"
+   satırında görünür. Reddedilirse (ör. `refused: ...`) bu yol da kapanır, gerçek kilit BT
+   telefon-anahtarı taklidini gerektirir demektir.
 
 ## 4. oturumda yapılanlar (hepsi commit'li, araçta doğrulandı)
 
