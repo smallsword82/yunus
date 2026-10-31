@@ -2723,6 +2723,8 @@ function applyPerf() {
   $('fpsMeter').classList.toggle('show', S.set.fps);
   renderer.setPixelRatio((S.set.perf ? 1 : Math.min(devicePixelRatio, 2)) * stageScale * (window.visualViewport ? window.visualViewport.scale : 1));
   resize3d();
+  // The map at one canvas pixel per screen pixel: at 1.5× it drew 2.25 times the pixels.
+  if (map && map.setPixelRatio) map.setPixelRatio(S.set.perf ? 1 : devicePixelRatio);
   darkMapLayers();
   wake();
 }
@@ -3278,7 +3280,7 @@ function startMap() {
 }
 function buildMap() {
   try {
-    map = new maplibregl.Map({ container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: CENTER, zoom: 14.5, attributionControl: false });
+    map = new maplibregl.Map({ container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: CENTER, zoom: 14.5, attributionControl: false, pixelRatio: S.set.perf ? 1 : devicePixelRatio });
     map.on('load', () => {
       // Satellite imagery (Esri World Imagery, no key; its terms require the credit shown on the
       // map). Kept at the bottom of the stack so the street style's labels stay on top of it.
@@ -3384,7 +3386,8 @@ function onFix(c) {
   if (meMarker) meMarker.setLngLat(myPos);
   // The first fix, or a jump of more than 2 km (a late first real fix), moves the map there.
   if (map && (first || distM(prev, myPos) > 2000)) map.jumpTo({ center: myPos });
-  else if (map && mapFollow && !NAV.active) map.easeTo({ center: myPos, duration: 900 });
+  // An ease per fix (about one a second) kept the map drawing nonstop; the performance mode jumps.
+  else if (map && mapFollow && !NAV.active) S.set.perf ? map.jumpTo({ center: myPos }) : map.easeTo({ center: myPos, duration: 900 });
   if (first) dropDemoRoute();
   if (NAV.active) updateNav();
 }
@@ -3604,7 +3607,7 @@ function updateNav() {
     <div class="nbBtns"><button data-voice aria-label="Sesli yönlendirme"><i class="ti ti-volume${NAV.voice ? '' : '-off'}"></i></button>
     <button data-overview aria-label="Rotanın tamamı"><i class="ti ti-route"></i></button>
     <button data-stop aria-label="Navigasyonu bitir"><i class="ti ti-x"></i></button></div>`;
-  if (map && mapFollow) map.easeTo({ center: pos, zoom: 16.5, pitch: 50, bearing: NAV.heading != null ? NAV.heading : map.getBearing(), duration: 900 });
+  if (map && mapFollow) map.easeTo({ center: pos, zoom: 16.5, pitch: 50, bearing: NAV.heading != null ? NAV.heading : map.getBearing(), duration: S.set.perf ? 0 : 900 });
 }
 $('navBanner').addEventListener('click', (e) => {
   const t = e.target.closest('button'); if (!t) return;
