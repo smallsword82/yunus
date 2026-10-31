@@ -139,7 +139,9 @@ CHARGE_FLAP = [(0.95, 0.818), (0.955, 0.81), (0.962, 0.803), (0.97, 0.798), (0.9
 
 
 def door_spec(name, sx, outline, hinge_y):
-    return dict(name=name, region=SideOutline(sx, outline), skip=rf"^({WHEELS}|{UNDER})",
+    # upper_bodypaint is the hood and roof: the front door's outline reaches the roof edge above
+    # the window, and a slab of it swung out with the open door.
+    return dict(name=name, region=SideOutline(sx, outline), skip=rf"^({WHEELS}|{UNDER}|upper_bodypaint)",
                 hinge=(0.86 * sx, hinge_y, 0.9), window=f"Window_{name[-2:]}",
                 jamb=((-sx, 0, 0), 0.10), thickness=0.07)
 
