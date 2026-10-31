@@ -3274,7 +3274,8 @@ const ROUTE = [CENTER, [29.0262, 40.9915], [29.0249, 40.9921], [29.0236, 40.993]
 // unit's CPU busy and held the 3D car back by ~5 s. The timer is a fallback if the car fails.
 let mapStarting = false;
 function startMap() {
-  if (map || mapStarting) return;
+  // On the car Yunus's own map shows only when it is the chosen navigation app (settings).
+  if (map || mapStarting || (DEVICE && S.set.navApp !== 'yunus')) return;
   mapStarting = true;
   // MapLibre itself (800 kB) is only fetched and parsed now, not while the page starts.
   const script = document.createElement('script');
@@ -3342,12 +3343,16 @@ function startMapArea() {
   if (!/hazır/.test(window.YunusEmbedStatus || '')) $('map').dataset.wait = 'Harita hazırlanıyor…'; // the helper not up yet
   YunusNative.embedApp('map', navPackages().join(','), x, y, w, h);
 }
+// The chosen navigation app was not found (not installed, or not yet at power-on): the area says
+// so and tries again shortly; Yunus's own map is not put in its place.
+let mapRetry = 0;
 function mapEmbedFailed() {
   if (!mapEmbedded) return;
   mapEmbedded = false; mapsIn(false);
-  delete $('map').dataset.wait;
   YunusNative.embedVisible('map', false);
-  startMap();
+  $('map').dataset.wait = 'Navigasyon uygulaması bulunamadı';
+  clearTimeout(mapRetry);
+  mapRetry = setTimeout(() => { if (!mapEmbedded && S.set.navApp !== 'yunus') startMapArea(); }, 10000);
 }
 const MAPS_APPS = ['com.google.android.apps.maps', 'app.revanced.android.apps.maps'];
 // The navigation app chosen in Yunus's settings (Harita ve telefon) first, then Google Maps.
