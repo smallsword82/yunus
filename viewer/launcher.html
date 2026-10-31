@@ -492,7 +492,7 @@ button { font-family:inherit; color:inherit; }
 #indIcc { display:flex; align-items:center; gap:5px; color:var(--cd2); }
 #indIcc svg { width:30px; }
 #indIcc b { font-size:24px; font-weight:600; min-width:24px; }
-.tt.adas.on svg { stroke:var(--tx); } #indIcc.on { color:var(--tx); } #indIcc.on svg { stroke:var(--tx); }
+.tt.adas.on svg { stroke:var(--tx); } .tt.adas.warn svg { stroke:#ff9f0a; } .tt.adas.red svg { stroke:#ff3b30; } #indIcc.on { color:var(--tx); } #indIcc.on svg { stroke:var(--tx); }
 #indIcc.act, #indIcc.act svg { color:#2fd06a; stroke:#2fd06a; } /* cruise working */
 #indPark path:nth-child(2) { fill:var(--cd2); }
 #indPark.on { stroke:#2fd06a; } #indPark.on path:nth-child(-n+2) { fill:#2fd06a; } /* position lamps (knob on park) */
@@ -1349,14 +1349,17 @@ function updateTelltales() {
   // chip (red if a red one is folded) that opens the warnings list.
   // Blind spot and lane keeping lead the column all the time, as on the cluster: grey off, white on.
   const a = S.adas || {};
-  const assist = `<div class="tt adas ${a.bsd ? 'on' : ''}" title="Kör nokta"><svg viewBox="0 0 34 28"><rect x="12" y="5" width="10" height="18" rx="3"/><path d="M8 17a6 6 0 0 1 0-6M4.5 19.5a10 10 0 0 1 0-11M26 17a6 6 0 0 0 0-6M29.5 19.5a10 10 0 0 0 0-11"/></svg></div>`
+  // As the model's lane lines: orange with a car in the blind spot, red signalling towards it.
+  const bsWarn = ['left', 'right'].some((s) => bsd[s] && S.gear === 'D' && S.signal === s) ? 'red'
+    : ['left', 'right'].some((s) => bsd[s] && S.gear === 'D') ? 'warn' : '';
+  const assist = `<div class="tt adas ${a.bsd ? 'on' : ''} ${bsWarn}" title="Kör nokta"><svg viewBox="0 0 34 28"><rect x="12" y="5" width="10" height="18" rx="3"/><path d="M8 17a6 6 0 0 1 0-6M4.5 19.5a10 10 0 0 1 0-11M26 17a6 6 0 0 0 0-6M29.5 19.5a10 10 0 0 0 0-11"/></svg></div>`
     + `<div class="tt adas ${a.lane ? 'on' : ''}" title="Şerit"><svg viewBox="0 0 34 28"><path d="M5 26 11 2M29 26 23 2"/><rect x="13" y="11" width="8" height="12" rx="2.5"/></svg></div>`;
   const lit = TELLTALES.filter((t) => !t.status && isWarning(t) && ttLit(t))
     .sort((a, b) => (ttColor(a) === 'red' ? 0 : 1) - (ttColor(b) === 'red' ? 0 : 1));
   const box = $('telltales'), fit = 16; // two places go to the assist icons
   const shown = lit.length > fit ? lit.slice(0, fit - 1) : lit;
   const hidden = lit.slice(shown.length);
-  const key = lit.map((t) => t.id + (halTT[t.id] && halTT[t.id].flash ? '*' : '')).join() + '|' + shown.length + '|' + !!a.bsd + !!a.lane; // * flashing
+  const key = lit.map((t) => t.id + (halTT[t.id] && halTT[t.id].flash ? '*' : '')).join() + '|' + shown.length + '|' + !!a.bsd + !!a.lane + bsWarn; // * flashing
   if (box.dataset.key !== key) {
     box.dataset.key = key;
     box.innerHTML = assist + shown.map(ttHtml).join('') + (hidden.length
