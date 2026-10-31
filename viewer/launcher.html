@@ -1614,7 +1614,7 @@ const DEV = location.hash === '#debug';
 // On the head unit (or the emulator) the app is there: real data and the car's own screens only,
 // none of the desktop preview's demo content or demo taps.
 const DEVICE = !!window.YunusNative;
-document.documentElement.classList.toggle('nativeKeys', DEVICE); // the third window's keys float over its app
+// The third window keeps its title row with back and ✕ above the app (the floating keys were taken out).
 // Tyre pressures come from the car (Tyre device); until it reports them the card shows "—".
 if (DEVICE) S.tyres = { FL: null, FR: null, RL: null, RR: null };
 S.tyreState = {}; // TYRE_PRESSURE_STATE_*: 0 normal, 1 over, 2 under
@@ -2693,7 +2693,7 @@ renderer.setAnimationLoop(() => {
   // Parked and untouched, the last frame just stays on screen.
   frames++;
   let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || S.signal || S.hazard || chargeGear.visible || now < awakeUntil;
-  if (draw && S.set.perf && now - lastDraw < 32) draw = false;
+  if (draw && (S.set.perf || S.gear === 'D') && now - lastDraw < 32) draw = false; // driving: 30/s is smooth enough for the lines
   if (resized) draw = true;
   if (draw) {
     controls.update();
@@ -2950,7 +2950,8 @@ function reverseView(g) {
 function setGear(g) {
   reverseView(g);
   // The camera is kept running while driving, so the signal's window has its picture at once.
-  if (window.YunusNative && YunusNative.camWarm && (g === 'D' || g === 'R') !== (S.gear === 'D' || S.gear === 'R')) YunusNative.camWarm(g === 'D' || g === 'R');
+  // The camera is not kept warm in D any more: streaming it nonstop cost the car's camera services
+  // about one whole core and made everything lag. It opens on the signal and stays 30 s after.
   S.gear = g;
   [...$('gears').children].forEach((s) => s.classList.toggle('on', s.textContent === g));
   const driving = g === 'D' || g === 'R';

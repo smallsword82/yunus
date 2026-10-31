@@ -613,7 +613,6 @@ private class AppEmbed(private val activity: Activity, private val root: android
             Slot(android.view.TextureView(activity)).also { s ->
                 root.addView(s.view)
                 s.view.setOnTouchListener { _, ev -> shell.send(touchLine(s.displayId, ev)); true }
-                if (name == "side") s.keys = sideKeys()
             }
         }
         slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
@@ -737,13 +736,15 @@ private class ShellLink(private val ctx: android.content.Context, private val st
     // connection that drops (the helper restarted, after an update say) is made again, so the
     // values never stop coming until Yunus restarts.
     @Volatile private var watching = false
+    // After close() the worker is stopped: late calls are dropped instead of crashing Yunus.
+    private fun queue(task: () -> Unit) { try { worker.execute(task) } catch (_: java.util.concurrent.RejectedExecutionException) { } }
     fun watch() {
         watching = true
-        worker.execute { try { if (socket == null) connect() else write("watch") } catch (t: Throwable) { status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") } }
+        queue { try { if (socket == null) connect() else write("watch") } catch (t: Throwable) { status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") } }
     }
 
     /** Sends [line]; [failed] runs (on this link's thread) if the helper could not be reached. */
-    fun send(line: String, failed: () -> Unit = {}) = worker.execute {
+    fun send(line: String, failed: () -> Unit = {}) = queue {
         try { write(line) } catch (_: Throwable) {
             try { socket?.close() } catch (_: Throwable) { }
             socket = null
@@ -796,7 +797,7 @@ private class ShellLink(private val ctx: android.content.Context, private val st
                 try { while (true) onLine(input.readLine() ?: break) } catch (_: Throwable) { }
                 // Dropped: connect again (once the helper is back) to keep the values coming.
                 if (watching) try {
-                    worker.execute {
+                    queue {
                         if (socket === s) socket = null
                         Thread.sleep(1500)
                         try { if (socket == null) connect() } catch (_: Throwable) { }

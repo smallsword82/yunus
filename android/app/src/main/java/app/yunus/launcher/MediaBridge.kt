@@ -379,7 +379,8 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         val lastPkg = last
         val failed = startFailed
         val seenNow = HashSet(seen)
-        worker.execute { emit(JSONObject().put("media", build(now, all, lastPkg, failed, seenNow)).toString()) }
+        // A refresh posted just before Yunus closed must not crash it on the stopped worker.
+        try { worker.execute { emit(JSONObject().put("media", build(now, all, lastPkg, failed, seenNow)).toString()) } } catch (_: java.util.concurrent.RejectedExecutionException) { }
     }
 
     private fun build(c: Snap?, all: List<Snap>, lastPkg: String?, failed: String?, seenNow: Set<String>): JSONObject {

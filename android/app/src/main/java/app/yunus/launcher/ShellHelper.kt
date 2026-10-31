@@ -51,7 +51,11 @@ object ShellHelper {
         android.os.Looper.loop()
     }
 
-    private fun serve(client: Socket, token: String, injector: TouchInjector) = client.use {
+    // A dropped connection (Yunus restarting) must end only this thread: an exception left to escape
+    // here took the whole helper down with it.
+    private fun serve(client: Socket, token: String, injector: TouchInjector) = try { serveLines(client, token, injector) } catch (_: Throwable) { }
+
+    private fun serveLines(client: Socket, token: String, injector: TouchInjector) = client.use {
         client.tcpNoDelay = true
         val reader = client.getInputStream().bufferedReader()
         if (reader.readLine() != token) return
