@@ -1579,7 +1579,14 @@ const bsd = { left: false, right: false };
 function stepTraffic(dt) {
   // The overtaking cars and their blind-spot warnings are the preview's demo; on the device there
   // is no traffic data (the car's blind-spot radar is signature-locked), so none are drawn.
-  if (DEVICE) { traffic.forEach((t) => { t.car.visible = false; }); bsd.left = bsd.right = false; return; }
+  // On the car: the cluster's blind-spot warning. It gives no side, so both lines warn (the one
+  // signalled towards turns red); the door-open warning has one.
+  if (DEVICE) {
+    traffic.forEach((t) => { t.car.visible = false; });
+    const a = S.adas || {};
+    bsd.left = !!(a.bsdAlarm || a.dowL); bsd.right = !!(a.bsdAlarm || a.dowR);
+    return;
+  }
   for (const t of traffic) {
     const z = t.car.position.z;
     if (t.wait > 0) {
@@ -5083,7 +5090,12 @@ const CAR_HAL_MAP = {
   'Get lampHigh': (v) => (v === 0 || v === 1 ? { highBeam: v === 1 } : {}),
   'Get drl': (v) => (v === 1 || v === 2 ? { drl: v === 1 } : {}), // getDayRunningLightState: 1 on, 2 off
   // Driver assist (updateTelltales, #adasR): blind spot / lane keeping switched on; cruise state and set speed.
-  'Adas 0x41800008': (v) => ({ adas: { bsd: v === 1 } }), // ADAS_BSD_STATE
+  // ADAS_BSD_STATE: 1 on, 2 on and warning, a car in the blind spot (seen on the car, a car on the
+  // left; the value says no side).
+  'Adas 0x41800008': (v) => ({ adas: { bsd: v === 1 || v === 2, bsdAlarm: v === 2 } }),
+  // Door-open warning (ADAS_DOW_WARN_LEFT/RIGHT): the same rear radars, with a side, while stopped.
+  'Adas 0x41800020': (v) => ({ adas: { dowL: v === 1 } }),
+  'Adas 0x41800022': (v) => ({ adas: { dowR: v === 1 } }),
   'Adas 0x32F0002A': (v) => ({ adas: { lane: v === 1 } }), // ADAS_ELKA_SWITCH_STATE
   'Instrument 0x29600032': (v) => ({ adas: { iccState: v } }), // DD_ACC_INDICAT_LIGHT_STATE (-1 not in use)
   'Instrument 0x2A600008': (v) => ({ adas: { iccSpeed: v > 0 ? v : null } }), // DD_ACC_CRUISING_SPEED, km/h
