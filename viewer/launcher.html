@@ -2984,6 +2984,15 @@ $('gears').onclick = () => { if (S.live || DEVICE) return; setGear(S.gear === 'P
 // On the car: signal state from the light HAL, video from the BYD AVM (360) camera.
 // Here the camera feed is a drawn placeholder.
 let bsHideTimer = null, bsSide = 'left', bsRaf = null;
+let sigPending = null, sigPendTimer = 0; // a column waiting for the camera's first frame
+function sigCamReady() {
+  clearTimeout(sigPendTimer);
+  const side = sigPending; sigPending = null;
+  if (side && blindSpotWanted() && bsSide === side) setSigCol(side);
+}
+// After the page's next frames are on screen: native windows (the embedded apps, the camera) move
+// at once, the page a frame or two later, so they wait for it where a gap would show black.
+const afterPaint = (fn) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(fn, 30)));
 // Both status-bar arrows blink together with the hazards; otherwise just the signalled side.
 function updateSignalArrows() {
   $('sigL').classList.toggle('on', S.signal === 'left' || S.hazard);
@@ -3050,13 +3059,17 @@ function setSigCol(side) {
   // No app is resized for the column (a resized app redraws, black for a moment): each is shifted
   // past the column and its far edge cut off, and put back as it was when the column closes. Under
   // the map or in a tab the third window shares the map's width, so it moves the same way.
-  if (stacked) {
-    const dx = Math.round(sigW.left * stageScale), cut = Math.round((side ? SIG_COL : 0) * stageScale);
+  // Opening, the apps move once the page has drawn the column (meanwhile Maps briefly overlaps the
+  // car, instead of leaving a black gap); closing, they move back at once, before the page.
+  const dx = Math.round(sigW.left * stageScale);
+  const moveApps = stacked ? () => {
+    const cut = Math.round((side ? SIG_COL : 0) * stageScale);
     try { if (mapEmbedded) YunusNative.embedShift('map', dx, cut); if (sidePkg) YunusNative.embedShift('side', dx, cut); } catch {}
-    return;
-  }
-  try { if (mapEmbedded) YunusNative.embedShift('map', Math.round(sigW.left * stageScale), Math.round((side ? SIG_COL - sigSideTaken : 0) * stageScale)); } catch {}
-  try { if (sidePkg) { if (sigSideTaken) YunusNative.embedVisible('side', false); else embedSide(); } } catch {}
+  } : () => {
+    try { if (mapEmbedded) YunusNative.embedShift('map', dx, Math.round((side ? SIG_COL - sigSideTaken : 0) * stageScale)); } catch {}
+    try { if (sidePkg) { if (sigSideTaken) YunusNative.embedVisible('side', false); else embedSide(); } } catch {}
+  };
+  if (side) afterPaint(moveApps); else moveApps();
 }
 function updateBlindSpot() {
   const cam = $('bsCam');
@@ -3075,7 +3088,9 @@ function updateBlindSpot() {
       $('sigSpot').classList.toggle('right', bsSide === 'right');
       const [x, y, w, h] = screenRect($('sigSpot'));
       YunusNative.sideCam(x, y, w, h, JSON.stringify(SIDE_CAM[bsSide]));
-      if (!PORTRAIT) setSigCol(bsSide);
+      // The column opens with the camera's first frame (sideCamReady), not before: a column waiting
+      // for the camera was black. Without a frame in 1.5 s it opens anyway.
+      if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = setTimeout(sigCamReady, 1500); }
     } else if (S.set.sigEdge) {
       $('sigPane').classList.toggle('right', bsSide === 'right');
       $('sigArrow').className = `ti ti-arrow-big-${bsSide}`;
@@ -3088,9 +3103,11 @@ function updateBlindSpot() {
     // Tesla keeps the view up briefly after the stalk is released.
     const delay = S.gear === 'D' && !sigDismissed ? 2000 : 0; // closed with a tap: at once
     bsHideTimer = setTimeout(() => {
-      if (LIVE_CAM) { clearTimeout(sideCamAt); YunusNative.sideCamHide(); }
       cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null;
+      sigPending = null; clearTimeout(sigPendTimer);
       if (sigW.left || sigW.right) setSigCol(null);
+      // The camera window goes once the page has drawn the closed column under it.
+      if (LIVE_CAM) { clearTimeout(sideCamAt); afterPaint(() => { if (!blindSpotWanted()) YunusNative.sideCamHide(); }); }
     }, delay);
   }
 }
@@ -5251,6 +5268,7 @@ window.yunusCar = (m) => {
   }
   if (m.sideBack) { closeSideApp(); return; } // the floating keys over the third window's app
   if (m.sideClose) { $('sideClose').onclick(); return; }
+  if (m.sideCamReady) { sigCamReady(); return; } // the signal camera's first frame: open its column
   if (m.sideCamDismissed) { sigDismissed = S.signal; updateBlindSpot(); return; } // tapped closed
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;

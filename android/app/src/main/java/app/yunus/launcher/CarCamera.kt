@@ -54,7 +54,9 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         val view = TextureView(activity)
         @Volatile var params = FloatArray(16)
         @Volatile var visible = false
-        @Volatile var waiting = false // shown, but no frame drawn in it yet: kept see-through till one is
+        // Frames still to draw before it shows: it is kept see-through till then (the first frames
+        // reach the screen a little after they are drawn; shown at the first, it was black a moment).
+        @Volatile var waiting = 0
         var out: SurfaceTexture? = null
         var w = 0; var h = 0
         var label: android.widget.TextView? = null // the mirror's front/rear switch
@@ -72,8 +74,8 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         val py = if (name == "rear") prefs.getInt("rearCamY", y) else y
         win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
-        // the camera takes a moment); it fades in with that frame.
-        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.waiting = true }
+        // the camera takes a moment); it shows with that frame.
+        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.waiting = 3 }
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
@@ -83,7 +85,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     fun hide(name: String) {
         val win = windows[name] ?: return
         win.visible = false
-        win.waiting = false
+        win.waiting = 0
         win.box.animate().cancel()
         win.box.visibility = View.GONE
         idleLater()
@@ -290,7 +292,9 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
                 GLES20.glVertexAttribPointer(pos, 2, GLES20.GL_FLOAT, false, 0, QUAD)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
                 EGL14.eglSwapBuffers(display, surface)
-                if (win.waiting) { win.waiting = false; root.post { if (win.visible) win.box.animate().alpha(1f).setDuration(120).start() } }
+                // Its third frame: shown at once, and the page told (sideCamReady), which opens the
+                // signal column just then, so the column is never black while the camera starts.
+                if (win.waiting > 0 && --win.waiting == 0) root.post { if (win.visible) { win.box.alpha = 1f; onEvent(win.name + "CamReady") } }
             }
         }
 
