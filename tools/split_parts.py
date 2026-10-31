@@ -113,12 +113,24 @@ def arc(cy, cz, r, start_deg, end_deg, steps):
             for a in (start_deg + (end_deg - start_deg) * i / steps for i in range(steps + 1))]
 
 
-# Side-view outlines traced from the corner_lines seams (y back from the front, z up).
-FRONT_DOOR = [(1.30, 0.26), (2.36, 0.26), (2.36, 1.00), (2.43, 1.47), (1.95, 1.47), (1.33, 1.02), (1.30, 0.98)]
-# The rear door's lower back corner wraps around the wheel arch (wheel centre y 3.51, z 0.33).
-REAR_DOOR = ([(2.36, 0.26), (3.05, 0.26)] + arc(3.51, 0.33, 0.46, 186, 120, 8)[1:] +
-             [(3.33, 0.85), (3.40, 0.98), (3.43, 1.05), (3.40, 1.15), (3.33, 1.25), (3.25, 1.37),
-              (3.18, 1.47), (2.43, 1.47), (2.36, 1.00)])
+# Side-view outlines traced from the corner_lines seams (y back from the front, z up), point for
+# point where the seam is drawn (tools/dump_seams.py), so the doors open on the car's own lines.
+# The seam between the doors (B-pillar), bottom to top; it leans back towards the roof.
+B_SEAM = [(2.385, 0.26), (2.385, 0.50), (2.387, 0.60), (2.391, 0.75), (2.395, 0.90), (2.398, 0.95),
+          (2.407, 1.00), (2.413, 1.05), (2.419, 1.10), (2.431, 1.20), (2.444, 1.30), (2.454, 1.35),
+          (2.466, 1.45), (2.468, 1.47)]
+# Front door's leading edge, bottom to top: in a little at the top, then out along the mirror base.
+FRONT_SEAM = [(1.318, 0.26), (1.313, 0.35), (1.308, 0.45), (1.302, 0.55), (1.299, 0.60), (1.294, 0.70),
+              (1.289, 0.75), (1.288, 0.80), (1.287, 0.85), (1.297, 0.90), (1.316, 0.95), (1.340, 1.00)]
+FRONT_DOOR = B_SEAM + [(1.95, 1.47)] + FRONT_SEAM[::-1]
+# Rear door's trailing edge, bottom to top. Below 0.75 m there is no seam line: the door's lower
+# back corner wraps around the wheel arch (wheel centre y 3.51, z 0.33, r 0.46), and the arc ends
+# where the seam starts (114 degrees).
+REAR_SEAM = [(3.321, 0.75), (3.370, 0.85), (3.403, 0.90), (3.429, 0.95), (3.454, 1.00), (3.458, 1.05),
+             (3.443, 1.10), (3.424, 1.15), (3.380, 1.20), (3.339, 1.25), (3.304, 1.30), (3.269, 1.35),
+             (3.220, 1.40), (3.18, 1.47)]
+REAR_DOOR = ([(2.385, 0.26), (3.05, 0.26)] + arc(3.51, 0.33, 0.46, 186, 114.2, 8)[1:-1] + REAR_SEAM +
+             B_SEAM[:0:-1])
 # Tailgate in the rear view (x, z): roof end, rear window edge, through the light bar at the
 # point the seam meets it, then down the seam groove the model has in the body panel (a pair of
 # sharp creases, found with a crease plot of bodypaint_A). The bottom edge is the upper crease,
@@ -150,10 +162,10 @@ SPECS = [
     dict(name="Tailgate", region=RearOutline(TAILGATE),
          skip=rf"^(interior|sticker|rubber|{WHEELS}|{UNDER})", hinge=None,
          jamb=((0, -1, 0), 0.12), thickness=0.05),
-    door_spec("Door_FL", 1, FRONT_DOOR, 1.30),
-    door_spec("Door_FR", -1, FRONT_DOOR, 1.30),
-    door_spec("Door_RL", 1, REAR_DOOR, 2.36),
-    door_spec("Door_RR", -1, REAR_DOOR, 2.36),
+    door_spec("Door_FL", 1, FRONT_DOOR, 1.29),
+    door_spec("Door_FR", -1, FRONT_DOOR, 1.29),
+    door_spec("Door_RL", 1, REAR_DOOR, 2.39),
+    door_spec("Door_RR", -1, REAR_DOOR, 2.39),
     dict(name="ChargeFlap", region=SideOutline(-1, CHARGE_FLAP, inner_x=0.70),
          only=r"^(bodypaint_A|upper_bodypaint|corner_lines)", hinge=(-0.84, 0.947, 0.84),
          jamb=((1, 0, 0), 0.05), thickness=0.012),
@@ -309,6 +321,9 @@ def add_jamb(o, spec):
     return len(edges)
 
 
+DOOR_CARD_X, DOOR_BELT_Z = 0.63, 0.98
+
+
 def thicken(part, spec):
     """Give a moving panel real depth: a dark trim skin parallel to the paint, set back into
     the car along the spec's jamb direction, and dark gap-shaded edges along the cut line
@@ -337,7 +352,13 @@ def thicken(part, spec):
                 loop[layer] = -loop[layer]  # the inner skin faces into the car
     gap = gap_index(part.data)
     ext = bmesh.ops.extrude_edge_only(bm, edges=rim)
-    bmesh.ops.translate(bm, verts=[g for g in ext["geom"] if isinstance(g, bmesh.types.BMVert)], vec=vec)
+    for v in (g for g in ext["geom"] if isinstance(g, bmesh.types.BMVert)):
+        v.co += vec
+        # Doors: the cards sit 10-19 cm inside the paint, so below the belt line the edge runs on
+        # in to them (|x| = DOOR_CARD_X) and closes the gap between the skin and the card.
+        p = to_metres(v.co)
+        if spec.get("window") and p.z < DOOR_BELT_Z and abs(p.x) > DOOR_CARD_X:
+            v.co.x = cx + math.copysign(DOOR_CARD_X, p.x) * s
     for f in (g for g in ext["geom"] if isinstance(g, bmesh.types.BMFace)):
         f.material_index = gap
     bm.to_mesh(part.data)
@@ -358,6 +379,48 @@ def add_box(name, centre_m, size_m, mat, parent=None):
     return box
 
 
+# B-pillars. The model is a shell with no pillar behind the doors, so with both doors open the
+# roof seemed to float. Each pillar is a copy of the skin around the doors' shared seam - the
+# black trim between the windows and, below the belt line, the strip either side of the seam -
+# cut before the doors are, joined into one piece, given depth, set back into the car so the
+# closed doors cover it, and painted body colour. The doors keep their own cut.
+B_PILLAR = [(2.36, 0.26), (2.47, 0.26), (2.47, 1.00), (2.52, 1.47), (2.39, 1.47), (2.36, 1.00)]
+B_PILLAR_SET_BACK, B_PILLAR_DEPTH = 0.06, 0.05
+
+
+def add_pillar(sx):
+    spec = dict(name="BPillar", region=SideOutline(sx, B_PILLAR), only=r"^(bodypaint_A|blk_mat)",
+                jamb=((-sx, 0, 0), 0), thickness=B_PILLAR_DEPTH)
+    pieces = []
+    for o in meshes:
+        if not wants(o, spec):
+            continue
+        tmp = o.copy()
+        tmp.data = o.data.copy()
+        bpy.context.scene.collection.objects.link(tmp)
+        piece = separate(tmp, spec)
+        bpy.data.objects.remove(tmp, do_unlink=True)
+        if piece:
+            pieces.append(piece)
+    bpy.ops.object.select_all(action="DESELECT")
+    for p in pieces:
+        p.select_set(True)
+    bpy.context.view_layer.objects.active = pieces[0]
+    bpy.ops.object.join()
+    pillar = bpy.context.active_object
+    pillar.name = f"BPillar_{'L' if sx > 0 else 'R'}"
+    thicken(pillar, spec)
+    pillar.data.materials.clear()
+    pillar.data.materials.append(bpy.data.materials["CarPaint_1"])
+    for f in pillar.data.polygons:
+        f.material_index = 0
+    pillar.location.x -= sx * B_PILLAR_SET_BACK * s
+    bpy.ops.object.transform_apply(location=True)
+    return pillar
+
+
+pillars = [add_pillar(sx) for sx in (1, -1)]
+
 summary = []
 for spec in SPECS:
     parts, cut_bodies = [], []
@@ -370,6 +433,17 @@ for spec in SPECS:
     if not parts:
         summary.append(f"{spec['name']}: nothing selected")
         continue
+
+    # Door cards are made of a few large triangles that the seam planes do not reach (only faces
+    # near a seam are cut), so a corner of one can poke out past the door's edge as a spike.
+    for p in parts:
+        if spec.get("window") and re.match(r"^(interior|sticker)", p.name):
+            bm = bmesh.new()
+            bm.from_mesh(p.data)
+            out = [f for f in bm.faces if not all(inside(to_metres(v.co), spec, margin=0.015) for v in f.verts)]
+            bmesh.ops.delete(bm, geom=out, context="FACES")
+            bm.to_mesh(p.data)
+            bm.free()
 
     jamb_edges = sum(add_jamb(o, spec) for o in cut_bodies if SOLID.match(o.name))
     solid = [p for p in parts if SOLID.match(p.name)]
@@ -397,6 +471,53 @@ for spec in SPECS:
     spec["pivot"] = pivot
     summary.append(f"{spec['name']}: {len(parts)} parts, {len(solid)} thickened, {jamb_edges} jamb edges, "
                    f"windows={windows}, hinge_m={tuple(round(c, 2) for c in to_metres(hinge_w))}")
+
+# Front wheels steer. The four wheels are merged into one mesh per part (tyre, rims, disc, calliper),
+# so each front wheel's faces - those within the wheel's radius of its centre - are split off under
+# Wheel_FL / Wheel_FR, an empty on the wheel centre that the launcher turns about the vertical.
+FRONT_WHEEL = dict(y=0.84, z=0.327, x=0.747, r=0.36, inner_x=0.55)
+
+
+def split_front_wheel(sx):
+    centre = to_world((FRONT_WHEEL["x"] * sx, FRONT_WHEEL["y"], FRONT_WHEEL["z"]))
+    pivot = bpy.data.objects.new(f"Wheel_F{'L' if sx > 0 else 'R'}", None)
+    bpy.context.scene.collection.objects.link(pivot)
+    pivot.location = centre
+    bpy.context.view_layer.update()
+
+    def in_wheel(p):
+        return sx * p.x > FRONT_WHEEL["inner_x"] and \
+            math.hypot(p.y - FRONT_WHEEL["y"], p.z - FRONT_WHEEL["z"]) < FRONT_WHEEL["r"]
+
+    count = 0
+    for o in [o for o in meshes if re.match(rf"^({WHEELS})", o.name)]:
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        picked = {f for f in bm.faces if in_wheel(to_metres(f.calc_center_median()))}
+        if not picked:
+            bm.free()
+            continue
+        for f in bm.faces:
+            f.select_set(f in picked)
+        bm.to_mesh(o.data)
+        bm.free()
+        bpy.ops.object.select_all(action="DESELECT")
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.separate(type="SELECTED")
+        bpy.ops.object.mode_set(mode="OBJECT")
+        part = [x for x in bpy.context.selected_objects if x is not o][0]
+        part.name = f"{o.name}_{pivot.name}"
+        mw = part.matrix_world.copy()
+        part.parent = pivot
+        part.matrix_world = mw
+        count += 1
+    summary.append(f"{pivot.name}: {count} parts, centre_m={tuple(round(c, 3) for c in to_metres(centre))}")
+
+
+for sx in (1, -1):
+    split_front_wheel(sx)
 
 # Trunk: floor at the bumper line, back wall where the cabin starts, side walls under the
 # tailgate's edges. All of it sits inside the body and only shows with the tailgate up.

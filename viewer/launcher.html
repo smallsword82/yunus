@@ -1571,6 +1571,7 @@ function onCarLoaded(gltf) {
     if (w) w.userData.y0 = w.position.y;
   }
   moving.flap = car.getObjectByName('ChargeFlap');
+  moving.wheels = ['Wheel_FL', 'Wheel_FR'].map((n) => car.getObjectByName(n)).filter(Boolean);
   car.traverse((o) => { if (o.isMesh && /^Trunk/.test(o.name)) moving.trunk.push(o); });
   setupLamps(car);
   setupSunshade(car);
@@ -1602,7 +1603,9 @@ let gateAngle = 0, gateTarget = gatePivot;
 // Doors hinge on their front edge; left doors swing towards +x, right doors towards -x.
 const CORNERS = ['FL', 'FR', 'RL', 'RR'];
 const DOOR_OPEN = 1.05, WINDOW_DROP = 0.42, FLAP_OPEN = 1.6;
-const moving = { doors: {}, windows: {}, flap: null, trunk: [], anim: { doors: {}, windows: {}, flap: 0 } };
+const moving = { doors: {}, windows: {}, flap: null, trunk: [], wheels: [], anim: { doors: {}, windows: {}, flap: 0 } };
+// Steering wheel degrees per road-wheel degree, and the road wheels' lock.
+const STEER_RATIO = 14, STEER_MAX = 36, STEER_SIGN = 1;
 function animateParts() {
   const a = moving.anim, ease = 0.08;
   for (const k of CORNERS) {
@@ -1614,6 +1617,11 @@ function animateParts() {
   }
   a.flap += ((S.charging ? FLAP_OPEN : 0) - a.flap) * ease;
   if (moving.flap) moving.flap.rotation.y = a.flap;
+  // Front wheels follow the steering wheel: its angle (BODYWORK, degrees) over the steering ratio.
+  // Positive is taken as a left turn (ISO); +y turns the wheels' front (+z) towards the car's left (+x).
+  a.steer = (a.steer || 0) + ((S.steerAngle || 0) - (a.steer || 0)) * 0.2;
+  const road = THREE.MathUtils.clamp(a.steer / STEER_RATIO, -STEER_MAX, STEER_MAX) * STEER_SIGN;
+  moving.wheels.forEach((w) => { w.rotation.y = THREE.MathUtils.degToRad(road); });
   // The sunshade rolls back from the front edge of the glass towards the rear.
   if (SHADE.node) {
     a.shade = (a.shade || 0) + (S.sunshade / 100 - (a.shade || 0)) * 0.05;
@@ -2515,9 +2523,13 @@ renderer.setAnimationLoop(() => {
   updateLamps(performance.now());
   stepChargeGlow(performance.now());
   // The car column and the map change width (divider and side window drags), so follow them every frame.
+  // Resizing the canvas clears it, so a resized frame is always drawn (never skipped by the
+  // performance mode's 30/s cap): otherwise the car blinks out while the divider is dragged.
+  let resized = false;
   if ((box.clientWidth !== lastBox.w || box.clientHeight !== lastBox.h) && box.clientWidth > 10) {
     lastBox.w = box.clientWidth; lastBox.h = box.clientHeight;
     resize3d();
+    resized = true;
   }
   // Width and height: in portrait the map window changes height when the windows are resized.
   const mapW = $('mapWrap').clientWidth, mapH = $('mapWrap').clientHeight;
@@ -2529,6 +2541,7 @@ renderer.setAnimationLoop(() => {
   frames++;
   let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || S.signal || S.hazard || chargeGear.visible || now < awakeUntil;
   if (draw && S.set.perf && now - lastDraw < 32) draw = false;
+  if (resized) draw = true;
   if (draw) {
     controls.update();
     placeHotspots();
