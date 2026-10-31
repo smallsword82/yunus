@@ -2823,7 +2823,17 @@ window.addEventListener('pointerup', () => {
 });
 
 // Demo: tap the gear letters to toggle P / D. On the car this comes from the gearbox HAL.
+// Reverse: BYD brings its 360° view up full screen on its own; Yunus moves it into its third window
+// (the helper's launch takes the app's task off the main screen) once it has started, and closes
+// it again out of reverse. On trial: not yet seen on the car.
+let reverse360 = false;
+function reverseView(g) {
+  if (!DEVICE || !window.YunusNative) return;
+  if (g === 'R' && !reverse360) { reverse360 = true; setTimeout(() => { if (S.gear === 'R') openInSide('com.byd.avc'); }, 1200); }
+  else if (g !== 'R' && reverse360) { reverse360 = false; if (sidePkg === 'com.byd.avc') { YunusNative.embedClose('side'); closeSideApp(); setSideW(0, true); } }
+}
 function setGear(g) {
+  reverseView(g);
   S.gear = g;
   [...$('gears').children].forEach((s) => s.classList.toggle('on', s.textContent === g));
   const driving = g === 'D' || g === 'R';
