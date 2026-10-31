@@ -14,9 +14,9 @@ komut yolu kodda eklendi (aşağıda). **Yeni kodun araçta henüz hiç çalış
 
 ## EN SON DURUM (yeni pencere buradan başlasın)
 
-Araç tarafı 4. oturumun sonundaki halinde (bir satır bile değişmedi, derlenip kurulmadı da).
-Bu oturumda eklenen tek kod değişikliği: `ShellHelper.kt`'ye `{cmd:"lockViaSetting", value:0|1}`
-komutu (aşağıda, madde 6) — **araçta hiç denenmedi**, önce derleyip kurmak lazım.
+Araç tarafı 4. oturumun sonundaki halinde, tek ek: `{cmd:"lockViaSetting"}` komutu (madde 6) kullanıcı
+tarafından başka bir pencereden derlenip araçta denendi — **reddedildi**, kilit komutu HAL'den
+kapandı (ayrıntı madde 6'da). Başka hiçbir şey değişmedi.
 
 **Sonraki oturum evden mi araçtan mı?** Araç verisi, gömülü uygulamalar, BYD panelleri için araç + ADB gerekir
 (`adb connect 10.184.30.214:5555`, aynı ağda olmak gerek). Sayfa/tasarım işleri evde masaüstü önizlemede
@@ -33,19 +33,15 @@ Bulut oturumunda (ADB/SDK yok) yalnız sayfa/doküman işi yapılabilir, derleme
    (`dumpsys window windows` → `mFrame` y<0 mı). 5. oturumda böyle bir uygulamaya **henüz rastlanmadı**.
 4. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
 5. ~~Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü~~ — **sürüşte doğrulandı, çalışıyor** (kullanıcı, 5. oturum).
-6. **Kilit komutu, yeni iz (henüz araçta denenmedi):** Kinex'in kendi HAL köprüsü (`kinex_hal_api_service.jar` ve iki
-   diğer jar, `androguard` ile) tersine mühendislikle incelendi — ayrıntı `KINEX_NOTLARI.md`. Sonuç: **Kinex de DL3'te
-   (Dolphin) kilidi yalnız okuyor, komut yok**; DL5 tarafında da `rpcSetDoorState` bir stub (`"dl5_door_state_read_only"`
-   döndürüp hiçbir şey ayarlamıyor). Yani Kinex'in kodunda kopyalanacak bir kilit komutu bulunamadı.
-   Daha önce denenen `Bodywork.set()` (reddedildi, `1c80e5e`) ve `postEvent()` (kilitlemiyor, yalnız durum
-   yayını) dışında üçüncü bir yol eklendi: aracın kendi `introspect-dilink3.txt` dökümünde görülen `Setting`
-   cihazının `getDoorLock()`/`setDoorLock(int)` çifti — bu ikisi daha önce hiç denenmemişti.
-   `ShellHelper.kt`'ye `{cmd:"lockViaSetting", value:0|1}` eklendi (commit `38db03c`); **derlenip kurulmadı, araçta
-   hiç çağrılmadı.** Sıradaki adım: derle/kur, sonra sayfadan ya da CDP konsolundan
-   `YunusNative.command('{"cmd":"lockViaSetting","value":1}')` çağır, sonucu
-   `adb shell cat /data/local/tmp/yunus_helper.log`'da `cmd lockViaSetting ...` satırında oku.
-   "refused: ..." dönerse bu yol da kapanır — gerçek kilit o zaman yalnızca BT telefon-anahtarı
-   taklidiyle (çok daha büyük iş, BLE paket yakalama gerektirir) mümkün demektir.
+6. ~~Kilit komutu~~ — **kapandı, HAL'den mümkün değil.** Kinex'in kendi HAL köprüsü tersine mühendislikle
+   incelendi (`androguard`, ayrıntı `KINEX_NOTLARI.md`): Kinex de DL3'te (Dolphin) kilidi yalnız okuyor,
+   komut yok; DL5'te `rpcSetDoorState` bir stub. Üçüncü bir yol da eklenip araçta denendi: `Setting`
+   cihazının `getDoorLock()`/`setDoorLock(int)` çifti (`{cmd:"lockViaSetting"}`, commit `38db03c`) —
+   **reddedildi** (`setDoorLock` → `0x800003E8`, `getDoorLock` → `-10011`, ikisi de imza-korumalı).
+   Üç yol da (`Bodywork.set()`, `postEvent()`, `Setting.setDoorLock()`) denendi, üçü de kapalı.
+   Gerçek kilit mekanizması yalnız Bluetooth telefon-anahtarı taklidiyle mümkün — bu, BLE paket
+   yakalama ve protokol tersine mühendisliği gerektiren ayrı ve çok daha büyük bir iş; istenirse
+   sonraki bir oturumda ayrı olarak ele alınabilir.
 
 ## 5. oturumda yapılanlar
 - **Tanıtım videosu:** kullanıcı istedi, masaüstü önizlemeden (demo modu, 1920×1080, Playwright/Chromium headless,
@@ -55,7 +51,9 @@ Bulut oturumunda (ADB/SDK yok) yalnız sayfa/doküman işi yapılabilir, derleme
   dalında** (bu, `claude/live-vehicle-data`'dan FARKLI bir dal — video oraya taşınmadı).
 - Kullanıcı sürüşte park freni (bırakılınca 0) ve emniyet kemerini (takılı 1) doğruladı → madde 5 kapandı.
 - Sesli asistan dışında görünmez kalan başka bir BYD penceresine henüz rastlanmadı (madde 3 açık kaldı, netleşti).
-- Kinex'in üç HAL jar'ı tersine mühendislikle incelendi (yukarıda madde 6); yeni test komutu eklendi, araçta denenmedi.
+- Kinex'in üç HAL jar'ı tersine mühendislikle incelendi, yeni bir test komutu eklendi (`lockViaSetting`);
+  kullanıcı bunu başka bir pencereden (bu bulut oturumunun bağlanamadığı bir bilgisayar/araçtan) derleyip
+  kurdu ve denedi — **reddedildi**. Kilit komutu konusu madde 6'da kapatıldı.
 
 ## 4. oturumda yapılanlar (hepsi commit'li, araçta doğrulandı)
 

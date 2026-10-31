@@ -123,11 +123,16 @@ oturumun geçici klasörü — tekrarlamak gerekirse aynı adımlar).
   HAL köprüsü kilit/açma KOMUTU içermiyor — bizim `1c80e5e`'de bulduğumuzla (set() reddediliyor,
   postEvent kilitlemiyor, gerçek kilit BT telefon-anahtarı taklidiyle oluyor) aynı duvara çarpıyor.
 
-**Yeni, henüz denenmemiş iz** (Kinex'te değil, aracın kendi `introspect-dilink3.txt` dökümünde):
-`android.hardware.bydauto.setting.BYDAutoSettingDevice` sınıfında ayrı bir çift var:
-`int getDoorLock()` / `int setDoorLock(int)` + dinleyicide `onDoorLockChanged(int)`. Bu, okunan
-`doorlock.BYDAutoDoorLockDevice` (salt okunur) ve denenmiş `Bodywork.set()`/`postEvent()`'ten
-(ikisi de başarısız) FARKLI bir üçüncü yol — Setting cihazının diğer set'leri (`setSteeringWheelHeatingState`
-gibi) düz `getMethod` ile çalışıyor, imza kontrolü onlarda engel değil. `ShellHelper.kt`'ye
-`{cmd:"lockViaSetting", value:0|1}` komutu eklendi (bu oturum), bir sonraki araç ziyaretinde denenmeli;
-sonucu `adb shell cat /data/local/tmp/yunus_helper.log`'da `cmd lockViaSetting ... -> ...` satırı verecek.
+**Üçüncü iz de denendi, o da kapandı** (`android.hardware.bydauto.setting.BYDAutoSettingDevice`'ın
+`getDoorLock()`/`setDoorLock(int)` çifti, Kinex'te değil aracın kendi `introspect-dilink3.txt`
+dökümünde görülmüştü — okunan `doorlock.BYDAutoDoorLockDevice` ve denenmiş `Bodywork.set()`/`postEvent()`'ten
+FARKLI bir yoldu). `ShellHelper.kt`'ye eklenen `{cmd:"lockViaSetting", value:0|1}` araçta test edildi:
+**`setDoorLock` reddedildi (`0x800003E8`, Bodywork'ün `set()`'iyle aynı imza-korumalı aile), `getDoorLock`'un
+kendisi de gizli (`-10011`, gerçek bir durum değil)**. Setting cihazının diğer set'leri
+(`setSteeringWheelHeatingState` gibi) düz çalışırken bu ikisi özel olarak kapalı.
+
+**Sonuç — üç yol da denendi, üçü de kapalı:** `Bodywork.set()` (reddedildi), `Bodywork.postEvent()`
+(kilitlemiyor, yalnız durum yayını), `Setting.setDoorLock()` (reddedildi). Kinex'in kendi kodunda da
+kilit komutu yok. Dolphin'de HAL üzerinden kilit/açma komutu **mümkün değil** — gerçek mekanizma
+Bluetooth telefon-anahtarı taklidi (BLE paket yakalama + protokol tersine mühendisliği, çok daha
+büyük ve ayrı bir iş).

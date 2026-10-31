@@ -563,10 +563,12 @@ private object CarWatch {
                     // A third path, not in Kinex's own bundled HAL bridge either (it never sets lock
                     // state anywhere, DL3 or DL5 — only reads it): the car's own Setting device
                     // (introspect-dilink3.txt) declares a plain getDoorLock()/setDoorLock(int) pair,
-                    // separate from Bodywork's set()/postEvent() above (both already refused/no-op, see
-                    // commit 1c80e5e) and from the read-only doorlock device. Untested whether its
-                    // signature check lets this one through; same device class as the working
-                    // setSteeringWheelHeatingState above, so worth one try.
+                    // separate from Bodywork's set()/postEvent() (both already refused/no-op, see
+                    // commit 1c80e5e) and from the read-only doorlock device. Tried on the car (this
+                    // commit): setDoorLock refused (0x800003E8, same signature-gate family as
+                    // Bodywork's set()) and getDoorLock itself is also gated (-10011, not a real
+                    // state) — same dead end as the other two. The lock/post/lockViaSetting hooks are
+                    // all kept for reference; the real command needs Bluetooth phone-key emulation.
                     val sd = settingDev ?: run { System.err.println("cmd lockViaSetting: no setting device"); return@post }
                     val value = o.optInt("value", if (o.optBoolean("on", true)) 1 else 0)
                     val r = try { sd.javaClass.getMethod("setDoorLock", Integer.TYPE).invoke(sd, value) } catch (t: Throwable) { "refused: ${t.cause ?: t}" }
