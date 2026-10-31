@@ -2210,18 +2210,16 @@ function updateDriveHud() {
   $('limitVal').textContent = S.speedLimit;
   sign.classList.toggle('over', S.set.tsrWarn !== 'off' && S.speed > S.speedLimit + 3);
 }
-// Blind-spot warning: the car in the zone and the lane line on that side go red; signalling
-// towards an occupied side makes it flash and frames the side camera in red.
-function updateBlindSpotWarning(now) {
-  const flash = Math.floor(now / 250) % 2 === 0;
+// Blind-spot warning, as the mirrors' lamps: a car in the zone turns that side's lane line (and
+// the car) orange; signalling towards it turns them red and frames the side camera in red.
+function updateBlindSpotWarning() {
   for (const side of ['left', 'right']) {
     const danger = bsd[side] && S.gear === 'D';
     const urgent = danger && S.signal === side;
-    const on = danger && (!urgent || flash);
-    laneLine[side].color.setHex(on ? 0xe5484d : 0x9aa0a8);
+    laneLine[side].color.setHex(urgent ? 0xff3b30 : danger ? 0xff9f0a : 0x9aa0a8);
     const t = traffic.find((x) => x.side === side);
-    t.car.userData.mat.color.setHex(danger ? 0xb83a3d : 0x6b7078);
-    t.car.userData.mat.emissive.setHex(on ? 0x5a0d0e : 0x000000);
+    t.car.userData.mat.color.setHex(urgent ? 0xb83a3d : danger ? 0xc27a1a : 0x6b7078);
+    t.car.userData.mat.emissive.setHex(urgent ? 0x5a0d0e : danger ? 0x4a2a00 : 0x000000);
   }
   $('bsCam').classList.toggle('warn', !!S.signal && bsd[S.signal] && S.gear === 'D');
 }
@@ -2665,7 +2663,7 @@ renderer.setAnimationLoop(() => {
     stepTraffic(dt);
   }
   updateDriveHud();
-  updateBlindSpotWarning(now);
+  updateBlindSpotWarning();
   updateRearCam(now);
   if (now > cardsAt) { updateCards(); cardsAt = now + 500; }
   gateAngle += ((S.trunk ? GATE.openAngle : 0) - gateAngle) * 0.06;
