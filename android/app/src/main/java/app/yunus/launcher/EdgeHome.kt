@@ -44,6 +44,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         }
         val lp = overlayParams(stripH, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
         try { wm.addView(v, lp); strip = v } catch (t: Throwable) { android.util.Log.w("Yunus", "edge: $t") }
+        prepareDock()
     }
 
     fun hide() {
@@ -55,7 +56,14 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     /** The dock overlay's page, while it is up (it gets the car's data like the main page). */
     fun dockWeb(): WebView? = if (dockShown) dock else null
 
-    private fun showDock() {
+    // The dock's window is made once, page loaded, and then stays on the screen hidden and
+    // untouchable: a swipe only turns it visible. Adding the window (and on the first swipe loading
+    // the page) at every swipe made the dock come up late.
+    private val hiddenFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+    private val shownFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+    private var dockAdded = false
+
+    private fun prepareDock(): WebView {
         val w = dock ?: WebView(ctx).apply {
             setBackgroundColor(Color.TRANSPARENT)
             settings.javaScriptEnabled = true
@@ -70,9 +78,19 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
                 false
             }
         }.also { dock = it }
-        if (!dockShown) {
-            val lp = overlayParams(dockH, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH)
-            try { wm.addView(w, lp); dockShown = true } catch (t: Throwable) { android.util.Log.w("Yunus", "dock: $t") }
+        if (!dockAdded) {
+            w.visibility = View.INVISIBLE
+            try { wm.addView(w, overlayParams(dockH, hiddenFlags)); dockAdded = true } catch (t: Throwable) { android.util.Log.w("Yunus", "dock: $t") }
+        }
+        return w
+    }
+
+    private fun showDock() {
+        val w = prepareDock()
+        if (!dockShown && dockAdded) {
+            try { wm.updateViewLayout(w, overlayParams(dockH, shownFlags)) } catch (_: Throwable) { }
+            w.visibility = View.VISIBLE
+            dockShown = true
         }
         w.removeCallbacks(autoHide); w.postDelayed(autoHide, 7000)
     }
@@ -80,7 +98,10 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     fun hideDock() {
         val w = dock ?: return
         w.removeCallbacks(autoHide)
-        if (dockShown) { try { wm.removeView(w) } catch (_: Throwable) { } }
+        if (dockShown && dockAdded) {
+            w.visibility = View.INVISIBLE
+            try { wm.updateViewLayout(w, overlayParams(dockH, hiddenFlags)) } catch (_: Throwable) { }
+        }
         dockShown = false
     }
 

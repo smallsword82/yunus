@@ -176,7 +176,16 @@ class MediaListener : NotificationListenerService() {
     }
     fun dismiss(key: String) = try { cancelNotification(key) } catch (_: Exception) { }
     fun clearAll() = try { cancelAllNotifications() } catch (_: Exception) { }
-    override fun onListenerConnected() { instance = this; report() }
+    override fun onListenerConnected() {
+        instance = this; report()
+        // At boot, and a few seconds after Yunus crashed, the system starts this listener but not
+        // Yunus's screen, and DiLink's home comes up instead - with BYD's bars still off the screen,
+        // so nothing can be reached. Bring Yunus up (it may start activities from the background: it
+        // holds the overlay permission); it also makes itself home again if the choice was lost.
+        if (wantHome(this) && (!isDefaultHome(this) || !MainActivity.alive)) try {
+            startActivity(android.content.Intent(this, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) { }
+    }
     override fun onListenerDisconnected() { if (instance === this) instance = null }
     override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification?) = report()
     override fun onNotificationRemoved(sbn: android.service.notification.StatusBarNotification?) = report()

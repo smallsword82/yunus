@@ -374,6 +374,7 @@ private object CarWatch {
             }
         } catch (t: Throwable) { System.err.println("watch instrument: ${t.cause ?: t}") }
         poll()
+        steerPoll()
     }
 
     // Device → (key sent, getter, its int argument or null).
@@ -435,7 +436,7 @@ private object CarWatch {
 
     private fun poll() {
         copyDabSlide()
-        for (p in polls) if (!p.dead) try {
+        for (p in polls) if (!p.dead && p.get.key != "steer") try { // steer: steerPoll
             val m = if (p.get.arg == null) p.cls.getMethod(p.get.method) else p.cls.getMethod(p.get.method, Integer.TYPE)
             val raw = if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)
             // getChargingRestTime returns [hour, minute]; everything else a single number.
@@ -467,6 +468,22 @@ private object CarWatch {
             for (id in intArrayOf(0x29600032, 0x2A600008)) { val v = fg.invoke(inst, 1007, id) as Int; event("Instrument", id, if (v in 0..300) v else -1) }
         } catch (t: Throwable) { lightsDead = true; System.err.println("watch lights: ${t.cause ?: t}") }
         if (polls.any { !it.dead } || !lightsDead) main.postDelayed({ poll() }, 1000)
+    }
+
+    // The steering angle comes as no event, and once a second made the model's front wheels and the
+    // lane lines lag the wheel in steps: it alone is read ten times a second. Sent only when it has
+    // moved 2° or more, so sensor jitter never keeps the page drawing (each change wakes the 3D view).
+    private var steerSent = Double.NaN
+    private fun steerPoll() {
+        val p = polls.firstOrNull { it.get.key == "steer" } ?: return
+        if (p.dead) return
+        try {
+            val m = if (p.get.arg == null) p.cls.getMethod(p.get.method) else p.cls.getMethod(p.get.method, Integer.TYPE)
+            val raw = if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)
+            val v = Math.round((raw as Number).toDouble()).toDouble()
+            if (v !in invalid && !(Math.abs(v - steerSent) < 2.0)) { steerSent = v; send("ev Get steer d $v") }
+        } catch (t: Throwable) { p.dead = true; System.err.println("watch steer: ${t.cause ?: t}"); return }
+        main.postDelayed({ steerPoll() }, 100)
     }
 
     private fun listen(ctx: android.content.Context, clsName: String) {

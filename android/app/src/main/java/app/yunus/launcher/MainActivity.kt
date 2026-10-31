@@ -59,9 +59,15 @@ class MainActivity : Activity() {
     private lateinit var volume: VolumeBridge
     private lateinit var status: StatusBridge
 
+    companion object {
+        /** Yunus's screen exists in this process (MediaListener brings it up after a crash if not). */
+        @Volatile var alive = false
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        alive = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemBars()
 
@@ -163,7 +169,7 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun isHome(): Boolean = isDefaultHome()
                 @JavascriptInterface
-                fun setHome(yunus: Boolean) = shell.send(if (yunus) "home yunus" else "home byd")
+                fun setHome(yunus: Boolean) { wantHome(this@MainActivity, yunus); shell.send(if (yunus) "home yunus" else "home byd") }
 
                 // The recent apps (BYD's bar with its key is off the screen); the shell sends the key.
                 @JavascriptInterface
@@ -321,6 +327,10 @@ class MainActivity : Activity() {
         }) { line -> carFromHelper(line) }
         // Windows, sunshade and speed through the shell helper (read only), as Kinex reads them.
         shell.watch()
+        // The car came up on DiLink's home although Yunus is the chosen one (seen after a restart:
+        // the choice was gone, and with BYD's bars still off the screen nothing could be reached).
+        // Make Yunus the home screen again; the helper also puts the bars back off the screen.
+        if (!isDefaultHome(this) && wantHome(this)) shell.send("home yunus")
         contentResolver.registerContentObserver(android.provider.Settings.System.getUriFor(VOICE_KEY), false, voiceObserver)
         voiceLift()
         embed = AppEmbed(this, root, shell)
@@ -512,12 +522,8 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide() }
     override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
 
-    // Yunus is the car's home screen (the HOME intent resolves to it).
-    private fun isDefaultHome(): Boolean = try {
-        packageManager.resolveActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME), 0)
-            ?.activityInfo?.packageName == packageName
-    } catch (_: Throwable) { false }
-    override fun onDestroy() { contentResolver.unregisterContentObserver(voiceObserver); carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+    private fun isDefaultHome(): Boolean = isDefaultHome(this)
+    override fun onDestroy() { alive = false; contentResolver.unregisterContentObserver(voiceObserver); carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {
@@ -641,6 +647,18 @@ private class AppEmbed(private val activity: Activity, private val root: android
  * helper is not running it is started over Yunus's own ADB connection to the car (127.0.0.1:5555;
  * the owner approves Yunus's key once on the screen). Lines are sent in order on one thread.
  */
+/** Yunus is the car's home screen (the HOME intent resolves to it). */
+fun isDefaultHome(ctx: android.content.Context): Boolean = try {
+    ctx.packageManager.resolveActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME), 0)
+        ?.activityInfo?.packageName == ctx.packageName
+} catch (_: Throwable) { false }
+
+/** Whether the owner wants Yunus as the home screen: yes unless DiLink's was picked in Yunus's settings. */
+fun wantHome(ctx: android.content.Context): Boolean =
+    ctx.getSharedPreferences("yunus", android.content.Context.MODE_PRIVATE).getBoolean("wantHome", true)
+fun wantHome(ctx: android.content.Context, yunus: Boolean) =
+    ctx.getSharedPreferences("yunus", android.content.Context.MODE_PRIVATE).edit().putBoolean("wantHome", yunus).apply()
+
 private class ShellLink(private val ctx: android.content.Context, private val status: (String) -> Unit, private val onLine: (String) -> Unit = {}) {
     companion object { private const val PORT = 19340 }
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "yunus-shell").apply { isDaemon = true } }
