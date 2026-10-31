@@ -54,6 +54,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         val view = TextureView(activity)
         @Volatile var params = FloatArray(16)
         @Volatile var visible = false
+        @Volatile var waiting = false // shown, but no frame drawn in it yet: kept see-through till one is
         var out: SurfaceTexture? = null
         var w = 0; var h = 0
         var label: android.widget.TextView? = null // the mirror's front/rear switch
@@ -70,6 +71,9 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         val px = if (name == "rear") prefs.getInt("rearCamX", x) else x
         val py = if (name == "rear") prefs.getInt("rearCamY", y) else y
         win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
+        // Until the camera's first frame is drawn in it the window is see-through, not black (opening
+        // the camera takes a moment); it fades in with that frame.
+        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.waiting = true }
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
@@ -79,6 +83,8 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     fun hide(name: String) {
         val win = windows[name] ?: return
         win.visible = false
+        win.waiting = false
+        win.box.animate().cancel()
         win.box.visibility = View.GONE
         idleLater()
     }
@@ -284,6 +290,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
                 GLES20.glVertexAttribPointer(pos, 2, GLES20.GL_FLOAT, false, 0, QUAD)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
                 EGL14.eglSwapBuffers(display, surface)
+                if (win.waiting) { win.waiting = false; root.post { if (win.visible) win.box.animate().alpha(1f).setDuration(120).start() } }
             }
         }
 

@@ -2608,8 +2608,11 @@ function syncEmbedSoon() {
 function syncEmbedNow() {
   try { if (!mapEmbedded && !sidePkg) return; } catch { return; }
   clearTimeout(embedSyncAt);
-  if (sidePkg && !sigSideTaken) embedSide(); // lent to a signal column: hidden till it closes
-  if (!mapEmbedded || ((sigW.left || sigW.right) && !STACK() && !TABS())) return; // a signal column: Maps is shifted, not resized
+  // While a signal column is open the apps are shifted, not resized (see setSigCol); a third window
+  // beside the map is lent to it (hidden till it closes).
+  const sigOpen = !!(sigW.left || sigW.right);
+  if (sidePkg && !sigSideTaken && !sigOpen) embedSide();
+  if (!mapEmbedded || sigOpen) return;
   const r = $('map').getBoundingClientRect();
   if (r.width < 80 || r.height < 80 || current || appTabOn()) YunusNative.embedVisible('map', false); // map area closed, a card over it, or the app's tab
   else startMapArea();
@@ -3032,17 +3035,19 @@ let sigSideTaken = 0; // px of the third window lent to the signal column
 function setSigCol(side) {
   stage.classList.add('noColAnim');
   sigW.left = side === 'left' ? SIG_COL : 0; sigW.right = side === 'right' ? SIG_COL : 0;
-  // Third window under the map: it narrows with the map (shifted and cut the same way), nothing lent.
+  // Third window under the map or in a tab: it narrows with the map (shifted and cut the same way), nothing lent.
   const stacked = STACK() || TABS();
   sigSideTaken = side && !stacked ? Math.min(sideW, SIG_COL) : 0;
   stage.style.setProperty('--sigL', sigW.left + 'px'); stage.style.setProperty('--sigR', sigW.right + 'px');
   stage.style.setProperty('--sideW', (sideW - sigSideTaken) + 'px');
   placeHandles(); wake(1500);
   requestAnimationFrame(() => stage.classList.remove('noColAnim'));
-  // Third window under the map: both apps are really resized to their narrower windows (on trial:
-  // they redraw for it, but nothing is cut off).
+  // No app is resized for the column (a resized app redraws, black for a moment): each is shifted
+  // past the column and its far edge cut off, and put back as it was when the column closes. Under
+  // the map or in a tab the third window shares the map's width, so it moves the same way.
   if (stacked) {
-    requestAnimationFrame(() => { try { syncEmbedNow(); } catch {} }); // each app to its new size (the hidden tab stays hidden)
+    const dx = Math.round(sigW.left * stageScale), cut = Math.round((side ? SIG_COL : 0) * stageScale);
+    try { if (mapEmbedded) YunusNative.embedShift('map', dx, cut); if (sidePkg) YunusNative.embedShift('side', dx, cut); } catch {}
     return;
   }
   try { if (mapEmbedded) YunusNative.embedShift('map', Math.round(sigW.left * stageScale), Math.round((side ? SIG_COL - sigSideTaken : 0) * stageScale)); } catch {}
