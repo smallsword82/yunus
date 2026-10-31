@@ -1,22 +1,27 @@
 # Devir notu — Yunus (BYD Dolphin, DiLink 3)
 
-Tarih: 30.10.2026 (4. oturum sonu) · Dal: `claude/live-vehicle-data` · **PR: smallsword82/yunus#1**
-APK: `release/yunus-0.1-test.apk` (araçta kurulu = dalın ucu) · Çalışma ağacı temiz · **Hepsi push'lu** (kullanıcı istedi).
+Tarih: 31.10.2026 (5. oturum sonu) · Dal: `claude/live-vehicle-data` (bu dosyanın ve kodun dalı) ·
+**PR: smallsword82/yunus#1** · Çalışma ağacı temiz · **Hepsi push'lu**.
 Push'u kullanıcı açıkça isteyince yap; bu oturumdaki onay sonraki oturumlara geçmez.
+
+**Dikkat — bu oturum bulutta geçti, araca hiç dokunmadı:** 5. oturum Claude Code'un bulut ortamında
+çalıştı (Android SDK, ADB, araç bağlantısı yok). Hiçbir şey derlenip kurulmadı, araçta hiçbir şey
+test edilmedi. Yalnızca: (a) masaüstü önizlemede 10 sn'lik bir tanıtım videosu kaydedildi — bu video
+`claude/live-vehicle-data`'da DEĞİL, ayrı bir oturum dalında (`ccr-c1d74f02-csoecl`,
+`media/yunus-tanitim.mp4`) duruyor; (b) kullanıcının sürüşte doğruladığı iki madde not edildi;
+(c) Kinex'in kilit mekanizması tersine mühendislikle incelendi ve araçta denenmemiş yeni bir
+komut yolu kodda eklendi (aşağıda). **Yeni kodun araçta henüz hiç çalıştırılmadığını unutma.**
 
 ## EN SON DURUM (yeni pencere buradan başlasın)
 
-Araçta her şey çalışıyor; kullanıcı arabadan eve geçti, bilgisayar araçtan ayrıldı. Yunus ve yardımcısı bilgisayarsız çalışıyor
-(yardımcıyı Yunus kendi ADB istemcisiyle aracın kablosuz ADB'si üzerinden başlatıyor; açılışta 60 sn'ye kadar bekliyor).
-Bu oturumun son işleri:
-- Açılıştaki harita takılması çözüldü (aşağıda "Performans").
-- Apps penceresi Maps'i karartmıyor; Maps altta canlı kalıyor, pencere tek parça kapanıyor.
-- Far simgeleri gösterge gibi: AUTO'da park lambası da yanıyor, uzun far/selektörde kısa far simgesi mavi.
-- BYD sesli asistanı yeniden görünüyor (konuşma sürerken BYD üst çubuğu iniyor — aşağıda).
+Araç tarafı 4. oturumun sonundaki halinde (bir satır bile değişmedi, derlenip kurulmadı da).
+Bu oturumda eklenen tek kod değişikliği: `ShellHelper.kt`'ye `{cmd:"lockViaSetting", value:0|1}`
+komutu (aşağıda, madde 6) — **araçta hiç denenmedi**, önce derleyip kurmak lazım.
 
 **Sonraki oturum evden mi araçtan mı?** Araç verisi, gömülü uygulamalar, BYD panelleri için araç + ADB gerekir
 (`adb connect 10.184.30.214:5555`, aynı ağda olmak gerek). Sayfa/tasarım işleri evde masaüstü önizlemede
 (`python -m http.server 8765 --directory viewer`, demo modu) ya da emülatörde yapılabilir; araca kurulum sonra.
+Bulut oturumunda (ADB/SDK yok) yalnız sayfa/doküman işi yapılabilir, derleme ve araç testi yapılamaz.
 
 **Açık / doğrulanmadı (bir sonraki sürüşte):**
 1. **Şarj göstergesi araç yeniden başlatıldıktan sonra** — kullanıcı "veri almıyor" dedi. Sebep büyük olasılıkla yardımcının
@@ -25,18 +30,32 @@ Bu oturumun son işleri:
 2. İlk açılışta haritanın takılmadan geldiği soğuk açılışta (araç kapanıp açılınca) henüz görülmedi; Yunus yeniden başlatılınca ölçüldü.
 3. **Ekran dışındaki üst çubuğa bağlı başka BYD pencereleri:** sesli asistan gibi kendini durum çubuğu alanına koyan başka bir
    BYD penceresi olursa o da görünmez kalır. Kullanıcı "X ekranda çıkmıyor ama çalışıyor" derse önce bunu düşün
-   (`dumpsys window windows` → `mFrame` y<0 mı).
+   (`dumpsys window windows` → `mFrame` y<0 mı). 5. oturumda böyle bir uygulamaya **henüz rastlanmadı**.
 4. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
-5. ~~Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü~~ — **sürüşte doğrulandı, çalışıyor.**
-6. **Kilit komutu, yeni iz:** Kinex'in kendi HAL köprüsü tersine mühendislikle incelendi (bu oturum,
-   `KINEX_NOTLARI.md`'de ayrıntı) — Kinex de DL3'te kilidi yalnız okuyor, komut yok; DL5'te de stub.
-   Daha önce denenen `Bodywork.set()` (reddedildi) ve `postEvent()` (kilitlemiyor, yalnız durum
-   yayını) dışında üçüncü bir yol eklendi: `Setting` cihazının `getDoorLock()`/`setDoorLock(int)`
-   çifti, henüz araçta denenmedi. `ShellHelper.kt`'ye `{cmd:"lockViaSetting", value:0|1}` eklendi;
-   derleyip kurduktan sonra sayfadan `YunusNative.command('{"cmd":"lockViaSetting","value":1}')`
-   ile tetiklenebilir, sonuç `adb shell cat /data/local/tmp/yunus_helper.log`'da "cmd lockViaSetting"
-   satırında görünür. Reddedilirse (ör. `refused: ...`) bu yol da kapanır, gerçek kilit BT
-   telefon-anahtarı taklidini gerektirir demektir.
+5. ~~Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü~~ — **sürüşte doğrulandı, çalışıyor** (kullanıcı, 5. oturum).
+6. **Kilit komutu, yeni iz (henüz araçta denenmedi):** Kinex'in kendi HAL köprüsü (`kinex_hal_api_service.jar` ve iki
+   diğer jar, `androguard` ile) tersine mühendislikle incelendi — ayrıntı `KINEX_NOTLARI.md`. Sonuç: **Kinex de DL3'te
+   (Dolphin) kilidi yalnız okuyor, komut yok**; DL5 tarafında da `rpcSetDoorState` bir stub (`"dl5_door_state_read_only"`
+   döndürüp hiçbir şey ayarlamıyor). Yani Kinex'in kodunda kopyalanacak bir kilit komutu bulunamadı.
+   Daha önce denenen `Bodywork.set()` (reddedildi, `1c80e5e`) ve `postEvent()` (kilitlemiyor, yalnız durum
+   yayını) dışında üçüncü bir yol eklendi: aracın kendi `introspect-dilink3.txt` dökümünde görülen `Setting`
+   cihazının `getDoorLock()`/`setDoorLock(int)` çifti — bu ikisi daha önce hiç denenmemişti.
+   `ShellHelper.kt`'ye `{cmd:"lockViaSetting", value:0|1}` eklendi (commit `38db03c`); **derlenip kurulmadı, araçta
+   hiç çağrılmadı.** Sıradaki adım: derle/kur, sonra sayfadan ya da CDP konsolundan
+   `YunusNative.command('{"cmd":"lockViaSetting","value":1}')` çağır, sonucu
+   `adb shell cat /data/local/tmp/yunus_helper.log`'da `cmd lockViaSetting ...` satırında oku.
+   "refused: ..." dönerse bu yol da kapanır — gerçek kilit o zaman yalnızca BT telefon-anahtarı
+   taklidiyle (çok daha büyük iş, BLE paket yakalama gerektirir) mümkün demektir.
+
+## 5. oturumda yapılanlar
+- **Tanıtım videosu:** kullanıcı istedi, masaüstü önizlemeden (demo modu, 1920×1080, Playwright/Chromium headless,
+  sayfanın kendi saatini/animasyonlarını kare kare ilerletip gerçek görüntüden) 10 sn'lik bir video üretildi:
+  açılış → şarj görünümü → sürüş görünümü → kapanış kartı. Gerçek APK'da kurulu değil, çalıştırılamadı da
+  (bu oturumda Android SDK/emülatör yok); sayfanın kodu aynı. `media/yunus-tanitim.mp4`, **`ccr-c1d74f02-csoecl`
+  dalında** (bu, `claude/live-vehicle-data`'dan FARKLI bir dal — video oraya taşınmadı).
+- Kullanıcı sürüşte park freni (bırakılınca 0) ve emniyet kemerini (takılı 1) doğruladı → madde 5 kapandı.
+- Sesli asistan dışında görünmez kalan başka bir BYD penceresine henüz rastlanmadı (madde 3 açık kaldı, netleşti).
+- Kinex'in üç HAL jar'ı tersine mühendislikle incelendi (yukarıda madde 6); yeni test komutu eklendi, araçta denenmedi.
 
 ## 4. oturumda yapılanlar (hepsi commit'li, araçta doğrulandı)
 
