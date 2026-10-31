@@ -357,7 +357,11 @@ private object CarWatch {
         // approach here; proven on the car, where Kinex reads and locks the Dolphin this way.
         val ctx: android.content.Context = Permissive(base)
         for (name in listOf("bodywork.BYDAutoBodyworkDevice", "speed.BYDAutoSpeedDevice",
-                "doorlock.BYDAutoDoorLockDevice", "ota.BYDAutoOtaDevice"))
+                "doorlock.BYDAutoDoorLockDevice", "ota.BYDAutoOtaDevice",
+                // Search (temporary): every event of the devices that may carry the blind-spot
+                // warning's side (the cluster shows it), logged by the page.
+                "adas.BYDAutoADASDevice", "instrument.BYDAutoInstrumentDevice", "panorama.BYDAutoPanoramaDevice",
+                "doormirror.BYDAutoRearViewMirrorDevice", "collision.BYDAutoCollisionDevice"))
             try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
         // Also the getters Kinex reads, once a second (SOC, range and speed don't come as events
         // while parked). A getter that is refused is not asked again.
