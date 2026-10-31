@@ -123,6 +123,12 @@ B_SEAM = [(2.385, 0.26), (2.385, 0.50), (2.387, 0.60), (2.391, 0.75), (2.395, 0.
 FRONT_SEAM = [(1.318, 0.26), (1.313, 0.35), (1.308, 0.45), (1.302, 0.55), (1.299, 0.60), (1.294, 0.70),
               (1.289, 0.75), (1.288, 0.80), (1.287, 0.85), (1.297, 0.90), (1.316, 0.95), (1.340, 1.00)]
 FRONT_DOOR = B_SEAM + [(1.95, 1.47)] + FRONT_SEAM[::-1]
+# The window frame's black trim and seal run on down the A-pillar in front of that line (the
+# pillar's paint ends just ahead of them), so for the trim the leading edge follows the back of
+# the pillar's paint instead; otherwise the frame's front corner stayed on the body.
+FRONT_DOOR_TRIM = B_SEAM + [(1.98, 1.47), (1.95, 1.425), (1.89, 1.40), (1.83, 1.375), (1.72, 1.35), (1.64, 1.30),
+                            (1.50, 1.25), (1.39, 1.20), (1.36, 1.15)] + FRONT_SEAM[::-1]
+FRAME_TRIM = r"^(blk_mat|rubber)"
 # Rear door's trailing edge, bottom to top. Below 0.75 m there is no seam line: the door's lower
 # back corner wraps around the wheel arch (wheel centre y 3.51, z 0.33, r 0.46), and the arc ends
 # where the seam starts (114 degrees).
@@ -150,20 +156,21 @@ CHARGE_FLAP = [(0.95, 0.818), (0.955, 0.81), (0.962, 0.803), (0.97, 0.798), (0.9
                (0.947, 0.866), (0.948, 0.858)]
 
 
-def door_spec(name, sx, outline, hinge_y):
+def door_spec(name, sx, outline, hinge_y, trim_outline=None):
     # upper_bodypaint is the hood and roof: the front door's outline reaches the roof edge above
     # the window, and a slab of it swung out with the open door.
     return dict(name=name, region=SideOutline(sx, outline), skip=rf"^({WHEELS}|{UNDER}|upper_bodypaint)",
                 hinge=(0.86 * sx, hinge_y, 0.9), window=f"Window_{name[-2:]}",
-                jamb=((-sx, 0, 0), 0.10), thickness=0.07)
+                jamb=((-sx, 0, 0), 0.10), thickness=0.07,
+                trim_region=SideOutline(sx, trim_outline) if trim_outline else None)
 
 
 SPECS = [
     dict(name="Tailgate", region=RearOutline(TAILGATE),
          skip=rf"^(interior|sticker|rubber|{WHEELS}|{UNDER})", hinge=None,
          jamb=((0, -1, 0), 0.12), thickness=0.05),
-    door_spec("Door_FL", 1, FRONT_DOOR, 1.29),
-    door_spec("Door_FR", -1, FRONT_DOOR, 1.29),
+    door_spec("Door_FL", 1, FRONT_DOOR, 1.29, FRONT_DOOR_TRIM),
+    door_spec("Door_FR", -1, FRONT_DOOR, 1.29, FRONT_DOOR_TRIM),
     door_spec("Door_RL", 1, REAR_DOOR, 2.39),
     door_spec("Door_RR", -1, REAR_DOOR, 2.39),
     dict(name="ChargeFlap", region=SideOutline(-1, CHARGE_FLAP, inner_x=0.70),
@@ -268,18 +275,20 @@ def gap_index(mesh):
 
 def separate(o, spec):
     """Bisect `o` along the spec's planes and split off the faces inside. Returns the new object."""
-    if not wants(o, spec) or not any(inside(to_metres(v.co), spec) for v in o.data.vertices):
+    # Black trim and seals may have an outline of their own (the front doors' window frame).
+    region = spec["trim_region"] if spec.get("trim_region") and re.match(FRAME_TRIM, o.name) else spec["region"]
+    if not wants(o, spec) or not any(region.inside(to_metres(v.co)) for v in o.data.vertices):
         return None
     bm = bmesh.new()
     bm.from_mesh(o.data)
-    for pt, n, is_near in spec["region"].cuts():
+    for pt, n, is_near in region.cuts():
         # Only cut around the seam: the planes are infinite, and slicing the whole car leaves
         # sliver triangles elsewhere that shade as white specks.
         near = [f for f in bm.faces if any(is_near(to_metres(v.co)) for v in f.verts)]
         geom = list({v for f in near for v in f.verts}) + list({e for f in near for e in f.edges}) + near
         bmesh.ops.bisect_plane(bm, geom=geom, plane_co=to_world(pt), plane_no=n)
     bmesh.ops.dissolve_degenerate(bm, edges=bm.edges[:], dist=1e-5 * s)
-    picked =[f for f in bm.faces if inside(to_metres(f.calc_center_median()), spec)]
+    picked = [f for f in bm.faces if region.inside(to_metres(f.calc_center_median()))]
     if not picked:
         bm.free()
         return None

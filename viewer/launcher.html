@@ -106,6 +106,7 @@ input { user-select:text; -webkit-user-select:text; }
   /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
      stacks its app list into one tall column and would push the dock off screen) */
   grid-template-columns:var(--sigL, 0px) var(--carW, 720px) 1fr var(--sideW, 0px) var(--sigR, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
+#stage.noColAnim { transition:none; } /* the signal camera's column closing at once (setSigCol) */
 /* hidden third column on the right: an app window, pulled out from the right edge */
 #sidePanel { min-width:0; min-height:0; overflow:clip; background:var(--pn); border-left:1px solid var(--cd); display:flex; flex-direction:column; }
 #sideHandle { position:absolute; top:0; bottom:112px; width:36px; z-index:7; cursor:ew-resize; touch-action:none;
@@ -1461,7 +1462,34 @@ const laneLine = { left: dashMat.clone(), right: dashMat.clone() };
 for (let i = -20; i < 20; i++) for (const x of ONE_LANE ? [-1.9, 1.9] : [-1.9, 1.9, 5.7, -5.7]) {
   const mat = x === 1.9 ? laneLine.left : x === -1.9 ? laneLine.right : dashMat;
   const d = new THREE.Mesh(new THREE.PlaneGeometry(x === 1.9 || x === -1.9 ? 0.16 : 0.12, 1.6), mat);
-  d.rotation.x = -Math.PI / 2; d.position.set(x, 0.01, i * 3.2); dashes.add(d);
+  d.rotation.x = -Math.PI / 2; d.rotation.order = 'YXZ'; d.position.set(x, 0.01, i * 3.2); d.userData.x0 = x; dashes.add(d);
+}
+// The lines bend with the steering wheel (as Kinex shows it): they follow the arc the car would
+// drive at the front wheels' angle, curvature tan(angle) / wheelbase, offset kz²/2 at distance z.
+const WHEELBASE = 2.7;
+function bendRoad() {
+  const k = Math.tan(THREE.MathUtils.degToRad(roadWheelAngle())) / WHEELBASE;
+  for (const d of dashes.children) {
+    const z = d.position.z + dashes.position.z;
+    d.position.x = d.userData.x0 + k * z * z / 2;
+    d.rotation.y = Math.atan(k * z);
+  }
+}
+// Only the lines are drawn, no dark road under them. As on a Tesla they end a little behind the car,
+// fading out between 2.5 m and 7 m behind it (front is +z), so they don't run under the cards, and
+// they fade the same way ahead, from 16 m to 34 m, towards the top bar.
+asphalt.visible = false;
+const ROAD_FADE = { near: -2.5, far: -7, ahead: 16, horizon: 34 };
+for (const m of [roadMat, dashMat, laneLine.left, laneLine.right]) {
+  m.transparent = true;
+  m.customProgramCacheKey = () => 'roadFade'; // else three.js reuses the ground's program, unfaded
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'varying float vFadeZ;\n' + sh.vertexShader.replace('#include <project_vertex>',
+      '#include <project_vertex>\n  vFadeZ = (modelMatrix * vec4(transformed, 1.0)).z;');
+    sh.fragmentShader = 'varying float vFadeZ;\n' + sh.fragmentShader.replace('#include <dithering_fragment>',
+      `#include <dithering_fragment>\n  gl_FragColor.a *= smoothstep(${ROAD_FADE.far.toFixed(1)}, ${ROAD_FADE.near.toFixed(1)}, vFadeZ)` +
+      ` * (1.0 - smoothstep(${ROAD_FADE.ahead.toFixed(1)}, ${ROAD_FADE.horizon.toFixed(1)}, vFadeZ));`);
+  };
 }
 
 // ---------- traffic in the next lanes (Tesla draws surrounding cars as plain grey shapes) ----------
@@ -1606,6 +1634,8 @@ const DOOR_OPEN = 1.05, WINDOW_DROP = 0.42, FLAP_OPEN = 1.6;
 const moving = { doors: {}, windows: {}, flap: null, trunk: [], wheels: [], anim: { doors: {}, windows: {}, flap: 0 } };
 // Steering wheel degrees per road-wheel degree, and the road wheels' lock.
 const STEER_RATIO = 14, STEER_MAX = 36, STEER_SIGN = 1;
+/** The front wheels' angle in degrees (+ = left), from the eased steering-wheel angle. */
+const roadWheelAngle = () => THREE.MathUtils.clamp((moving.anim.steer || 0) / STEER_RATIO, -STEER_MAX, STEER_MAX) * STEER_SIGN;
 function animateParts() {
   const a = moving.anim, ease = 0.08;
   for (const k of CORNERS) {
@@ -1620,8 +1650,7 @@ function animateParts() {
   // Front wheels follow the steering wheel: its angle (BODYWORK, degrees) over the steering ratio.
   // Positive is taken as a left turn (ISO); +y turns the wheels' front (+z) towards the car's left (+x).
   a.steer = (a.steer || 0) + ((S.steerAngle || 0) - (a.steer || 0)) * 0.2;
-  const road = THREE.MathUtils.clamp(a.steer / STEER_RATIO, -STEER_MAX, STEER_MAX) * STEER_SIGN;
-  moving.wheels.forEach((w) => { w.rotation.y = THREE.MathUtils.degToRad(road); });
+  moving.wheels.forEach((w) => { w.rotation.y = THREE.MathUtils.degToRad(roadWheelAngle()); });
   // The sunshade rolls back from the front edge of the glass towards the rear.
   if (SHADE.node) {
     a.shade = (a.shade || 0) + (S.sunshade / 100 - (a.shade || 0)) * 0.05;
@@ -2050,9 +2079,13 @@ function resize3d() {
 // never cover it: the rendered image is shifted up by half the cards' height (none when the
 // cards are dragged away).
 let viewShift = 0;
+// Parked, the car sits this much lower than the middle of the space above the cards (asked for on
+// the car: there was room to spare between the car and the music card). Less as the cards go.
+const PARK_LOWER = 70;
 function applyViewShift() {
   const w = box.clientWidth, h = box.clientHeight;
-  if (Math.abs(viewShift) > 0.5) cam.setViewOffset(w, h, 0, viewShift, w, h); else cam.clearViewOffset();
+  const y = viewShift - (S.gear === 'P' ? Math.min(PARK_LOWER, viewShift * 0.65) : 0);
+  if (Math.abs(y) > 0.5) cam.setViewOffset(w, h, 0, y, w, h); else cam.clearViewOffset();
   // Also scale the picture down so the whole car fits in the space left above the cards.
   // Driving, only the shift: the road view should keep its width.
   cam.zoom = h > 0 && S.gear === 'P' ? (h - viewShift * 2) / h : 1;
@@ -2457,14 +2490,16 @@ let embedSyncAt = 0;
 function syncEmbedSoon() {
   try { if (!mapEmbedded && !sidePkg) return; } catch { return; } // layout restored at start, before the map is set up
   clearTimeout(embedSyncAt);
-  embedSyncAt = setTimeout(() => {
-    if (colDrag) return syncEmbedSoon(); // still dragging
-    if (sidePkg) embedSide();
-    if (!mapEmbedded) return;
-    const r = $('map').getBoundingClientRect();
-    if (r.width < 80 || r.height < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
-    else startMapArea();
-  }, 450);
+  embedSyncAt = setTimeout(() => { if (colDrag) syncEmbedSoon(); else syncEmbedNow(); }, 450); // after the layout settles
+}
+function syncEmbedNow() {
+  try { if (!mapEmbedded && !sidePkg) return; } catch { return; }
+  clearTimeout(embedSyncAt);
+  if (sidePkg) embedSide();
+  if (!mapEmbedded) return;
+  const r = $('map').getBoundingClientRect();
+  if (r.width < 80 || r.height < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
+  else startMapArea();
 }
 $('divider').onpointerdown = (e) => {
   colDrag = { x: axisPos(e), w: carW, side: sideW };
@@ -2497,6 +2532,8 @@ addEventListener('pointercancel', endColDrag);
 // Double-tap: normal <-> car full screen; from map full screen it returns to normal.
 $('divider').ondblclick = () => setCarW(carW === CAR_W ? LEN() : CAR_W, true);
 renderer.setAnimationLoop(() => {
+  // The dock overlay has no car or map, and it now stays loaded behind other apps: nothing to run.
+  if (DOCK_ONLY) return;
   if (camAnim) {
     camAnim.t = Math.min(1, camAnim.t + 0.025);
     const k = 1 - Math.pow(1 - camAnim.t, 3);
@@ -2509,6 +2546,7 @@ renderer.setAnimationLoop(() => {
   stepDrive(dt, now);
   if (S.gear === 'D') {
     dashes.position.z = (dashes.position.z - S.speed / 3.6 * dt) % 3.2;
+    bendRoad();
     stepTraffic(dt);
   }
   updateDriveHud();
@@ -2833,9 +2871,15 @@ function blindSpotWanted() {
 const SIG_COL = 520;
 const sigW = { left: 0, right: 0 };
 function setSigCol(side) {
+  // Closing, the column goes at once and the embedded Maps follows in the same moment: sliding it
+  // shut moved the page under Maps for 0.35 s while Maps only caught up 450 ms later (black, then a jump).
+  const closing = !side;
+  if (closing) stage.classList.add('noColAnim');
   sigW.left = side === 'left' ? SIG_COL : 0; sigW.right = side === 'right' ? SIG_COL : 0;
   stage.style.setProperty('--sigL', sigW.left + 'px'); stage.style.setProperty('--sigR', sigW.right + 'px');
-  placeHandles(); syncEmbedSoon(); wake(1500);
+  placeHandles(); wake(1500);
+  if (closing) requestAnimationFrame(() => { stage.classList.remove('noColAnim'); syncEmbedNow(); });
+  else syncEmbedSoon();
 }
 function updateBlindSpot() {
   const cam = $('bsCam');
@@ -4843,7 +4887,7 @@ const CAR_HAL_MAP = {
   // to be calibrated against the cluster on a drive. ENGINE_POWER: kW, -100..300 (regen below 0).
   'Engine 0x44100008': (v) => (realSpeed ? {} : { speed: Math.round(Math.abs(v) * KMH_PER_RPM) }),
   'Engine 0x14400020': (v) => ({ powerKw: v }),
-  'Statistic 0x4A502010': (v) => ({ odo: v }), // STATISTIC_TOTAL_MILEAGE, km
+  'Statistic 0x4A502010': (v) => ({ odo: v / 10 }), // STATISTIC_TOTAL_MILEAGE, 0.1 km (189845 when the getter says 18984)
   // Charging: CHARGING_BATTERY_STATE_* (1 charging, 2 finished, 13 paused, …), the gun
   // (CHARGING_GUN_STATE_CONNECTED_*: 1 none, 2 AC, 3 DC), power in kW and minutes left.
   'Charging 0x34400018': (v) => ({ chargeState: v }),
