@@ -12,6 +12,16 @@ test edilmedi. Yalnızca: (a) masaüstü önizlemede 10 sn'lik bir tanıtım vid
 (c) Kinex'in kilit mekanizması tersine mühendislikle incelendi ve araçta denenmemiş yeni bir
 komut yolu kodda eklendi (aşağıda). **Yeni kodun araçta henüz hiç çalıştırılmadığını unutma.**
 
+## SIRADAKİ (31.10.2026 akşamı, şarj bitmek üzereyken eklendi)
+1. **Navigasyonda adres arama Yunus haritasında (MapLibre):** kullanıcı istedi; Yunus haritası Google Maps gibi kasmıyor.
+2. **Geri viteste BYD'nin tam ekran 360° penceresi** (`com.byd.avc/.AutoVideoActivity`) Yunus'un 2. penceresine küçültülsün.
+   Gömme yöntemi çalışıyor (AppEmbed, `embedApp('side','com.byd.avc',…)` ile denendi, canlı görüntü geldi); R'de sistem onu ana
+   ekranda açıyor, o anda yan pencereye alınması denenmedi (R gerekiyor).
+3. Kameralar (`CarCamera.kt`, `bmmcamera.jar`, "pano_h" = 4 balık gözü yan yana: arka, sol, sağ, ön): sinyal penceresi
+   (dewarp, 3. seçenek) ve yüzen dikiz aynası (arka 55°, aynalı; ön ⇄) araçta kurulu ve push'lu (`63229ff`); dikiz aynası
+   sürüşte gerçek trafikle görülmedi. Kamera izni ADB ile verilir: `pm grant app.yunus.launcher android.permission.CAMERA`.
+   BYD 360° uygulaması açıkken kamera onda olabilir (görüntü gelmezse `am force-stop com.byd.avc`).
+
 ## EN SON DURUM (yeni pencere buradan başlasın)
 
 Araç tarafı 4. oturumun sonundaki halinde, tek ek: `{cmd:"lockViaSetting"}` komutu (madde 6) kullanıcı
