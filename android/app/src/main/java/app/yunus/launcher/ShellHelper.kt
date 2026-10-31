@@ -474,6 +474,9 @@ private object CarWatch {
             // probes for a car in the blind spot (BSD_STATE_HAL, DOW_WARN_LEFT/RIGHT; see YunusCarData),
             // and the cruise control's state and set speed (instrument; 65535 while not in use).
             for (id in intArrayOf(0x41800008, 0x32F0002A, 0x41800018, 0x41800020, 0x41800022)) { val v = fg.invoke(inst, 1038, id) as Int; if (v in 0..15) event("Adas", id, v) }
+            // Search (temporary): the cluster shows the blind-spot warning's side, so some id near the
+            // blind-spot ones may carry it; every id in that range is read, unnamed ones too.
+            for (id in 0x41800000..0x41800040 step 2) { val v = try { fg.invoke(inst, 1038, id) as Int } catch (_: Throwable) { -1 }; if (v in 0..15) event("Adas", id, v) }
             for (id in intArrayOf(0x29600032, 0x2A600008)) { val v = fg.invoke(inst, 1007, id) as Int; event("Instrument", id, if (v in 0..300) v else -1) }
         } catch (t: Throwable) { lightsDead = true; System.err.println("watch lights: ${t.cause ?: t}") }
         if (polls.any { !it.dead } || !lightsDead) main.postDelayed({ poll() }, 1000)

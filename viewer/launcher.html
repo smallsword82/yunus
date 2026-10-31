@@ -5305,6 +5305,12 @@ window.yunusCar = (m) => {
   // charging. Inspect window.YunusCarData to see what the car is actually sending.
   if (m.carHal) {
     const data = (window.YunusCarData = window.YunusCarData || {});
+    // Temporary: changes of the blind-spot ids (Adas 0x418000xx) kept with their time in
+    // localStorage 'adasLog', to find which one carries the warning's side.
+    const ak = m.carHal.dev + ' ' + m.carHal.type;
+    if (ak.startsWith('Adas 0x418') && data[ak] && data[ak].int !== m.carHal.int) {
+      try { const log = JSON.parse(localStorage.getItem('adasLog') || '[]'); log.push(new Date().toTimeString().slice(0, 8) + ' ' + m.carHal.type + '=' + m.carHal.int + ' sig=' + (S.signal || '-')); localStorage.setItem('adasLog', JSON.stringify(log.slice(-300))); } catch {}
+    }
     data[m.carHal.dev + ' ' + m.carHal.type] = m.carHal;
     if (window.__dbg) console.log('carHal', m.carHal);
     const key = m.carHal.dev + ' ' + m.carHal.type, map = CAR_HAL_MAP[key];
