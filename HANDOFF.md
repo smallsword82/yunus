@@ -27,7 +27,7 @@ Bu oturumun son işleri:
    BYD penceresi olursa o da görünmez kalır. Kullanıcı "X ekranda çıkmıyor ama çalışıyor" derse önce bunu düşün
    (`dumpsys window windows` → `mFrame` y<0 mı).
 4. **Şarj portu konumu:** modeldeki soket ön-sol; gerçekte arkaysa `HOT.hCharge`'ı arkaya al.
-5. Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü araçta henüz görülmedi (araç hep park/şarjdaydı).
+5. ~~Park freni bırakılınca 0 geldiği ve takılı kemerin 1 döndüğü~~ — **sürüşte doğrulandı, çalışıyor.**
 
 ## 4. oturumda yapılanlar (hepsi commit'li, araçta doğrulandı)
 
