@@ -51,7 +51,7 @@ class MainActivity : Activity() {
     private var carHal: CarHal? = null
     private lateinit var shell: ShellLink
     private lateinit var embed: AppEmbed
-    private lateinit var sideCam: SideCamera
+    private lateinit var carCam: CarCamera
     private lateinit var volPop: VolumeOverlay
     private lateinit var media: MediaBridge
     private lateinit var bt: BtBridge
@@ -176,11 +176,16 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun recents() { runOnUiThread { edge.hideDock() }; shell.send("recents") }
 
-                // The side camera in the signal window (SideCamera): window rect and its settings (JSON).
+                // The car's cameras (CarCamera): the signal window and the rear-view mirror, each at
+                // a screen rect with its settings (JSON).
                 @JavascriptInterface
-                fun sideCam(x: Int, y: Int, w: Int, h: Int, json: String) = runOnUiThread { sideCam.show(x, y, w, h, json) }
+                fun sideCam(x: Int, y: Int, w: Int, h: Int, json: String) = runOnUiThread { carCam.show("side", x, y, w, h, json) }
                 @JavascriptInterface
-                fun sideCamHide() = runOnUiThread { sideCam.hide() }
+                fun sideCamHide() = runOnUiThread { carCam.hide("side") }
+                @JavascriptInterface
+                fun rearCam(x: Int, y: Int, w: Int, h: Int, json: String) = runOnUiThread { carCam.show("rear", x, y, w, h, json) }
+                @JavascriptInterface
+                fun rearCamHide() = runOnUiThread { carCam.hide("rear") }
 
                 @JavascriptInterface
                 fun mapUnder(under: Boolean) = runOnUiThread { web.translationZ = if (under) 10f else 0f }
@@ -341,7 +346,7 @@ class MainActivity : Activity() {
         contentResolver.registerContentObserver(android.provider.Settings.System.getUriFor(VOICE_KEY), false, voiceObserver)
         voiceLift()
         embed = AppEmbed(this, root, shell)
-        sideCam = SideCamera(this, root) { postToPage(JSONObject().put("sideCamDismissed", true).toString()) }
+        carCam = CarCamera(this, root) { ev -> postToPage(JSONObject().put(ev, true).toString()) } // sideCamDismissed, rearClosed
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
         bt = BtBridge(this, ::postToPage)
@@ -533,7 +538,7 @@ class MainActivity : Activity() {
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
 
 
-    override fun onDestroy() { alive = false; sideCam.close(); contentResolver.unregisterContentObserver(voiceObserver); carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+    override fun onDestroy() { alive = false; carCam.close(); contentResolver.unregisterContentObserver(voiceObserver); carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {

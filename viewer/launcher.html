@@ -2862,8 +2862,8 @@ function setSignal(side, fromCar) {
 $('beamInd').onclick = (e) => { e.stopPropagation(); if (DEVICE) return; S.highBeam = !S.highBeam; refreshCard(); };
 $('sigL').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('left'); };
 $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'); };
-// The car's real side cameras (SideCamera on the device): the four cameras' picture is 1920×1080,
-// front, left, right, rear side by side (sector 0-3). "dewarp" takes the fisheye out: a virtual
+// The car's real side cameras (CarCamera on the device): the four cameras' picture is 1920×1080,
+// rear, left, right, front side by side (sector 0-3). "dewarp" takes the fisheye out: a virtual
 // straight-lens camera looking back along the car, tipped down (the camera's view ends just above
 // the horizon looking back) and mirrored, like a door mirror. The car's rear is at the left camera's
 // left edge and the right camera's right edge (back -1 / 1). Chosen on the car (option 3 of 4).
@@ -2872,6 +2872,15 @@ const SIDE_CAM = {
   left: { mode: 'dewarp', sector: 1, back: -1, yaw: 10, pitch: 40, hfov: 60, mirror: true },
   right: { mode: 'dewarp', sector: 2, back: 1, yaw: 10, pitch: 40, hfov: 60, mirror: true },
 };
+// The rear-view mirror (floating window) from the rear camera (sector 0), or the front one (sector 3)
+// with its switch: the virtual camera looks along the lens's axis tipped up towards the picture's
+// top (the horizon), 90° across. The rear one is mirrored, as a mirror shows the road behind; set
+// on the car by eye.
+const MIRROR_CAM = {
+  rear: { mode: 'dewarp', sector: 0, back: 1, yaw: 90, pitch: 55, hfov: 90, mirror: true, label: 'Arka ⇄' },
+  front: { mode: 'dewarp', sector: 3, back: 1, yaw: 90, pitch: 70, hfov: 90, mirror: false, label: 'Ön ⇄' },
+};
+let mirrorView = 'rear', mirrorShown = false;
 const LIVE_CAM = !!(window.YunusNative && YunusNative.sideCam);
 let sigDismissed = null; // the signal whose camera was closed with a tap: stays closed until released
 function blindSpotWanted() {
@@ -2942,6 +2951,18 @@ $('rearClose').onclick = (e) => { e.stopPropagation(); S.set.rearMirror = false;
 let rearT = 0, rearAt = 0;
 function updateRearCam(now) {
   const el = $('rearCam'), on = S.set.rearMirror && S.gear === 'D' && !!carObj;
+  // On the car the mirror is the live camera in a window of its own (it floats: dragged anywhere,
+  // kept there); it is put up once, at the strip's place, and taken down with the strip.
+  if (LIVE_CAM) {
+    el.classList.remove('show');
+    if (on !== mirrorShown) {
+      mirrorShown = on;
+      if (!on) { YunusNative.rearCamHide(); return; }
+      const [bx, by] = screenRect(box), w = 540, h = 200;
+      YunusNative.rearCam(Math.round(bx + box.clientWidth / 2 - w / 2), Math.round(by + 90), w, h, JSON.stringify(MIRROR_CAM[mirrorView]));
+    }
+    return;
+  }
   el.classList.toggle('show', on);
   if (!on) return;
   bsBox.setFromObject(carObj);
@@ -5032,6 +5053,12 @@ window.yunusCar = (m) => {
     return;
   }
   if (m.redraw) { wake(800); return; } // back in front: draw again
+  if (m.rearClosed) { S.set.rearMirror = false; saveSettings(); mirrorShown = false; return; } // its ✕
+  if (m.rearSwitch) { // front ↔ rear
+    mirrorView = mirrorView === 'rear' ? 'front' : 'rear';
+    if (mirrorShown) { const [bx, by] = screenRect(box); YunusNative.rearCam(Math.round(bx + box.clientWidth / 2 - 270), Math.round(by + 90), 540, 200, JSON.stringify(MIRROR_CAM[mirrorView])); }
+    return;
+  }
   if (m.sideCamDismissed) { sigDismissed = S.signal; updateBlindSpot(); return; } // tapped closed
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
