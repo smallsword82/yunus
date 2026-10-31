@@ -51,6 +51,7 @@ class MainActivity : Activity() {
     private var carHal: CarHal? = null
     private lateinit var shell: ShellLink
     private lateinit var embed: AppEmbed
+    private lateinit var sideCam: SideCamera
     private lateinit var volPop: VolumeOverlay
     private lateinit var media: MediaBridge
     private lateinit var bt: BtBridge
@@ -174,6 +175,12 @@ class MainActivity : Activity() {
                 // The recent apps (BYD's bar with its key is off the screen); the shell sends the key.
                 @JavascriptInterface
                 fun recents() { runOnUiThread { edge.hideDock() }; shell.send("recents") }
+
+                // The side camera in the signal window (SideCamera): window rect and its settings (JSON).
+                @JavascriptInterface
+                fun sideCam(x: Int, y: Int, w: Int, h: Int, json: String) = runOnUiThread { sideCam.show(x, y, w, h, json) }
+                @JavascriptInterface
+                fun sideCamHide() = runOnUiThread { sideCam.hide() }
 
                 @JavascriptInterface
                 fun mapUnder(under: Boolean) = runOnUiThread { web.translationZ = if (under) 10f else 0f }
@@ -334,6 +341,7 @@ class MainActivity : Activity() {
         contentResolver.registerContentObserver(android.provider.Settings.System.getUriFor(VOICE_KEY), false, voiceObserver)
         voiceLift()
         embed = AppEmbed(this, root, shell)
+        sideCam = SideCamera(this, root) { postToPage(JSONObject().put("sideCamDismissed", true).toString()) }
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
         bt = BtBridge(this, ::postToPage)
@@ -523,7 +531,9 @@ class MainActivity : Activity() {
     override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
 
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
-    override fun onDestroy() { alive = false; contentResolver.unregisterContentObserver(voiceObserver); carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
+
+
+    override fun onDestroy() { alive = false; sideCam.close(); contentResolver.unregisterContentObserver(voiceObserver); carHal?.close(); bt.close(); embed.close(); shell.close(); media.close(); volume.close(); status.close(); tts?.shutdown(); web.destroy(); super.onDestroy() }
 
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {

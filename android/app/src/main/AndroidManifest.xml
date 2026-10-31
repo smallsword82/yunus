@@ -3,6 +3,8 @@
 
     <!-- Map tiles and satellite imagery. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The car's cameras in the page (getUserMedia); granted once over ADB (pm grant). -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- The map follows the car's GPS. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

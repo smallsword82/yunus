@@ -2862,9 +2862,23 @@ function setSignal(side, fromCar) {
 $('beamInd').onclick = (e) => { e.stopPropagation(); if (DEVICE) return; S.highBeam = !S.highBeam; refreshCard(); };
 $('sigL').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('left'); };
 $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'); };
+// The car's real side cameras (SideCamera on the device): the four cameras' picture is 1920×1080,
+// front, left, right, rear side by side (sector 0-3). "dewarp" takes the fisheye out: a virtual
+// straight-lens camera looking back along the car, tipped down (the camera's view ends just above
+// the horizon looking back) and mirrored, like a door mirror. The car's rear is at the left camera's
+// left edge and the right camera's right edge (back -1 / 1). Chosen on the car (option 3 of 4).
+// ("flat", rot: the plain camera picture turned 90° and stretched, the earlier view.)
+const SIDE_CAM = {
+  left: { mode: 'dewarp', sector: 1, back: -1, yaw: 10, pitch: 40, hfov: 60, mirror: true },
+  right: { mode: 'dewarp', sector: 2, back: 1, yaw: 10, pitch: 40, hfov: 60, mirror: true },
+};
+const LIVE_CAM = !!(window.YunusNative && YunusNative.sideCam);
+let sigDismissed = null; // the signal whose camera was closed with a tap: stays closed until released
 function blindSpotWanted() {
   if (bsPreview) return true;
-  if (!S.signal || S.gear !== 'D' || S.bsMode === 'off') return false;
+  if (!S.signal) sigDismissed = null;
+  if (S.signal && sigDismissed === S.signal) return false;
+  if (!S.signal || S.gear === 'R' || S.bsMode === 'off') return false; // parked too (asked on the car), not reversing
   return S.bsMode === 'always' || S.speed < 30;
 }
 // Trial: the signal's side view as a column at that edge (landscape); the map gives up the room.
@@ -2898,12 +2912,23 @@ function updateBlindSpot() {
       $('sigTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
       $('sigPane').classList.add('show');
       if (!PORTRAIT) setSigCol(bsSide); // landscape: a column; upright it slides over the edge
+      // The live camera goes where the window is, once it has opened (the column slides in).
+      if (LIVE_CAM) {
+        const side = bsSide;
+        clearTimeout(sideCamAt);
+        sideCamAt = setTimeout(() => {
+          if (bsSide !== side || !$('sigPane').classList.contains('show')) return;
+          const [x, y, w, h] = screenRect($('sigPane'));
+          YunusNative.sideCam(x, y, w, h, JSON.stringify(SIDE_CAM[side]));
+        }, PORTRAIT ? 400 : 380);
+      }
     }
     if (!bsRaf) bsRaf = requestAnimationFrame(drawBlindSpot);
   } else if (cam.classList.contains('show') && !bsHideTimer) {
     // Tesla keeps the view up briefly after the stalk is released.
-    const delay = S.gear === 'D' ? 2000 : 0;
+    const delay = S.gear === 'D' && !sigDismissed ? 2000 : 0; // closed with a tap: at once
     bsHideTimer = setTimeout(() => {
+      if (LIVE_CAM) { clearTimeout(sideCamAt); YunusNative.sideCamHide(); }
       cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null;
       if (sigW.left || sigW.right) setSigCol(null);
     }, delay);
@@ -3052,7 +3077,10 @@ function paintSideView(c, W, H, flip) {
   const gx = flip ? W * 0.3 : W * 0.7;
   c.beginPath(); c.moveTo(gx, H); c.lineTo(flip ? W * 0.45 : W * 0.55, H * 0.55); c.stroke();
 }
+let sideCamAt = 0;
 function drawBlindSpot() {
+  // The car's own camera is drawn natively in the edge window; nothing to paint here then.
+  if (LIVE_CAM && S.set.sigEdge && !bsPreview) { bsRaf = null; return; }
   const flip = bsSide === 'right';
   bsT += (DEVICE ? 0 : 0.004) + S.speed * 0.00025; // a drawing, not a camera: on the device it moves only with speed
   paintSideView(bsCtx, 672, 400, flip);
@@ -5004,6 +5032,7 @@ window.yunusCar = (m) => {
     return;
   }
   if (m.redraw) { wake(800); return; } // back in front: draw again
+  if (m.sideCamDismissed) { sigDismissed = S.signal; updateBlindSpot(); return; } // tapped closed
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
     // At power-on the shell helper comes up a few seconds late (wireless ADB starts late). Keep the
