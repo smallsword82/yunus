@@ -2550,10 +2550,10 @@ function setSideTab(t) {
   });
 }
 function renderSideTabs() {
-  $('sideTabs').style.display = TABS() ? '' : 'none';
+  $('sideTabs').style.display = PORTRAIT ? 'none' : ''; // always there in landscape: a tab switches to the tabbed layout
   $('tabApp').innerHTML = `<i class="ti ti-apps"></i>${$('sidePanel').classList.contains('appOpen') ? $('sideTitle').textContent : 'Uygulamalar'}`;
-  $('tabMap').classList.toggle('on', sideTab === 'map');
-  $('tabApp').classList.toggle('on', sideTab === 'app');
+  $('tabMap').classList.toggle('on', TABS() && sideTab === 'map');
+  $('tabApp').classList.toggle('on', TABS() && sideTab === 'app');
 }
 const appTabOn = () => TABS() && sideTab === 'app';
 // Whenever car, map and side window are all showing, give each a third of the screen.
@@ -3993,8 +3993,9 @@ placeHandles();
 renderSideTabs();
 renderLayoutSeg();
 $('layoutSeg').onclick = (e) => { const b = e.target.closest('[data-layout]'); if (b) setLayout(b.dataset.layout); };
-$('tabMap').onclick = () => setSideTab('map');
-$('tabApp').onclick = () => { fillSideApps(); setSideTab('app'); };
+// Outside the tabbed layout a tab first switches to it.
+$('tabMap').onclick = () => { if (!TABS()) setLayout('tabs'); setSideTab('map'); };
+$('tabApp').onclick = () => { if (!TABS()) setLayout('tabs'); fillSideApps(); setSideTab('app'); };
 // On the device the third window lists the real apps (filled the first time it opens: reading the
 // icons takes a moment) and runs the chosen one inside the window, like Google Maps in the map
 // area (AppEmbed slot "side"). The preview keeps its stand-ins.
