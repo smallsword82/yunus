@@ -9,6 +9,10 @@
      (shipped Chrome 99). Polyfill it before any script runs. Accepts a number or a 1-4
      element radii array [tl, tr, br, bl], matching the spec. -->
 <script>
+// On the car the map area is the chosen navigation app (Google Maps) unless Yunus's own map is the
+// chosen one: from the first paint, Yunus's map controls (the "Nereye gidiyoruz?" card and the
+// rest) are hidden and the area waits for the app, instead of showing them until Maps comes.
+try { if (window.YunusNative && (JSON.parse(localStorage.getItem('settings') || '{}').navApp || '') !== 'yunus') document.documentElement.classList.add('mapsIn'); } catch {}
 if (!CanvasRenderingContext2D.prototype.roundRect) {
   CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
     if (typeof r === 'number') r = [r, r, r, r];
@@ -571,7 +575,7 @@ button { font-family:inherit; color:inherit; }
 #mapWrap { position:relative; overflow:clip; }
 /* With the car's Maps in the map area, Yunus's own map controls (search, recent place, buttons)
    are not shown: they would only appear while Maps steps aside for a pop-up. */
-#stage.mapsIn #mapWrap > .floating { display:none !important; }
+#stage.mapsIn #mapWrap > .floating, html.mapsIn #mapWrap > .floating { display:none !important; }
 /* …and the page is see-through there, for Maps to show through under a pop-up (see popTouch). */
 html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.mapsIn #map { background:transparent; }
 #carPanel { overflow:clip; }
@@ -3348,7 +3352,7 @@ function startMapArea() {
 let mapRetry = 0;
 function mapEmbedFailed() {
   if (!mapEmbedded) return;
-  mapEmbedded = false; mapsIn(false);
+  mapEmbedded = false; // Yunus's map controls stay hidden (mapsIn): it isn't the chosen app
   YunusNative.embedVisible('map', false);
   $('map').dataset.wait = 'Navigasyon uygulaması bulunamadı';
   clearTimeout(mapRetry);
