@@ -161,6 +161,8 @@ class MainActivity : Activity() {
                 // Hides a slot while a Yunus card covers its area, and shows it again after.
                 @JavascriptInterface
                 fun embedVisible(slot: String, visible: Boolean) = runOnUiThread { embed.setVisible(slot, visible) }
+                @JavascriptInterface
+                fun embedShift(slot: String, dx: Int, cut: Int) = runOnUiThread { embed.shift(slot, dx, cut) }
 
                 // While a Yunus pop-up over the map is open the page is raised above the embedded apps
                 // (it is see-through there), so the pop-up shows over live Maps; after, Maps is on
@@ -186,6 +188,8 @@ class MainActivity : Activity() {
                 fun rearCam(x: Int, y: Int, w: Int, h: Int, json: String) = runOnUiThread { carCam.show("rear", x, y, w, h, json) }
                 @JavascriptInterface
                 fun rearCamHide() = runOnUiThread { carCam.hide("rear") }
+                @JavascriptInterface
+                fun camWarm(on: Boolean) = runOnUiThread { carCam.warm(on) }
 
                 @JavascriptInterface
                 fun mapUnder(under: Boolean) = runOnUiThread { web.translationZ = if (under) 10f else 0f }
@@ -345,7 +349,7 @@ class MainActivity : Activity() {
         if (!isDefaultHome(this) && wantHome(this)) shell.send("home yunus")
         contentResolver.registerContentObserver(android.provider.Settings.System.getUriFor(VOICE_KEY), false, voiceObserver)
         voiceLift()
-        embed = AppEmbed(this, root, shell)
+        embed = AppEmbed(this, root, shell) { ev -> postToPage(JSONObject().put(ev, true).toString()) } // sideBack, sideClose
         carCam = CarCamera(this, root) { ev -> postToPage(JSONObject().put(ev, true).toString()) } // sideCamDismissed, rearClosed
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
@@ -485,6 +489,9 @@ class MainActivity : Activity() {
 
     private fun hideSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Up to the top edge, where the hidden status bar was (Android 14 otherwise starts the window below it).
+        if (android.os.Build.VERSION.SDK_INT >= 30 && window.attributes.layoutInDisplayCutoutMode != android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS)
+            window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS }
         // On the car BYD's bars are pushed off the screen (wm overscan 0,-84,0,-90): then they are
         // left "shown" up there, out of sight, so a swipe shows nothing and the helper can pull the
         // status bar there to open the quick panel. Elsewhere they are hidden as usual.
@@ -568,13 +575,35 @@ class MainActivity : Activity() {
  * the display by the shell helper (`am start --display <id>`; the shell may launch onto a display
  * it does not own) and touches on the view are injected into that display by the same helper.
  */
-private class AppEmbed(private val activity: Activity, private val root: android.widget.FrameLayout, private val shell: ShellLink) {
+private class AppEmbed(private val activity: Activity, private val root: android.widget.FrameLayout, private val shell: ShellLink,
+                       private val onEvent: (String) -> Unit) {
     private class Slot(val view: android.view.TextureView) {
         var display: android.hardware.display.VirtualDisplay? = null
         var component: String? = null // the app shown, so a different one can replace it
         val displayId get() = display?.display?.displayId ?: -1
+        var keys: List<android.view.View> = emptyList() // the third window's floating back and close keys
     }
     private val slots = HashMap<String, Slot>()
+    private val KEY = 60 // px, the floating keys' size
+
+    // The third window's back (to Yunus's app list, the app keeps running) and close keys float over
+    // the app's top corners: the page can't draw over an embedded app. Kept as separate views on the
+    // root, above the app's view (moving that view into a box would blank it).
+    private fun sideKeys(): List<android.view.View> = listOf("←" to "sideBack", "✕" to "sideClose").map { (glyph, ev) ->
+        android.widget.TextView(activity).apply {
+            text = glyph; textSize = 15f; gravity = android.view.Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0x8C000000.toInt()) }
+            setOnClickListener { onEvent(ev) } // added after the app's view, so above it; a card (web raised) still covers both
+            root.addView(this, android.widget.FrameLayout.LayoutParams(KEY, KEY))
+        }
+    }
+    private fun placeKeys(slot: Slot, x: Int, y: Int, w: Int) {
+        val (back, close) = slot.keys
+        back.layoutParams = android.widget.FrameLayout.LayoutParams(KEY, KEY).apply { leftMargin = x + 12; topMargin = y + 12 }
+        close.layoutParams = android.widget.FrameLayout.LayoutParams(KEY, KEY).apply { leftMargin = x + w - 12 - KEY; topMargin = y + 12 }
+    }
+    private fun showKeys(slot: Slot, on: Boolean) { for (k in slot.keys) { k.visibility = if (on) android.view.View.VISIBLE else android.view.View.GONE; k.translationX = 0f } }
 
     /** Shows [packages]' first installed app in slot [name] at x,y size w×h (screen pixels). */
     fun show(name: String, packages: List<String>, x: Int, y: Int, w: Int, h: Int, onReady: (Int) -> Unit) {
@@ -584,10 +613,13 @@ private class AppEmbed(private val activity: Activity, private val root: android
             Slot(android.view.TextureView(activity)).also { s ->
                 root.addView(s.view)
                 s.view.setOnTouchListener { _, ev -> shell.send(touchLine(s.displayId, ev)); true }
+                if (name == "side") s.keys = sideKeys()
             }
         }
         slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
+        slot.view.translationX = 0f; slot.view.clipBounds = null // placed for real: no shift (see shift)
         slot.view.visibility = android.view.View.VISIBLE
+        if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
         val dpi = activity.resources.displayMetrics.densityDpi
         val component = launch.flattenToShortString()
         // The helper stops the app's task elsewhere first; otherwise that task would just come to
@@ -639,14 +671,31 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (slot.displayId > 0) shell.send("close ${slot.displayId}")
         slot.component = null
         slot.view.visibility = android.view.View.GONE
+        showKeys(slot, false)
     }
 
     fun setVisible(name: String, visible: Boolean) {
-        slots[name]?.view?.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        val slot = slots[name] ?: return
+        slot.view.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        showKeys(slot, visible)
+    }
+
+    /**
+     * Moves slot [name] sideways by [dx] px and cuts [cut] px off its right side, without resizing
+     * it (resizing makes the app redraw): the map area for a moment narrower, the third window or a
+     * column at its right not covered.
+     */
+    fun shift(name: String, dx: Int, cut: Int) {
+        val slot = slots[name] ?: return
+        val v = slot.view
+        v.translationX = dx.toFloat()
+        slot.keys.firstOrNull()?.translationX = dx.toFloat() // the close key sits on the cut-off side: hidden while cut
+        slot.keys.getOrNull(1)?.visibility = if (cut > 0 || v.visibility != android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
+        v.clipBounds = if (cut > 0) android.graphics.Rect(0, 0, (v.width - cut).coerceAtLeast(0), v.height) else null
     }
 
     fun close() {
-        for (s in slots.values) { s.display?.release(); root.removeView(s.view) }
+        for (s in slots.values) { s.display?.release(); root.removeView(s.view); s.keys.forEach(root::removeView) }
         slots.clear()
     }
 

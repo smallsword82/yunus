@@ -47,6 +47,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     private var gl: Renderer? = null
     private val windows = HashMap<String, Win>()
     private val idle = Runnable { close() }
+    private var warm = false
 
     private inner class Win(val name: String) {
         val box = FrameLayout(activity)
@@ -74,12 +75,27 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         renderer() // starts the camera when the first window comes up
     }
 
-    /** Hides window [name]; the camera is let go 30 s after the last window went. */
+    /** Hides window [name]; the camera is let go 30 s after the last window went (unless kept warm). */
     fun hide(name: String) {
         val win = windows[name] ?: return
         win.visible = false
         win.box.visibility = View.GONE
-        if (windows.values.none { it.visible }) { root.removeCallbacks(idle); root.postDelayed(idle, IDLE_CLOSE_MS) }
+        idleLater()
+    }
+
+    /**
+     * Keeps the camera running while driving (the page asks in D and R), so a signal's window shows
+     * a picture at once: opening the camera and its first frame took a moment on the car. Frames
+     * are only taken from it, not drawn, while no window is up.
+     */
+    fun warm(on: Boolean) {
+        warm = on
+        if (on) { root.removeCallbacks(idle); renderer() } else idleLater()
+    }
+
+    private fun idleLater() {
+        root.removeCallbacks(idle)
+        if (!warm && windows.values.none { it.visible }) root.postDelayed(idle, IDLE_CLOSE_MS)
     }
 
     fun close() {

@@ -119,9 +119,47 @@ input { user-select:text; -webkit-user-select:text; }
 #sideApps { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:26px 6px; padding:14px 18px; overflow-y:auto; }
 #sideApp { flex:1; margin:8px 18px 18px; border-radius:18px; background:var(--cd); display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; text-align:center; color:var(--mu); font-size:20px; padding:20px; }
 #sideApp .big { width:120px; height:120px; border-radius:28px; display:flex; align-items:center; justify-content:center; font-size:64px; color:#fff; }
+/* An app open: no title, only a thin strip with small back and close keys, so the app gets the room. */
+#sidePanel.appOpen .sideHead { padding:4px 10px; }
+#sidePanel.appOpen #sideTitle { display:none; }
+#sidePanel.appOpen .sideHead button { width:36px; height:36px; font-size:20px; }
+#sidePanel.appOpen #sideApp { margin:0 10px 10px; }
+/* On the car the keys float over the app (AppEmbed): no header at all, or under the map only a thin
+   strip that holds the window's drag handle. */
+html.nativeKeys #sidePanel.appOpen .sideHead { display:none; }
+html.nativeKeys #sidePanel.appOpen #sideApp { margin:10px; }
+html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px; }
+#stage.stack #sideHandle { height:28px; }
+#stage.tabbed #sidePanel.appOpen #sideApp { margin:0; border-radius:0; } /* the app's tab: edge to edge */
 #sidePanel.appOpen #sideApps { display:none; }
 #sidePanel.appOpen #sideApp { display:flex; }
 #stage.dragging { transition:none; }
+/* Landscape, third window under the map (setting stackSide): map and third window share the
+   right column, so a signal column narrows both and neither goes away. --sideW is then its height. */
+#stage.stack { grid-template-columns:var(--sigL, 0px) var(--carW, 720px) 1fr 0px var(--sigR, 0px); grid-template-rows:minmax(0, 1fr) var(--sideW, 0px) 112px;
+  transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1), grid-template-rows .35s cubic-bezier(.2,.8,.2,1); }
+#stage.stack.dragging, #stage.stack.noColAnim { transition:none; }
+#stage.stack:not(.portrait) #carPanel { grid-row:1 / 3; }
+#stage.stack:not(.portrait) #sidePanel { grid-column:3; grid-row:2; border-left:0; border-top:1px solid var(--cd); }
+#stage.stack #dock { grid-row:3; }
+#stage.stack #sideHandle { width:auto; height:36px; bottom:auto; cursor:ns-resize; transition:top .35s cubic-bezier(.2,.8,.2,1), left .35s, right .35s; }
+#stage.stack.dragging #sideHandle { transition:none; }
+#stage.stack #sideHandle div { width:110px; height:8px; }
+/* Landscape, tabbed right area (setting tabSide): the third window takes the map's place under the
+   status bar, switched with the tabs there; the map and the app never show together. */
+#stage.tabbed { grid-template-columns:var(--sigL, 0px) var(--carW, 720px) 1fr 0px var(--sigR, 0px); }
+#stage.tabbed:not(.portrait) #sidePanel { grid-column:3; grid-row:1; position:relative; z-index:3; margin-top:56px; border-left:0; display:none; }
+#stage.tabbed.appTab:not(.portrait) #sidePanel { display:flex; }
+#stage.tabbed #sideHandle { display:none; }
+#layoutSeg { display:flex; margin:0 20px 0 0; background:var(--cd2); border-radius:22px; padding:3px; }
+#topBar #sideTabs[style*="none"] + #layoutSeg { margin-left:auto; } /* no tabs: the keys sit where they would */
+#layoutSeg button { border:0; background:transparent; width:44px; height:38px; border-radius:19px; font-size:23px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--mu); }
+#layoutSeg button.on { background:var(--cd); color:var(--tx); box-shadow:0 1px 4px rgba(0,0,0,.18); }
+#stage.portrait #layoutSeg { display:none; } /* upright the windows always stack */
+#sideTabs { display:flex; margin:0 14px 0 auto; background:var(--cd2); border-radius:24px; padding:4px; }
+#sideTabs button { border:0; background:transparent; font-size:21px; font-weight:500; padding:6px 18px; border-radius:20px; display:flex; align-items:center; cursor:pointer; white-space:nowrap; max-width:300px; overflow:hidden; }
+#sideTabs button i { margin-right:8px; }
+#sideTabs button.on { background:var(--cd); box-shadow:0 1px 4px rgba(0,0,0,.18); }
 /* Portrait (the Dolphin's screen turned upright, 1080×1920): the windows stack, car on top, then
    the map, the third window and the dock. The same sizes (--carW, --sideW) become heights and the
    handles lie across; the dock takes two rows (climate, then apps and volume). */
@@ -406,6 +444,10 @@ button { font-family:inherit; color:inherit; }
    the left, Wi-Fi and cellular on the right); the map, Google Maps included, starts below it. */
 #topBar { position:absolute; top:0; left:0; right:0; height:56px; display:flex; align-items:center; padding:0 28px; font-size:25px; font-weight:500; background:var(--pn); color:var(--tx); z-index:4; }
 #topBar > * + * { margin-left:26px; }
+/* Landscape: from the car column's edge to the screen's right edge (a signal camera column aside). */
+#stage:not(.portrait) #topBar { left:calc(var(--sigL, 0px) + var(--carW, 720px)); right:var(--sigR, 0px); overflow:hidden; transition:left .35s cubic-bezier(.2,.8,.2,1); }
+#stage.dragging #topBar, #stage.noColAnim #topBar { transition:none; }
+#stage:not(.portrait):not(.stack):not(.tabbed) #sidePanel { margin-top:56px; } /* side by side: under the bar */
 #topBar { touch-action:none; } /* pulled down for the car's quick panel */
 #topBar #outTemp { color:var(--tx); }
 #lockInd { font-size:30px; cursor:pointer; padding:8px 2px; }
@@ -488,6 +530,12 @@ button { font-family:inherit; color:inherit; }
 #chargeInfo .ciUnit { font-size:24px; color:var(--ok); font-weight:400; }
 #chargeInfo .ciMeta { display:block; margin-top:4px; font-size:20px; color:var(--mu); white-space:nowrap; min-height:24px; }
 #stage.driving #chargeInfo { display:none; } /* the trial's edge pane shows instead */
+/* Where the car's live side camera goes (CarCamera draws it there): the signal column's place
+   (upright: over the edge). Never seen itself. */
+#sigSpot { position:absolute; top:0; bottom:112px; left:0; width:520px; visibility:hidden; pointer-events:none; }
+#sigSpot.right { left:auto; right:0; }
+#stage.portrait #sigSpot { top:140px; bottom:auto; height:370px; width:620px; left:24px; }
+#stage.portrait #sigSpot.right { left:auto; right:24px; }
 #sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:#000;
   box-shadow:0 16px 48px rgba(0,0,0,.55); transform:translateX(-110%); transition:transform .35s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
 #sigPane.right { left:auto; right:0; transform:translateX(110%); }
@@ -501,6 +549,7 @@ button { font-family:inherit; color:inherit; }
 #stage:not(.portrait) #sigPane { position:relative; grid-row:1; grid-column:1; top:auto; left:auto; right:auto; width:auto; height:auto; min-width:0; align-self:stretch;
   transform:none; border-radius:0; box-shadow:none; z-index:auto; display:flex; align-items:center; }
 #stage:not(.portrait) #sigPane.right { grid-column:5; }
+#stage.stack:not(.portrait) #sigPane { grid-row:1 / 3; } /* beside both the map and the third window */
 #stage:not(.portrait) #sigPane canvas { height:100%; } /* drawn at the column's own size */
 
 /* seats */
@@ -915,6 +964,10 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
       <div id="outTemp">18°C</div>
       <!-- The driver, as the car's own status bar shows the signed-in user: photo (or initial) and name. -->
       <div id="profile"><span id="profPic"></span><span id="profName"></span></div>
+      <!-- Tabbed right area (setting tabSide): the map or the app, one at a time. -->
+      <div id="sideTabs" style="display:none"><button id="tabMap" class="on"><i class="ti ti-map"></i>Harita</button><button id="tabApp"><i class="ti ti-apps"></i>Uygulamalar</button></div>
+      <!-- How the map and the third window share the right side: side by side, one under the other, or tabs. -->
+      <div id="layoutSeg"><button data-layout="cols" aria-label="Yan yana"><i class="ti ti-layout-columns"></i></button><button data-layout="stack" aria-label="Alt alta"><i class="ti ti-layout-rows"></i></button><button data-layout="tabs" aria-label="Sekmeli"><i class="ti ti-layout-navbar"></i></button></div>
       <!-- An icon shows only when there is that link (the car's own status bar is hidden while
            Yunus runs full screen). -->
       <div id="netStat"><i id="locInd" class="ti ti-location-filled hide"></i><i id="btInd" class="ti ti-bluetooth hide"></i><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span><span id="bellInd"><i class="ti ti-bell"></i><b id="bellCount"></b></span></div>
@@ -993,6 +1046,7 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
   <div id="srcPop" role="dialog"></div>
   <div id="volPop"><i class="ti ti-volume"></i><div class="track"><div class="fill"></div><div class="knob"></div></div></div>
   <!-- Trial ("Sinyalde kenardan kamera penceresi"): the side view slides in from the signal's edge. -->
+  <div id="sigSpot"></div>
   <div id="sigPane"><canvas id="sigCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="sigArrow"></i><span id="sigTxt">Sol kamera</span></div></div>
   <!-- The app tray, as in Tesla: over all windows, in the middle, just above the dock. -->
   <div id="appTray" role="dialog" aria-label="Uygulamalar">
@@ -1136,7 +1190,7 @@ const SETTING_DEFAULTS = {
   mapArea: 'map', navApp: '', bt: true, wifi: true, hotspot: false,
   projector: 'yunus', projAlways: true, projAuto: false,
   speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
-  rearMirror: true, sigEdge: false,
+  rearMirror: true, sigEdge: false, stackSide: false, tabSide: false,
   driverName: '', petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: true, fps: false, isHome: false,
 };
 S.set = { ...SETTING_DEFAULTS };
@@ -1364,11 +1418,13 @@ function fit() {
   if (portrait !== PORTRAIT) {
     PORTRAIT = portrait;
     stage.classList.toggle('portrait', portrait);
-    // The status bar: across the top upright, over the map in landscape.
-    const bar = document.getElementById('topBar'), wrap = document.getElementById('mapWrap');
-    if (portrait) stage.insertBefore(bar, stage.firstChild); else wrap.insertBefore(bar, wrap.firstChild);
     try { relayout(); } catch {} // not yet on the first fit: the layout code is set up later
   }
+  // The status bar: across the top upright; in landscape over the map and the third window together
+  // (not inside the map's column, so it keeps its width when the third window opens).
+  const bar = document.getElementById('topBar'), wrap = document.getElementById('mapWrap');
+  if (PORTRAIT) { if (stage.firstChild !== bar) stage.insertBefore(bar, stage.firstChild); }
+  else if (wrap.nextElementSibling !== bar) wrap.after(bar);
   // Revealed only once the correct scale is applied, so the stage never flashes at the wrong
   // (unscaled 1920x1080) size before the fit on load.
   stage.style.visibility = 'visible';
@@ -1558,6 +1614,7 @@ const DEV = location.hash === '#debug';
 // On the head unit (or the emulator) the app is there: real data and the car's own screens only,
 // none of the desktop preview's demo content or demo taps.
 const DEVICE = !!window.YunusNative;
+document.documentElement.classList.toggle('nativeKeys', DEVICE); // the third window's keys float over its app
 // Tyre pressures come from the car (Tyre device); until it reports them the card shows "—".
 if (DEVICE) S.tyres = { FL: null, FR: null, RL: null, RR: null };
 S.tyreState = {}; // TYRE_PRESSURE_STATE_*: 0 normal, 1 over, 2 under
@@ -1606,7 +1663,7 @@ function onCarLoaded(gltf) {
   // Move the charge cable to the model's real charge socket (its geometry centre in world space).
   const chargeSocket = car.getObjectByName('ChargeSocket') || car.getObjectByName('ChargeFlap');
   if (chargeSocket) { new THREE.Box3().setFromObject(chargeSocket).getCenter(HOT.hCharge); buildChargeGear(); }
-  if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, get map() { return map; } };
+  if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, applyStack, openSideApp, get map() { return map; }, setSideW, onFix, get myPos() { return myPos; }, get mapFollow() { return mapFollow; } };
   placePlates(car);
   controls.target.copy(target);
   cam.position.copy(presetPos(PRESETS.default));
@@ -2444,10 +2501,64 @@ const CAR_W = 720;
 const LEN = () => (PORTRAIT ? 1920 - 224 - 48 : 1920); // upright: less the dock's two rows and the status bar
 const THIRDS = () => (PORTRAIT ? Math.round(LEN() / 3) : 640);
 const axisPos = (e) => (PORTRAIT ? e.clientY : e.clientX);
+// Landscape with the third window under the map (setting): its size is then a height, and the car
+// column no longer shares the width with it.
+const TABS = () => !PORTRAIT && !!S.set.tabSide;
+const STACK = () => !PORTRAIT && !!S.set.stackSide && !S.set.tabSide;
+const STACK_H = 1080 - 112; // the map column's height above the dock
+const sideAxis = (e) => (STACK() ? e.clientY : axisPos(e));
 let carW = CAR_W, colDrag = null;
-const carSnaps = (side) => (side > 0 ? [0, THIRDS(), LEN() - side] : [0, CAR_W, LEN()]);
+const carSnaps = (side) => (side > 0 && !STACK() ? [0, THIRDS(), LEN() - side] : [0, CAR_W, LEN()]);
+// A new layout keeps the third window open (with its app) when it was open.
+function applyStack() {
+  const open = sideW > 0 || sideTab === 'app' || !!sidePkg;
+  if (sidePkg) YunusNative.embedVisible('side', false);
+  stage.classList.add('noColAnim'); // straight to the new layout, no sliding between unlike grids
+  requestAnimationFrame(() => requestAnimationFrame(() => stage.classList.remove('noColAnim')));
+  stage.classList.toggle('stack', STACK());
+  stage.classList.toggle('tabbed', TABS());
+  sideTab = 'map';
+  if ((STACK() || TABS()) && carW === THIRDS()) setCarW(CAR_W, true); // the side-by-side thirds no longer apply
+  setSideW(open && !TABS() ? sideSnaps()[1] : 0, true);
+  setSideTab(open && TABS() ? 'app' : 'map');
+  normalizeLayout();
+  renderLayoutSeg();
+  syncEmbedSoon();
+}
+const layoutNow = () => (S.set.tabSide ? 'tabs' : S.set.stackSide ? 'stack' : 'cols');
+function renderLayoutSeg() {
+  document.querySelectorAll('#layoutSeg button').forEach((b) => b.classList.toggle('on', b.dataset.layout === layoutNow()));
+}
+function setLayout(k) {
+  if (k === layoutNow()) return;
+  S.set.tabSide = k === 'tabs'; S.set.stackSide = k === 'stack';
+  saveSettings();
+  applyStack();
+}
+// Tabbed right area: which one shows, the map or the third window (its app list or app).
+let sideTab = 'map';
+function setSideTab(t) {
+  sideTab = t;
+  stage.classList.toggle('appTab', TABS() && t === 'app');
+  renderSideTabs();
+  wake(800);
+  requestAnimationFrame(() => {
+    try {
+      if (TABS() && t === 'app') { YunusNative.embedVisible('map', false); if (sidePkg) embedSide(); }
+      else syncEmbedNow(); // the map back (the app's tab hides itself in embedSide)
+    } catch {}
+  });
+}
+function renderSideTabs() {
+  $('sideTabs').style.display = TABS() ? '' : 'none';
+  $('tabApp').innerHTML = `<i class="ti ti-apps"></i>${$('sidePanel').classList.contains('appOpen') ? $('sideTitle').textContent : 'Uygulamalar'}`;
+  $('tabMap').classList.toggle('on', sideTab === 'map');
+  $('tabApp').classList.toggle('on', sideTab === 'app');
+}
+const appTabOn = () => TABS() && sideTab === 'app';
 // Whenever car, map and side window are all showing, give each a third of the screen.
 function normalizeLayout() {
+  if (STACK()) return;
   if (carW > 0 && sideW > 0 && LEN() - carW - sideW > 0) { setSideW(THIRDS(), true); setCarW(THIRDS(), true); }
 }
 // After turning the screen: sizes kept within the new length, handles moved across, the embedded
@@ -2464,7 +2575,9 @@ function balanceDock() {
 function relayout() {
   const car = carW >= 1900 || carW >= LEN() ? LEN() : Math.min(carW, LEN());
   setCarW(car, true);
-  setSideW(Math.min(sideW, LEN() - car), true);
+  stage.classList.toggle('stack', STACK());
+  stage.classList.toggle('tabbed', TABS());
+  setSideW(STACK() ? sideW : Math.min(sideW, LEN() - car), true);
   normalizeLayout();
   placeHandles();
   syncEmbedSoon();
@@ -2479,13 +2592,15 @@ function setCarW(w, animate) {
   stage.classList.toggle('car-wide', w > 1000 && !PORTRAIT);
   if (w >= LEN() && current) closeCard();
   // The side window can't be wider than what the car column leaves.
-  if (sideW > LEN() - w) setSideW(LEN() - w, animate);
+  if (!STACK() && sideW > LEN() - w) setSideW(LEN() - w, animate);
   else placeHandles();
   syncEmbedSoon();
   setTimeout(fitCard, 400); // after the columns' transition
 }
 // The embedded navigation app follows the map area: hidden while a divider is dragged (resizing
 // its display every frame would stutter), then fitted to the new area once the layout settles.
+// The map follows the car (as Tesla's does) until it is dragged; Konumuma dön or a route turns it back on.
+let mapFollow = true;
 let embedSyncAt = 0;
 function syncEmbedSoon() {
   try { if (!mapEmbedded && !sidePkg) return; } catch { return; } // layout restored at start, before the map is set up
@@ -2495,10 +2610,10 @@ function syncEmbedSoon() {
 function syncEmbedNow() {
   try { if (!mapEmbedded && !sidePkg) return; } catch { return; }
   clearTimeout(embedSyncAt);
-  if (sidePkg) embedSide();
-  if (!mapEmbedded) return;
+  if (sidePkg && !sigSideTaken) embedSide(); // lent to a signal column: hidden till it closes
+  if (!mapEmbedded || ((sigW.left || sigW.right) && !STACK() && !TABS())) return; // a signal column: Maps is shifted, not resized
   const r = $('map').getBoundingClientRect();
-  if (r.width < 80 || r.height < 80 || current) YunusNative.embedVisible('map', false); // map area closed, or a card over it
+  if (r.width < 80 || r.height < 80 || current || appTabOn()) YunusNative.embedVisible('map', false); // map area closed, a card over it, or the app's tab
   else startMapArea();
 }
 $('divider').onpointerdown = (e) => {
@@ -2571,7 +2686,7 @@ renderer.setAnimationLoop(() => {
   }
   // Width and height: in portrait the map window changes height when the windows are resized.
   const mapW = $('mapWrap').clientWidth, mapH = $('mapWrap').clientHeight;
-  if (mapW !== lastBox.map || mapH !== lastBox.mapH) { lastBox.map = mapW; lastBox.mapH = mapH; map && mapW > 10 && map.resize(); }
+  if (mapW !== lastBox.map || mapH !== lastBox.mapH) { lastBox.map = mapW; lastBox.mapH = mapH; if (map && mapW > 10) { map.resize(); if (mapFollow && myPos && !NAV.active) map.jumpTo({ center: myPos }); } }
   stepViewShift();
   // Performance mode: the 3D view is only drawn while something in it moves (camera, a part
   // easing open or shut, blinking lamps, the road while driving), at most 30 times a second.
@@ -2834,6 +2949,8 @@ function reverseView(g) {
 }
 function setGear(g) {
   reverseView(g);
+  // The camera is kept running while driving, so the signal's window has its picture at once.
+  if (window.YunusNative && YunusNative.camWarm && (g === 'D' || g === 'R') !== (S.gear === 'D' || S.gear === 'R')) YunusNative.camWarm(g === 'D' || g === 'R');
   S.gear = g;
   [...$('gears').children].forEach((s) => s.classList.toggle('on', s.textContent === g));
   const driving = g === 'D' || g === 'R';
@@ -2848,8 +2965,9 @@ function setGear(g) {
   SIM.nextTarget = 0;
   if (!driving) S.speed = 0;
   camTo(driving ? 'drive' : 'default');
-  if (driving) { closeCard(); map && map.easeTo({ zoom: 16, pitch: 55, duration: 1200 }); }
-  else map && map.easeTo({ zoom: 14, pitch: 0, duration: 1200 });
+  const at = mapFollow && myPos ? { center: myPos } : {};
+  if (driving) { closeCard(); map && map.easeTo({ ...at, zoom: 16, pitch: 55, duration: 1200 }); }
+  else map && map.easeTo({ ...at, zoom: 14, pitch: 0, duration: 1200 });
 }
 $('gears').onclick = () => { if (S.live || DEVICE) return; setGear(S.gear === 'P' ? 'D' : 'P'); updateBlindSpot(); };
 
@@ -2901,18 +3019,33 @@ function blindSpotWanted() {
   return S.bsMode === 'always' || S.speed < 30;
 }
 // Trial: the signal's side view as a column at that edge (landscape); the map gives up the room.
+// The column opens and closes at once (no sliding: the 3D view and the map would follow it every
+// frame), and the embedded Maps is not resized for it - that made it redraw: late, black, jerky.
+// The room comes first from the third window, which steps back for that moment (its app hidden,
+// not resized), so the map keeps its width; only what the third window can't give comes off the
+// map. A left column pushes Maps right by its width; whatever the map area loses is cut off
+// Maps' right side.
 const SIG_COL = 520;
 const sigW = { left: 0, right: 0 };
+let sigSideTaken = 0; // px of the third window lent to the signal column
 function setSigCol(side) {
-  // Closing, the column goes at once and the embedded Maps follows in the same moment: sliding it
-  // shut moved the page under Maps for 0.35 s while Maps only caught up 450 ms later (black, then a jump).
-  const closing = !side;
-  if (closing) stage.classList.add('noColAnim');
+  stage.classList.add('noColAnim');
   sigW.left = side === 'left' ? SIG_COL : 0; sigW.right = side === 'right' ? SIG_COL : 0;
+  // Third window under the map: it narrows with the map (shifted and cut the same way), nothing lent.
+  const stacked = STACK() || TABS();
+  sigSideTaken = side && !stacked ? Math.min(sideW, SIG_COL) : 0;
   stage.style.setProperty('--sigL', sigW.left + 'px'); stage.style.setProperty('--sigR', sigW.right + 'px');
+  stage.style.setProperty('--sideW', (sideW - sigSideTaken) + 'px');
   placeHandles(); wake(1500);
-  if (closing) requestAnimationFrame(() => { stage.classList.remove('noColAnim'); syncEmbedNow(); });
-  else syncEmbedSoon();
+  requestAnimationFrame(() => stage.classList.remove('noColAnim'));
+  // Third window under the map: both apps are really resized to their narrower windows (on trial:
+  // they redraw for it, but nothing is cut off).
+  if (stacked) {
+    requestAnimationFrame(() => { try { syncEmbedNow(); } catch {} }); // each app to its new size (the hidden tab stays hidden)
+    return;
+  }
+  try { if (mapEmbedded) YunusNative.embedShift('map', Math.round(sigW.left * stageScale), Math.round((side ? SIG_COL - sigSideTaken : 0) * stageScale)); } catch {}
+  try { if (sidePkg) { if (sigSideTaken) YunusNative.embedVisible('side', false); else embedSide(); } } catch {}
 }
 function updateBlindSpot() {
   const cam = $('bsCam');
@@ -2925,22 +3058,19 @@ function updateBlindSpot() {
     $('bsTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
     cam.classList.add('show');
     cam.classList.toggle('edgeMode', !!S.set.sigEdge);
-    if (S.set.sigEdge) {
+    if (S.set.sigEdge && LIVE_CAM) {
+      // The car's camera, drawn at once where the column will be (#sigSpot is that place), as the
+      // column opens beneath it; the camera is kept running while driving, so its picture is there.
+      $('sigSpot').classList.toggle('right', bsSide === 'right');
+      const [x, y, w, h] = screenRect($('sigSpot'));
+      YunusNative.sideCam(x, y, w, h, JSON.stringify(SIDE_CAM[bsSide]));
+      if (!PORTRAIT) setSigCol(bsSide);
+    } else if (S.set.sigEdge) {
       $('sigPane').classList.toggle('right', bsSide === 'right');
       $('sigArrow').className = `ti ti-arrow-big-${bsSide}`;
       $('sigTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
       $('sigPane').classList.add('show');
       if (!PORTRAIT) setSigCol(bsSide); // landscape: a column; upright it slides over the edge
-      // The live camera goes where the window is, once it has opened (the column slides in).
-      if (LIVE_CAM) {
-        const side = bsSide;
-        clearTimeout(sideCamAt);
-        sideCamAt = setTimeout(() => {
-          if (bsSide !== side || !$('sigPane').classList.contains('show')) return;
-          const [x, y, w, h] = screenRect($('sigPane'));
-          YunusNative.sideCam(x, y, w, h, JSON.stringify(SIDE_CAM[side]));
-        }, PORTRAIT ? 400 : 380);
-      }
     }
     if (!bsRaf) bsRaf = requestAnimationFrame(drawBlindSpot);
   } else if (cam.classList.contains('show') && !bsHideTimer) {
@@ -3170,6 +3300,7 @@ function buildMap() {
       drawChargers(); loadChargers();
     });
     // A cube to go 3D, a flat map to lay it flat again.
+    map.on('dragstart', () => { mapFollow = false; }); // looking around: the car is left where it is till Konumuma dön
     map.on('pitchend', () => { $('view3dBtn').innerHTML = `<i class="ti ti-${map.getPitch() < 20 ? 'cube' : 'map'}"></i>`; });
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
@@ -3193,7 +3324,9 @@ function startMapArea() {
   mapAreaStarted = true;
   if (!(window.YunusNative && YunusNative.embedApp)) return startMap();
   if (S.set.navApp === 'yunus') { // Yunus's own map with its navigation, chosen in the settings
-    if (mapEmbedded) { mapEmbedded = false; mapsIn(false); YunusNative.embedVisible('map', false); }
+    // Hidden even when this page didn't put it up: Maps' window outlives a page reload.
+    if (mapEmbedded) { mapEmbedded = false; mapsIn(false); }
+    YunusNative.embedVisible('map', false);
     return startMap();
   }
   const [x, y, w, h] = screenRect($('map'));
@@ -3230,7 +3363,7 @@ function navAppBlock() {
       || '<p style="font-size:17px;color:var(--mu)">Kurulu navigasyon uygulaması bulunamadı.</p>'}</div>`;
 }
 $('search').onclick = () => openSearch();
-$('recenter').onclick = () => map && map.easeTo({ center: myPos || CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
+$('recenter').onclick = () => (mapFollow = true) && map && map.easeTo({ center: myPos || CENTER, zoom: S.gear === 'D' ? 16 : 14, bearing: 0 });
 // The car's GPS (through the WebView's geolocation): the position marker follows it and the map
 // moves to the first fix. Without a fix (desktop preview) the demo position stays.
 let myPos = null, meMarker = null, destMarker = null;
@@ -3241,16 +3374,18 @@ function dropDemoRoute() {
   if (map && map.getLayer('route')) map.setLayoutProperty('route', 'visibility', 'none');
 }
 if (navigator.geolocation) {
-  navigator.geolocation.watchPosition((p) => {
-    const prev = myPos, first = !prev;
-    myPos = [p.coords.longitude, p.coords.latitude];
-    if (p.coords.heading != null && !isNaN(p.coords.heading)) NAV.heading = p.coords.heading;
-    if (meMarker) meMarker.setLngLat(myPos);
-    // The first fix, or a jump of more than 2 km (a late first real fix), moves the map there.
-    if (map && (first || distM(prev, myPos) > 2000)) map.jumpTo({ center: myPos });
-    if (first) dropDemoRoute();
-    if (NAV.active) updateNav();
-  }, (e) => console.warn('location', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
+  navigator.geolocation.watchPosition((p) => onFix(p.coords), (e) => console.warn('location', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
+}
+function onFix(c) {
+  const prev = myPos, first = !prev;
+  myPos = [c.longitude, c.latitude];
+  if (c.heading != null && !isNaN(c.heading)) NAV.heading = c.heading;
+  if (meMarker) meMarker.setLngLat(myPos);
+  // The first fix, or a jump of more than 2 km (a late first real fix), moves the map there.
+  if (map && (first || distM(prev, myPos) > 2000)) map.jumpTo({ center: myPos });
+  else if (map && mapFollow && !NAV.active) map.easeTo({ center: myPos, duration: 900 });
+  if (first) dropDemoRoute();
+  if (NAV.active) updateNav();
 }
 
 // ---------- navigation on Yunus's own map ----------
@@ -3427,7 +3562,7 @@ function stepText(s) {
 const stepIcon = (s) => (s.maneuver.type === 'arrive' ? 'flag' : /roundabout|rotary/.test(s.maneuver.type) ? 'rotate' : NAV_ICON[s.maneuver.modifier] || 'arrow-up');
 function startNav() {
   if (!NAV.route) return;
-  NAV.active = true;
+  NAV.active = true; mapFollow = true;
   closeNavPanel(true);
   stage.classList.add('navigating');
   speak(`Rota başladı. ${fmtDur(NAV.route.dur)}, ${fmtDist(NAV.route.dist)}.`);
@@ -3437,7 +3572,7 @@ function stopNav(arrived) {
   NAV.active = false;
   $('navBanner').style.display = 'none';
   stage.classList.remove('navigating');
-  clearRoute();
+  clearRoute(); mapFollow = true;
   if (map) map.easeTo({ center: here(), zoom: 14.5, pitch: 0, bearing: 0, duration: 800 });
   if (arrived) speak('Hedefinize vardınız');
 }
@@ -3468,7 +3603,7 @@ function updateNav() {
     <div class="nbBtns"><button data-voice aria-label="Sesli yönlendirme"><i class="ti ti-volume${NAV.voice ? '' : '-off'}"></i></button>
     <button data-overview aria-label="Rotanın tamamı"><i class="ti ti-route"></i></button>
     <button data-stop aria-label="Navigasyonu bitir"><i class="ti ti-x"></i></button></div>`;
-  if (map) map.easeTo({ center: pos, zoom: 16.5, pitch: 50, bearing: NAV.heading != null ? NAV.heading : map.getBearing(), duration: 900 });
+  if (map && mapFollow) map.easeTo({ center: pos, zoom: 16.5, pitch: 50, bearing: NAV.heading != null ? NAV.heading : map.getBearing(), duration: 900 });
 }
 $('navBanner').addEventListener('click', (e) => {
   const t = e.target.closest('button'); if (!t) return;
@@ -3720,7 +3855,7 @@ const CARDS = {
       <p style="font-size:18px;color:var(--mu);margin-top:18px">Camları ve tavan perdesini araç modelinde parmakla sürükleyerek istediğin yerde bırakabilirsin.</p>`;
     if (tab === 'tyres') { const t = S.tyres, f = (v) => `<div class="${v != null && v < 2.2 ? 'low' : ''}">${pressNum(v)} ${pressUnit()}<span>${v != null && v < 2.2 ? 'Düşük basınç' : ''}</span></div>`;
       content = `<div class="tyres"><div class="col" style="text-align:right">${f(t.FL)}${f(t.RL)}</div><img src="img/overhead.png" alt="Araç üstten"><div class="col">${f(t.FR)}${f(t.RR)}</div></div>`; }
-    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['tog', 'sigEdge', 'Sinyalde kenardan kamera penceresi (deneme)'], ['text', 'driverName', 'Sürücü adı (üst çubukta)'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
+    if (tab === 'display') content = `${renderSettings([['tog', 'perf', 'Performans modu'], ['tog', 'fps', 'FPS göstergesi'], ['tog', 'rearMirror', 'Sürüşte dikiz aynası'], ['tog', 'sigEdge', 'Sinyalde kenardan kamera penceresi (deneme)'], ['tog', 'stackSide', 'Üçüncü pencere haritanın altında'], ['tog', 'tabSide', 'Harita ve uygulama sekmeli'], ['text', 'driverName', 'Sürücü adı (üst çubukta)'], ['text', 'petMsg', 'Evcil hayvan modu mesajı']])}
       <p style="font-size:18px;color:var(--mu);margin:10px 0 24px">Performans modu: 3D araç yalnızca bir şey hareket ederken çizilir (en fazla 30/sn), çözünürlük 1x olur ve koyu harita tam ekran filtre yerine yeniden renklendirilir. DiLink gibi zayıf donanımlar için.</p>
       <div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <button class="btn ${themeMode === 'auto' ? 'on' : ''}" data-theme="auto"><i class="ti ti-contrast"></i>Oto</button>
@@ -3822,8 +3957,10 @@ const APPS = [
 // narrow, half the screen, or full screen.
 const SIDE_W = 600;
 let sideW = 0, sideDrag = null;
-const sideRoom = () => LEN() - carW;
-const sideSnaps = () => (carW > 0 ? [0, THIRDS(), sideRoom()] : [0, SIDE_W, Math.round(LEN() / 2), LEN()]);
+// Under the map: up to all but 280 px of the map, opening at half the height, or as tall as it goes.
+const sideRoom = () => (STACK() ? STACK_H - 280 : LEN() - carW);
+const sideSnaps = () => (STACK() ? [0, Math.round(STACK_H / 2), sideRoom()]
+  : carW > 0 ? [0, THIRDS(), sideRoom()] : [0, SIDE_W, Math.round(LEN() / 2), LEN()]);
 function setSideW(w, animate) {
   sideW = Math.max(0, Math.min(w, sideRoom()));
   if (sideW > 0) fillSideApps();
@@ -3835,11 +3972,25 @@ function setSideW(w, animate) {
 }
 // The side window's handle sits on its left edge, but never on top of the car column's handle.
 function placeHandles() {
-  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - sideW - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
+  const h = $('sideHandle').style;
+  if (STACK()) { // across the map column, in the third window's top strip (the apps' windows cover the rest), clear of its keys
+    h.left = sigW.left + carW + 70 + 'px'; h.right = sigW.right + 70 + 'px';
+    h.top = (sideW ? STACK_H - sideW : STACK_H - 28) + 'px';
+    return;
+  }
+  h.right = ''; h.top = '';
+  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - (sideW - sigSideTaken) - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
   $('sideHandle').style.left = PORTRAIT ? '' : at;
   $('sideHandle').style.top = PORTRAIT ? at : '';
 }
+stage.classList.toggle('stack', STACK()); // the saved setting, from the start
+stage.classList.toggle('tabbed', TABS());
 placeHandles();
+renderSideTabs();
+renderLayoutSeg();
+$('layoutSeg').onclick = (e) => { const b = e.target.closest('[data-layout]'); if (b) setLayout(b.dataset.layout); };
+$('tabMap').onclick = () => setSideTab('map');
+$('tabApp').onclick = () => { fillSideApps(); setSideTab('app'); };
 // On the device the third window lists the real apps (filled the first time it opens: reading the
 // icons takes a moment) and runs the chosen one inside the window, like Google Maps in the map
 // area (AppEmbed slot "side"). The preview keeps its stand-ins.
@@ -3855,7 +4006,7 @@ function embedSide() {
   const [x, y, w, h] = screenRect($('sideApp'));
   // Closed (no size along the long side) or too small: hide it. Upright a closed window still has
   // its full width, so both sides count.
-  if (sideW < 80 || w < 60 || h < 60 || trayOpen) return YunusNative.embedVisible('side', false);
+  if ((TABS() ? sideTab !== 'app' : sideW < 80) || w < 60 || h < 60 || trayOpen) return YunusNative.embedVisible('side', false);
   YunusNative.embedApp('side', sidePkg, x, y, w, h);
 }
 // An element's place on the screen in physical pixels, for the embedded apps' windows. The page is
@@ -3867,7 +4018,8 @@ function screenRect(el) {
 }
 // Opens an app in the third window, opening the window first when it is closed.
 function openInSide(pkg) {
-  if (!sideW) setSideW(sideSnaps()[1], true);
+  if (TABS()) setSideTab('app');
+  else if (!sideW) setSideW(sideSnaps()[1], true);
   fillSideApps();
   setTimeout(() => openSidePkg(pkg), 450); // once the window has its size
 }
@@ -3880,6 +4032,7 @@ function openSidePkg(pkg) {
   $('sideBack').style.display = '';
   $('sideClose').style.display = '';
   $('sideApp').innerHTML = '';
+  renderSideTabs();
   requestAnimationFrame(embedSide);
 }
 if (!DEVICE) $('sideApps').innerHTML = APPS.map(([n, i, c], k) =>
@@ -3889,6 +4042,7 @@ function openSideApp(k) {
   $('sidePanel').classList.add('appOpen');
   $('sideTitle').textContent = n;
   $('sideBack').style.display = '';
+  setTimeout(renderSideTabs);
   $('sideApp').innerHTML = `<div class="big" style="background:${c}"><i class="ti ti-${i}"></i></div><b style="color:var(--tx);font-size:26px">${n}</b>Araçta uygulama bu pencerede açılacak`;
 }
 function closeSideApp() {
@@ -3897,6 +4051,7 @@ function closeSideApp() {
   $('sideTitle').textContent = 'Uygulamalar';
   $('sideBack').style.display = 'none';
   $('sideClose').style.display = 'none';
+  renderSideTabs();
 }
 // ---------- editable dock apps ----------
 // What can sit in the dock: the built-in cards and every installed app (apps open in the side
@@ -4030,20 +4185,21 @@ $('sideBack').onclick = closeSideApp;
 $('sideClose').onclick = () => {
   if (sidePkg) { YunusNative.embedClose('side'); sidePkg = null; }
   closeSideApp();
+  if (TABS()) setSideTab('map'); // the app gone: back to the map
 };
 $('sideHandle').onpointerdown = (e) => {
-  sideDrag = { x: axisPos(e), w: sideW };
+  sideDrag = { x: sideAxis(e), w: sideW };
   try { $('sideHandle').setPointerCapture(e.pointerId); } catch {}
   stage.classList.add('dragging');
 };
 addEventListener('pointermove', (e) => {
   if (!sideDrag) return;
-  const dx = (axisPos(e) - sideDrag.x) / stageScale;
+  const dx = (sideAxis(e) - sideDrag.x) / stageScale;
   setSideW(sideDrag.w - dx, false);
 });
 function endSideDrag(e) {
   if (!sideDrag) return;
-  const dx = (axisPos(e) - sideDrag.x) / stageScale, from = sideDrag.w;
+  const dx = (sideAxis(e) - sideDrag.x) / stageScale, from = sideDrag.w;
   sideDrag = null;
   const snaps = sideSnaps();
   // A tap opens to the narrow width or closes; a drag snaps to the nearest width, and a quick
@@ -4133,12 +4289,14 @@ function openCard(name) {
   refreshCard();
   card.classList.add('open');
   if (mapEmbedded) YunusNative.embedVisible('map', false); // the card sits over the map area
+  if (appTabOn() && sidePkg) YunusNative.embedVisible('side', false); // or over the app's tab
   document.querySelectorAll('[data-card]').forEach((b) => b.classList.toggle('on', b.dataset.card === name));
   if (c.cam && S.gear === 'P') camTo(c.cam);
 }
 function closeCard() {
   current = null; card.classList.remove('open', 'full');
-  if (mapEmbedded) YunusNative.embedVisible('map', true);
+  if (appTabOn()) { if (sidePkg) embedSide(); }
+  else if (mapEmbedded) YunusNative.embedVisible('map', true);
   document.querySelectorAll('[data-card]').forEach((b) => b.classList.remove('on'));
   if (S.gear === 'P') camTo('default');
 }
@@ -4218,6 +4376,7 @@ body.addEventListener('click', (e) => {
     saveSettings();
     if (k === 'mapArea') setProjection(S.set.mapArea);
     if (k === 'perf' || k === 'fps') applyPerf();
+    if (k === 'stackSide' || k === 'tabSide') applyStack();
   }
   if (t.dataset.door) {
     const k = t.dataset.door;
@@ -5069,6 +5228,8 @@ window.yunusCar = (m) => {
     if (mirrorShown) { const [bx, by] = screenRect(box); YunusNative.rearCam(Math.round(bx + box.clientWidth / 2 - 270), Math.round(by + 90), 540, 200, JSON.stringify(MIRROR_CAM[mirrorView])); }
     return;
   }
+  if (m.sideBack) { closeSideApp(); return; } // the floating keys over the third window's app
+  if (m.sideClose) { $('sideClose').onclick(); return; }
   if (m.sideCamDismissed) { sigDismissed = S.signal; updateBlindSpot(); return; } // tapped closed
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;

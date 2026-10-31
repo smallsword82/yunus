@@ -135,15 +135,19 @@ object ShellHelper {
                 try {
                     for ((task, onDisplay, pkgs) in Tasks.roots())
                         if (onDisplay == 0 && pkg in pkgs) {
+                            // Its start put it in front of Yunus on the main screen. Yunus (single task)
+                            // is brought back in front of it FIRST: started while the app is still on
+                            // top, that is a real transition that shows Yunus again. Moving the app away
+                            // first left Yunus "on top" but hidden after Android 14's to-back animation
+                            // (a black screen), and a start then changed nothing.
+                            ProcessBuilder("am", "start", "-W", "-n", "$OWNER/.MainActivity").inheritIO().start().waitFor()
+                            SystemClock.sleep(150)
                             Tasks.move(task, display)
                             System.err.println("moved $pkg task $task back to display $display")
                             // A video surface (SurfaceView) can stay behind on the main screen after the
                             // move; a relayout on the display (1 px narrower, then back) brings it along.
                             SystemClock.sleep(300)
                             nudge(display)
-                            // Its start had put it in front of Yunus on the main screen; with it gone the
-                            // home screen would show, so Yunus (single task) comes back to the front.
-                            ProcessBuilder("am", "start", "-n", "$OWNER/.MainActivity").inheritIO().start().waitFor()
                         }
                 } catch (t: Throwable) { System.err.println("keep $pkg: $t"); return@Thread }
             }
