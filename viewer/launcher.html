@@ -2235,8 +2235,13 @@ function updateDriveHud() {
 }
 // Blind-spot warning, as the mirrors' lamps: a car in the zone turns that side's lane line (and
 // the car) orange; signalling towards it turns them red and frames the side camera in red.
+// On the car each line is clear while the lane camera sees it and faint while it doesn't (Tesla).
 function updateBlindSpotWarning() {
+  const a = S.adas || {};
   for (const side of ['left', 'right']) {
+    const seen = side === 'left' ? a.lineL : a.lineR;
+    const want = seen === false ? 0.3 : 1, m = laneLine[side];
+    if (Math.abs(m.opacity - want) > 0.01) m.opacity += (want - m.opacity) * 0.15; // eases over a few frames
     const danger = bsd[side] && S.gear === 'D';
     const urgent = danger && S.signal === side;
     laneLine[side].color.setHex(urgent ? 0xff3b30 : danger ? 0xff9f0a : 0x9aa0a8);
@@ -5103,6 +5108,10 @@ const CAR_HAL_MAP = {
   // event does (searched on drives: ADAS, instrument, mirror and collision devices).
   'Adas 0x41800008': (v) => ({ adas: { bsd: v === 1 || v === 2, bsdAlarm: v === 2 } }),
   // Door-open warning (ADAS_DOW_WARN_LEFT/RIGHT): the same rear radars, with a side, while stopped.
+  // The lane camera sees the left / right line (LEFT/RIGHT_LINE_TRACKING_STATUS), polled and as events.
+  'Adas 0x3160000C': (v) => ({ adas: { lineL: v >= 1 } }), 'ADAS 0x3160000C': (v) => ({ adas: { lineL: v >= 1 } }),
+  'Adas 0x3160002A': (v) => ({ adas: { lineR: v >= 1 } }), 'ADAS 0x3160002A': (v) => ({ adas: { lineR: v >= 1 } }),
+  'ADAS 0x41800008': (v) => ({ adas: { bsd: v === 1 || v === 2, bsdAlarm: v === 2 } }),
   'Adas 0x41800020': (v) => ({ adas: { dowL: v === 1 } }),
   'Adas 0x41800022': (v) => ({ adas: { dowR: v === 1 } }),
   'Adas 0x32F0002A': (v) => ({ adas: { lane: v === 1 } }), // ADAS_ELKA_SWITCH_STATE

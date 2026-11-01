@@ -357,7 +357,9 @@ private object CarWatch {
         // approach here; proven on the car, where Kinex reads and locks the Dolphin this way.
         val ctx: android.content.Context = Permissive(base)
         for (name in listOf("bodywork.BYDAutoBodyworkDevice", "speed.BYDAutoSpeedDevice",
-                "doorlock.BYDAutoDoorLockDevice", "ota.BYDAutoOtaDevice"))
+                "doorlock.BYDAutoDoorLockDevice", "ota.BYDAutoOtaDevice",
+                // Driver assist: the lane camera's lines come as events at once (the poll is once a second).
+                "adas.BYDAutoADASDevice"))
             try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
         // Also the getters Kinex reads, once a second (SOC, range and speed don't come as events
         // while parked). A getter that is refused is not asked again.
@@ -472,9 +474,10 @@ private object CarWatch {
             }
             // The cluster's driver-assist row: blind spot (2: a car in it; the side is not given, not in
             // the ADAS, instrument, mirror or collision events either), lane keeping, and the door-open
-            // warning with its side (DOW_WARN_LEFT/RIGHT),
+            // warning with its side (DOW_WARN_LEFT/RIGHT), and whether the lane camera sees the left and
+            // right line (LEFT/RIGHT_LINE_TRACKING_STATUS; also as events, see the ADAS listener),
             // and the cruise control's state and set speed (instrument; 65535 while not in use).
-            for (id in intArrayOf(0x41800008, 0x32F0002A, 0x41800020, 0x41800022)) { val v = fg.invoke(inst, 1038, id) as Int; if (v in 0..15) event("Adas", id, v) }
+            for (id in intArrayOf(0x41800008, 0x32F0002A, 0x41800020, 0x41800022, 0x3160000C, 0x3160002A)) { val v = fg.invoke(inst, 1038, id) as Int; if (v in 0..15) event("Adas", id, v) }
             for (id in intArrayOf(0x29600032, 0x2A600008)) { val v = fg.invoke(inst, 1007, id) as Int; event("Instrument", id, if (v in 0..300) v else -1) }
         } catch (t: Throwable) { lightsDead = true; System.err.println("watch lights: ${t.cause ?: t}") }
         if (polls.any { !it.dead } || !lightsDead) main.postDelayed({ poll() }, 1000)
