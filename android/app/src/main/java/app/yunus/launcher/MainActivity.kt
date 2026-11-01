@@ -641,7 +641,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
             // The map app opens on its last view, not following the car. A tap on Google Maps'
             // my-location button (bottom-right, ~45dp from the right, ~122dp up) a few seconds after
             // launch centers it on the car and turns on follow mode, so the car stays centered.
-            if (name == "map") {
+            if (name == "map" && launch.packageName.contains("apps.maps")) { // Google Maps only (not Android Auto, Yandex…)
                 val d = slot.displayId
                 val bx = w - 45f * dpi / 160f; val by = h - 122f * dpi / 160f
                 root.postDelayed({

@@ -55,7 +55,8 @@ fun navigationApps(ctx: Context): String {
         android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:0,0?q=İzmir")),
         android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=İzmir")),
         android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_APP_MAPS))
-    val pkgs = probes.flatMap { pm.queryIntentActivities(it, 0) }.map { it.activityInfo.packageName }
+    // BYD's Android Auto receiver: the phone's navigation (and the rest of Android Auto) in the map area.
+    val pkgs = (probes.flatMap { pm.queryIntentActivities(it, 0) }.map { it.activityInfo.packageName } + "com.byd.androidauto")
         .distinct().filter { it != ctx.packageName && pm.getLaunchIntentForPackage(it) != null }
     return JSONArray().apply {
         pkgs.forEach { put(JSONObject().put("pkg", it).put("app", appLabel(ctx, it)).put("icon", appIconData(ctx, it) ?: JSONObject.NULL)) }
