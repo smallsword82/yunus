@@ -3354,6 +3354,7 @@ function buildMap() {
     });
     // A cube to go 3D, a flat map to lay it flat again.
     map.on('dragstart', () => { mapFollow = false; });
+    map.on('zoomstart', (e) => { if (e.originalEvent) mapFollow = false; }); // a pinch or the wheel: looking around too
     setupPinHold(); // looking around: the car is left where it is till Konumuma dön
     map.on('pitchend', () => { $('view3dBtn').innerHTML = `<i class="ti ti-${map.getPitch() < 20 ? 'cube' : 'map'}"></i>`; });
     const me = document.createElement('div');
@@ -3582,6 +3583,7 @@ function clearRoute() {
 }
 function fitRoute() {
   if (!map || !NAV.route) return;
+  mapFollow = false; // the whole route stays in view; Konumuma dön or Başlat follows the car again
   const b = NAV.route.coords.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(NAV.route.coords[0], NAV.route.coords[0]));
   map.fitBounds(b, { padding: { top: 140, bottom: 60, left: 640, right: 60 }, pitch: 0, bearing: 0, duration: 800 });
 }
@@ -3613,6 +3615,7 @@ function toggleFav(pl) {
 let pinPlace = null, pinMarker = null, pinHold = 0;
 function dropPinMarker() { if (pinMarker) { pinMarker.remove(); pinMarker = null; } pinPlace = null; }
 async function dropPin(lngLat) {
+  mapFollow = false; // looking at the pin, not the car
   const at = [+lngLat.lng.toFixed(6), +lngLat.lat.toFixed(6)];
   if (!pinMarker) {
     const el = document.createElement('div');
@@ -3673,7 +3676,11 @@ $('navPanel').addEventListener('click', (e) => {
   const t = e.target.closest('[data-unfav],[data-fav],[data-favsave],[data-pin],[data-result],[data-recent],[data-place],[data-close],[data-go],[data-save],[data-avoid],[data-ext]');
   if (!t) return;
   const d = t.dataset;
-  if (d.close !== undefined) { dropPinMarker(); return closeNavPanel(); }
+  if (d.close !== undefined) { // closed: back to the car, as Tesla does
+    dropPinMarker(); closeNavPanel();
+    if (!NAV.active && map) { mapFollow = true; if (myPos) map.easeTo({ center: myPos, zoom: S.gear === 'D' ? 16 : 14, duration: 800 }); }
+    return;
+  }
   if (d.unfav !== undefined) { navPlaces.favs.splice(+d.unfav, 1); saveNavPlaces(); return openSearch(); }
   if (d.fav !== undefined) return chooseDest(navPlaces.favs[+d.fav]);
   if (d.favsave !== undefined) { toggleFav(NAV.dest); t.classList.toggle('on', isFav(NAV.dest)); return; }
