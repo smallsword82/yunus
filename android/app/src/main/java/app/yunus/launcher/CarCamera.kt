@@ -39,6 +39,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         const val BUF_W = 1920
         const val BUF_H = 1080
         private const val IDLE_CLOSE_MS = 30_000L
+        const val SLIDE_MS = 220L // the signal window's slide, as long as the page's column (setSigCol)
     }
 
     private val loader by lazy { dalvik.system.PathClassLoader("/system/framework/bmmcamera.jar", "/system/lib64:/system/lib", activity.classLoader) }
@@ -75,7 +76,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
         // the camera takes a moment); it shows with that frame.
-        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.waiting = 3 }
+        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 3 }
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
@@ -87,8 +88,16 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         win.visible = false
         win.waiting = 0
         win.box.animate().cancel()
-        win.box.visibility = View.GONE
+        // The signal window slides back out to its edge with the page's column; the mirror just goes.
+        if (name == "side" && win.box.alpha > 0f) win.box.animate().translationX(edgeOffset(win)).setDuration(SLIDE_MS)
+            .setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).withEndAction { if (!win.visible) win.box.visibility = View.GONE }.start()
+        else win.box.visibility = View.GONE
         idleLater()
+    }
+    // Off the screen at the edge the window sits by (left half: to the left).
+    private fun edgeOffset(win: Win): Float {
+        val lp = win.box.layoutParams as FrameLayout.LayoutParams
+        return if (lp.leftMargin + lp.width / 2 < root.width / 2) -lp.width.toFloat() else lp.width.toFloat()
     }
 
     /**
@@ -173,6 +182,16 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
             }
             true
         }
+    }
+
+    /** A window's picture is on screen: the signal window slides in from its edge as the page opens its column. */
+    private fun ready(win: Win) {
+        win.box.alpha = 1f
+        if (win.name == "side") {
+            win.box.translationX = edgeOffset(win)
+            win.box.animate().translationX(0f).setDuration(SLIDE_MS).setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).start()
+        }
+        onEvent(win.name + "CamReady")
     }
 
     private fun renderer(): Renderer = gl ?: Renderer { st -> open(st) }.also { r ->
@@ -294,7 +313,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
                 EGL14.eglSwapBuffers(display, surface)
                 // Its third frame: shown at once, and the page told (sideCamReady), which opens the
                 // signal column just then, so the column is never black while the camera starts.
-                if (win.waiting > 0 && --win.waiting == 0) root.post { if (win.visible) { win.box.alpha = 1f; onEvent(win.name + "CamReady") } }
+                if (win.waiting > 0 && --win.waiting == 0) root.post { if (win.visible) ready(win) }
             }
         }
 

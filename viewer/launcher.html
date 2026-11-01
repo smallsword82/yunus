@@ -110,7 +110,10 @@ input { user-select:text; -webkit-user-select:text; }
   /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
      stacks its app list into one tall column and would push the dock off screen) */
   grid-template-columns:var(--sigL, 0px) var(--carW, 720px) 1fr var(--sideW, 0px) var(--sigR, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
-#stage.noColAnim { transition:none; } /* the signal camera's column closing at once (setSigCol) */
+#stage.noColAnim { transition:none; }
+/* The signal camera's column slides in and out in 0.22 s, with Maps and the camera window (moved
+   natively over the same time and curve; see setSigCol). */
+#stage.sigAnim, #stage.stack.sigAnim { transition:grid-template-columns .22s cubic-bezier(.2,.8,.2,1); }
 /* hidden third column on the right: an app window, pulled out from the right edge */
 #sidePanel { min-width:0; min-height:0; overflow:clip; background:var(--pn); border-left:1px solid var(--cd); display:flex; flex-direction:column; }
 #sideHandle { position:absolute; top:0; bottom:112px; width:36px; z-index:7; cursor:ew-resize; touch-action:none;
@@ -3000,9 +3003,6 @@ function sigCamReady() {
   const side = sigPending; sigPending = null;
   if (side && blindSpotWanted() && bsSide === side) setSigCol(side);
 }
-// After the page's next frames are on screen: native windows (the embedded apps, the camera) move
-// at once, the page a frame or two later, so they wait for it where a gap would show black.
-const afterPaint = (fn) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(fn, 30)));
 // Both status-bar arrows blink together with the hazards; otherwise just the signalled side.
 function updateSignalArrows() {
   $('sigL').classList.toggle('on', S.signal === 'left' || S.hazard);
@@ -3056,8 +3056,11 @@ function blindSpotWanted() {
 const SIG_COL = 520;
 const sigW = { left: 0, right: 0 };
 let sigSideTaken = 0; // px of the third window lent to the signal column
+const SIG_MS = 220; // as CarCamera.SLIDE_MS
+let sigAnimEnd = 0;
 function setSigCol(side) {
-  stage.classList.add('noColAnim');
+  stage.classList.add('sigAnim');
+  clearTimeout(sigAnimEnd); sigAnimEnd = setTimeout(() => stage.classList.remove('sigAnim'), SIG_MS + 80);
   sigW.left = side === 'left' ? SIG_COL : 0; sigW.right = side === 'right' ? SIG_COL : 0;
   // Third window under the map or in a tab: it narrows with the map (shifted and cut the same way), nothing lent.
   const stacked = STACK() || TABS();
@@ -3065,21 +3068,18 @@ function setSigCol(side) {
   stage.style.setProperty('--sigL', sigW.left + 'px'); stage.style.setProperty('--sigR', sigW.right + 'px');
   stage.style.setProperty('--sideW', (sideW - sigSideTaken) + 'px');
   placeHandles(); wake(1500);
-  requestAnimationFrame(() => stage.classList.remove('noColAnim'));
   // No app is resized for the column (a resized app redraws, black for a moment): each is shifted
   // past the column and its far edge cut off, and put back as it was when the column closes. Under
   // the map or in a tab the third window shares the map's width, so it moves the same way.
-  // Opening, the apps move once the page has drawn the column (meanwhile Maps briefly overlaps the
-  // car, instead of leaving a black gap); closing, they move back at once, before the page.
+  // They slide there with the column, over the same time and curve (one movement, not two steps).
   const dx = Math.round(sigW.left * stageScale);
-  const moveApps = stacked ? () => {
+  if (stacked) {
     const cut = Math.round((side ? SIG_COL : 0) * stageScale);
-    try { if (mapEmbedded) YunusNative.embedShift('map', dx, cut); if (sidePkg) YunusNative.embedShift('side', dx, cut); } catch {}
-  } : () => {
-    try { if (mapEmbedded) YunusNative.embedShift('map', dx, Math.round((side ? SIG_COL - sigSideTaken : 0) * stageScale)); } catch {}
-    try { if (sidePkg) { if (sigSideTaken) YunusNative.embedVisible('side', false); else embedSide(); } } catch {}
-  };
-  if (side) afterPaint(moveApps); else moveApps();
+    try { if (mapEmbedded) YunusNative.embedShift('map', dx, cut, SIG_MS); if (sidePkg) YunusNative.embedShift('side', dx, cut, SIG_MS); } catch {}
+    return;
+  }
+  try { if (mapEmbedded) YunusNative.embedShift('map', dx, Math.round((side ? SIG_COL - sigSideTaken : 0) * stageScale), SIG_MS); } catch {}
+  try { if (sidePkg) { if (sigSideTaken) YunusNative.embedVisible('side', false); else setTimeout(embedSide, SIG_MS); } } catch {}
 }
 function updateBlindSpot() {
   const cam = $('bsCam');
@@ -3116,8 +3116,8 @@ function updateBlindSpot() {
       cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null;
       sigPending = null; clearTimeout(sigPendTimer);
       if (sigW.left || sigW.right) setSigCol(null);
-      // The camera window goes once the page has drawn the closed column under it.
-      if (LIVE_CAM) { clearTimeout(sideCamAt); afterPaint(() => { if (!blindSpotWanted()) YunusNative.sideCamHide(); }); }
+      // The camera window slides out with the column (natively, same time and curve).
+      if (LIVE_CAM) { clearTimeout(sideCamAt); YunusNative.sideCamHide(); }
     }, delay);
   }
 }

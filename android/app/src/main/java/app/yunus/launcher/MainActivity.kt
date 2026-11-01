@@ -162,7 +162,7 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun embedVisible(slot: String, visible: Boolean) = runOnUiThread { embed.setVisible(slot, visible) }
                 @JavascriptInterface
-                fun embedShift(slot: String, dx: Int, cut: Int) = runOnUiThread { embed.shift(slot, dx, cut) }
+                fun embedShift(slot: String, dx: Int, cut: Int, ms: Int) = runOnUiThread { embed.shift(slot, dx, cut, ms.toLong()) }
 
                 // While a Yunus pop-up over the map is open the page is raised above the embedded apps
                 // (it is see-through there), so the pop-up shows over live Maps; after, Maps is on
@@ -682,15 +682,27 @@ private class AppEmbed(private val activity: Activity, private val root: android
     /**
      * Moves slot [name] sideways by [dx] px and cuts [cut] px off its right side, without resizing
      * it (resizing makes the app redraw): the map area for a moment narrower, the third window or a
-     * column at its right not covered.
+     * column at its right not covered. Over [ms] it slides there, in step with the page's column.
      */
-    fun shift(name: String, dx: Int, cut: Int) {
+    private val cuts = HashMap<String, Float>()
+    private val shifting = HashMap<String, android.animation.ValueAnimator>()
+    fun shift(name: String, dx: Int, cut: Int, ms: Long = 0) {
         val slot = slots[name] ?: return
         val v = slot.view
-        v.translationX = dx.toFloat()
-        slot.keys.firstOrNull()?.translationX = dx.toFloat() // the close key sits on the cut-off side: hidden while cut
-        slot.keys.getOrNull(1)?.visibility = if (cut > 0 || v.visibility != android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
-        v.clipBounds = if (cut > 0) android.graphics.Rect(0, 0, (v.width - cut).coerceAtLeast(0), v.height) else null
+        shifting.remove(name)?.cancel()
+        fun place(x: Float, c: Float) {
+            v.translationX = x
+            cuts[name] = c
+            v.clipBounds = if (c > 0.5f) android.graphics.Rect(0, 0, (v.width - c).toInt().coerceAtLeast(0), v.height) else null
+        }
+        val x0 = v.translationX; val c0 = cuts[name] ?: 0f
+        if (ms <= 0) return place(dx.toFloat(), cut.toFloat())
+        shifting[name] = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = ms
+            interpolator = android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f) // the page's column curve
+            addUpdateListener { val f = it.animatedValue as Float; place(x0 + (dx - x0) * f, c0 + (cut - c0) * f) }
+            start()
+        }
     }
 
     fun close() {
