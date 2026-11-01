@@ -131,6 +131,11 @@ input { user-select:text; -webkit-user-select:text; }
 #sidePanel.appOpen #sideTitle { display:none; }
 #sidePanel.appOpen .sideHead button { width:36px; height:36px; font-size:20px; }
 #sidePanel.appOpen #sideApp { margin:0 10px 10px; }
+/* A pop-up is up: the app under the page shows through its place; the panel's colour is drawn
+   around it by a shadow (the panel itself is see-through then). */
+html.sideUnder #sidePanel.appOpen { background:transparent; }
+html.sideUnder #sidePanel.appOpen #sideApp { background:transparent; box-shadow:0 0 0 40px var(--pn); }
+html.sideUnder #sidePanel.appOpen .sideHead { position:relative; z-index:1; }
 /* On the car the keys float over the app (AppEmbed): no header at all, or under the map only a thin
    strip that holds the window's drag handle. */
 html.nativeKeys #sidePanel.appOpen .sideHead { display:none; }
@@ -4929,7 +4934,9 @@ function popTouch(open) {
   clearTimeout(popBackAt);
   const apply = () => {
     if (window.YunusNative && YunusNative.mapUnder) YunusNative.mapUnder(any());
-    if (sidePkg) { if (any()) YunusNative.embedVisible('side', false); else embedSide(); } // the third window is still on top
+    // The third window's app goes under the page too (it was hidden: dark while the pop-up was up),
+    // seen through a hole in its panel.
+    document.documentElement.classList.toggle('sideUnder', any() && !!sidePkg);
   };
   if (any()) apply(); else popBackAt = setTimeout(apply, 280);
 }
