@@ -133,7 +133,10 @@ object ShellHelper {
         val id = System.nanoTime()
         synchronized(watching) { watching[display] = id }
         Thread {
-            val end = SystemClock.uptimeMillis() + 20000
+            // Android Auto starts its screen again on the main display whenever the phone connects,
+            // which can be any time: it is kept on the display for as long as it is the slot's app
+            // (until another launch on this display); everything else for 20 s after its start.
+            val end = if (pkg == "com.byd.androidauto") Long.MAX_VALUE else SystemClock.uptimeMillis() + 20000
             while (SystemClock.uptimeMillis() < end && synchronized(watching) { watching[display] == id }) {
                 SystemClock.sleep(700)
                 try {
