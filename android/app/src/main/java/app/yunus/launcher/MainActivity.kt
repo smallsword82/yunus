@@ -592,6 +592,9 @@ private class AppEmbed(private val activity: Activity, private val root: android
         var component: String? = null // the app shown, so a different one can replace it
         val displayId get() = display?.display?.displayId ?: -1
         var keys: List<android.view.View> = emptyList() // the third window's floating back and close keys
+        // The display's own size when it differs from the window (Android Auto: 1920×1080, fitted into
+        // the window keeping its shape); 0: the window's size. cw×ch: the picture's size in the window.
+        var vw = 0; var vh = 0; var w = 0; var h = 0; var cw = 0f; var ch = 0f
     }
     private val slots = HashMap<String, Slot>()
     private val KEY = 60 // px, the floating keys' size
@@ -622,10 +625,20 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val slot = slots.getOrPut(name) {
             Slot(android.view.TextureView(activity)).also { s ->
                 root.addView(s.view)
-                s.view.setOnTouchListener { _, ev -> shell.send(touchLine(s.displayId, ev)); true }
+                s.view.setOnTouchListener { _, ev -> shell.send(touchLine(s, ev)); true }
             }
         }
         slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
+        // Android Auto lays its 16:9 picture out for a car screen: in a window-sized display it came out
+        // wider than the window (its app bar cut off) with bars above and below. It gets a display of
+        // the car screen's size instead, drawn into the window whole, keeping its shape.
+        val (dw, dh) = if (launch.packageName == "com.byd.androidauto") 1920 to 1080 else w to h
+        slot.w = w; slot.h = h; slot.vw = if (dw != w || dh != h) dw else 0; slot.vh = if (slot.vw > 0) dh else 0
+        if (slot.vw > 0) {
+            val k = minOf(w.toFloat() / dw, h.toFloat() / dh)
+            slot.cw = dw * k; slot.ch = dh * k
+            slot.view.setTransform(android.graphics.Matrix().apply { setScale(slot.cw / w, slot.ch / h, w / 2f, h / 2f) })
+        } else slot.view.setTransform(null)
         slot.view.translationX = 0f; slot.view.clipBounds = null // placed for real: no shift (see shift)
         slot.view.visibility = android.view.View.VISIBLE
         if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
@@ -652,13 +665,13 @@ private class AppEmbed(private val activity: Activity, private val root: android
             }
         }
         fun attach(texture: android.graphics.SurfaceTexture) {
-            texture.setDefaultBufferSize(w, h)
+            texture.setDefaultBufferSize(dw, dh)
             val existing = slot.display
-            if (existing != null) { existing.resize(w, h, dpi); launchIfNew(); onReady(slot.displayId); return }
+            if (existing != null) { existing.resize(dw, dh, dpi); launchIfNew(); onReady(slot.displayId); return }
             val dm = activity.getSystemService(android.hardware.display.DisplayManager::class.java)
             // OWN_CONTENT_ONLY | DESTROY_CONTENT_ON_REMOVAL (hidden flag 1 << 8), as Kinex uses.
             val flags = android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or (1 shl 8)
-            slot.display = dm.createVirtualDisplay("yunus-$name", w, h, dpi, android.view.Surface(texture), flags)
+            slot.display = dm.createVirtualDisplay("yunus-$name", dw, dh, dpi, android.view.Surface(texture), flags)
             launchIfNew()
             onReady(slot.displayId)
         }
@@ -666,7 +679,8 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (texture != null) attach(texture)
         else slot.view.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(t: android.graphics.SurfaceTexture, width: Int, height: Int) = attach(t)
-            override fun onSurfaceTextureSizeChanged(t: android.graphics.SurfaceTexture, width: Int, height: Int) {}
+            // The view sets its own size on the buffer when it is laid out; a display of its own size keeps it.
+            override fun onSurfaceTextureSizeChanged(t: android.graphics.SurfaceTexture, width: Int, height: Int) { if (slot.vw > 0) t.setDefaultBufferSize(slot.vw, slot.vh) }
             override fun onSurfaceTextureUpdated(t: android.graphics.SurfaceTexture) {}
             // Keep the texture (and so the display's surface) across a pause.
             override fun onSurfaceTextureDestroyed(t: android.graphics.SurfaceTexture) = false
@@ -721,9 +735,14 @@ private class AppEmbed(private val activity: Activity, private val root: android
     }
 
     // "t <display> <action> <id> <x> <y> …" in the view's own pixels, which are the display's.
-    private fun touchLine(display: Int, ev: android.view.MotionEvent) = buildString {
-        append("t ").append(display).append(' ').append(ev.action)
-        for (i in 0 until ev.pointerCount) append(' ').append(ev.getPointerId(i)).append(' ').append(ev.getX(i)).append(' ').append(ev.getY(i))
+    // In a display of its own size (see Slot.vw) a point in the window is scaled to the display.
+    private fun touchLine(s: Slot, ev: android.view.MotionEvent) = buildString {
+        append("t ").append(s.displayId).append(' ').append(ev.action)
+        for (i in 0 until ev.pointerCount) {
+            var x = ev.getX(i); var y = ev.getY(i)
+            if (s.vw > 0) { x = (x - (s.w - s.cw) / 2) * s.vw / s.cw; y = (y - (s.h - s.ch) / 2) * s.vh / s.ch }
+            append(' ').append(ev.getPointerId(i)).append(' ').append(x).append(' ').append(y)
+        }
     }
 }
 
