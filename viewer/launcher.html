@@ -3353,7 +3353,8 @@ function buildMap() {
       drawChargers(); loadChargers();
     });
     // A cube to go 3D, a flat map to lay it flat again.
-    map.on('dragstart', () => { mapFollow = false; }); // looking around: the car is left where it is till Konumuma dön
+    map.on('dragstart', () => { mapFollow = false; });
+    setupPinHold(); // looking around: the car is left where it is till Konumuma dön
     map.on('pitchend', () => { $('view3dBtn').innerHTML = `<i class="ti ti-${map.getPitch() < 20 ? 'cube' : 'map'}"></i>`; });
     const me = document.createElement('div');
     me.style.cssText = 'width:28px;height:28px;border-radius:50%;background:#3e6ae1;border:4px solid #fff;box-shadow:0 0 0 12px rgba(62,106,225,.25)';
@@ -3460,6 +3461,7 @@ const saveVoice = () => { try { localStorage.setItem('navVoice', JSON.stringify(
 let navPlaces;
 try { navPlaces = JSON.parse(localStorage.getItem('navPlaces') || '{}'); } catch { navPlaces = {}; }
 navPlaces.recent = navPlaces.recent || [];
+navPlaces.favs = navPlaces.favs || []; // favourites: places kept by the driver (a pin or a search result)
 navPlaces.avoid = navPlaces.avoid || { motorway: false, toll: false, ferry: false };
 const saveNavPlaces = () => { try { localStorage.setItem('navPlaces', JSON.stringify(navPlaces)); } catch {} };
 const here = () => myPos || CENTER;
@@ -3476,6 +3478,9 @@ const speak = (text) => { if (NAV.voice && NAV.voiceVol > 0 && window.YunusNativ
 
 // Search panel: Home, Work, recent places, and results as you type (nearest area first).
 let navResults = [], navSaving = null;
+// A favourite: its star, and an x that takes it off the list.
+const favRow = (x, i) => `<div class="row" data-fav="${i}"><i class="ti ti-star-filled" style="color:#f5b400"></i><div>${escHtml(x.name)}<small>${escHtml(x.sub)}</small></div><i class="ti ti-x" data-unfav="${i}" style="margin-left:auto;color:var(--mu)"></i></div>`;
+const isFav = (pl) => !!pl && navPlaces.favs.some((x) => x.at[0] === pl.at[0] && x.at[1] === pl.at[1]);
 const placeRow = (x, kind, i, icon) => `<div class="row" data-${kind}="${i}"><i class="ti ti-${icon}"></i><div>${escHtml(x.name)}<small>${escHtml(x.sub)}</small></div></div>`;
 function openSearch() {
   if (NAV.active) return;
@@ -3485,7 +3490,7 @@ function openSearch() {
   p.innerHTML = `<input id="navQ" placeholder="Nereye gidiyoruz?" autocomplete="off" enterkeyhint="search">
     <div class="acts">${['home', 'work'].map((k) => `<button class="btn" data-place="${k}"><i class="ti ti-${k === 'home' ? 'home' : 'briefcase'}"></i>${k === 'home' ? 'Ev' : 'İş'}${navPlaces[k] ? '' : ' · ayarla'}</button>`).join('')}
       <button class="btn" data-close><i class="ti ti-x"></i></button></div>
-    <div id="navList">${navPlaces.recent.map((x, i) => placeRow(x, 'recent', i, 'history')).join('')}</div>`;
+    <div id="navList">${navPlaces.favs.map((x, i) => favRow(x, i)).join('')}${navPlaces.recent.map((x, i) => placeRow(x, 'recent', i, 'history')).join('')}</div>`;
   const q = $('navQ');
   q.focus();
   warmNav();
@@ -3591,10 +3596,71 @@ function showRoutePreview() {
     <div class="acts"><button class="btn on" data-go><i class="ti ti-navigation"></i>Başlat</button>
       <button class="btn" data-save="home"><i class="ti ti-home"></i>Ev yap</button>
       <button class="btn" data-save="work"><i class="ti ti-briefcase"></i>İş yap</button>
+      <button class="btn ${isFav(d) ? 'on' : ''}" data-favsave><i class="ti ti-star"></i>Favori</button>
       <button class="btn" data-ext><i class="ti ti-external-link"></i>Uygulamada aç</button>
       <button class="btn" data-close><i class="ti ti-x"></i></button></div>
     <div class="acts">${[['motorway', 'Otoyoldan kaçın'], ['toll', 'Ücretli yoldan kaçın'], ['ferry', 'Feribottan kaçın']]
       .map(([k, l]) => `<button class="btn ${navPlaces.avoid[k] ? 'on' : ''}" data-avoid="${k}">${l}</button>`).join('')}</div>`;
+}
+function toggleFav(pl) {
+  if (!pl) return;
+  if (isFav(pl)) navPlaces.favs = navPlaces.favs.filter((x) => !(x.at[0] === pl.at[0] && x.at[1] === pl.at[1]));
+  else navPlaces.favs = [pl].concat(navPlaces.favs).slice(0, 20);
+  saveNavPlaces();
+}
+// Holding a finger on the map (0.6 s, not moving) drops a pin there: go there, or keep it as
+// Home, Work or a favourite. Its name comes from the address server (the nearest street, place).
+let pinPlace = null, pinMarker = null, pinHold = 0;
+function dropPinMarker() { if (pinMarker) { pinMarker.remove(); pinMarker = null; } pinPlace = null; }
+async function dropPin(lngLat) {
+  const at = [+lngLat.lng.toFixed(6), +lngLat.lat.toFixed(6)];
+  if (!pinMarker) {
+    const el = document.createElement('div');
+    el.innerHTML = '<i class="ti ti-map-pin-filled" style="font-size:44px;color:#e5484d;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))"></i>';
+    pinMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' });
+  }
+  pinMarker.setLngLat(at).addTo(map);
+  pinPlace = { name: 'İşaretlenen konum', sub: `${at[1].toFixed(5)}, ${at[0].toFixed(5)}`, at };
+  renderPinPanel();
+  try {
+    const j = await (await fetch(`https://photon.komoot.io/reverse?lat=${at[1]}&lon=${at[0]}&limit=1`)).json();
+    const p = j.features && j.features[0] && j.features[0].properties;
+    if (p && pinPlace && pinPlace.at === at) {
+      const street = [p.street, p.housenumber].filter(Boolean).join(' No ');
+      pinPlace.name = p.name || street || p.district || pinPlace.name;
+      pinPlace.sub = [p.name && street, p.district, p.city || p.county].filter(Boolean).join(', ');
+      renderPinPanel();
+    }
+  } catch {}
+}
+function renderPinPanel() {
+  const pl = pinPlace; if (!pl) return;
+  $('navPanel').style.display = '';
+  $('navPanel').innerHTML = `<div class="row" style="cursor:default"><i class="ti ti-map-pin" style="color:#e5484d"></i><div>${escHtml(pl.name)}<small>${escHtml(pl.sub)} · ${fmtDist(distM(here(), pl.at))}</small></div></div>
+    <div class="acts"><button class="btn on" data-pin="go"><i class="ti ti-navigation"></i>Buraya git</button>
+      <button class="btn ${navPlaces.home && navPlaces.home.at[0] === pl.at[0] ? 'on' : ''}" data-pin="home"><i class="ti ti-home"></i>Ev yap</button>
+      <button class="btn ${navPlaces.work && navPlaces.work.at[0] === pl.at[0] ? 'on' : ''}" data-pin="work"><i class="ti ti-briefcase"></i>İş yap</button>
+      <button class="btn ${isFav(pl) ? 'on' : ''}" data-pin="fav"><i class="ti ti-star"></i>Favori</button>
+      <button class="btn" data-close><i class="ti ti-x"></i></button></div>`;
+}
+function pinAction(what, btn) {
+  const pl = pinPlace; if (!pl) return;
+  if (what === 'go') { const p = pl; dropPinMarker(); return chooseDest(p); }
+  if (what === 'fav') toggleFav(pl);
+  else { navPlaces[what] = { name: what === 'home' ? 'Ev' : 'İş', sub: pl.name + (pl.sub ? ', ' + pl.sub : ''), at: pl.at }; saveNavPlaces(); }
+  renderPinPanel();
+}
+function setupPinHold() {
+  const cancel = () => { clearTimeout(pinHold); pinHold = 0; };
+  const start = (e) => {
+    cancel();
+    if (NAV.active || (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 1)) return;
+    const ll = e.lngLat;
+    pinHold = setTimeout(() => { pinHold = 0; dropPin(ll); }, 600);
+  };
+  map.on('touchstart', start); map.on('mousedown', start);
+  for (const ev of ['touchend', 'touchcancel', 'mouseup', 'movestart', 'dragstart', 'zoomstart']) map.on(ev, cancel);
+  map.on('contextmenu', (e) => { cancel(); if (!NAV.active) dropPin(e.lngLat); }); // a right click, on the desktop
 }
 // Hands the destination to the chosen (or any) navigation app.
 function openInNavApp(place) {
@@ -3604,10 +3670,14 @@ function openInNavApp(place) {
     || YunusNative.openUri(`geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(place.name)})`, navPackages().join(','));
 }
 $('navPanel').addEventListener('click', (e) => {
-  const t = e.target.closest('[data-result],[data-recent],[data-place],[data-close],[data-go],[data-save],[data-avoid],[data-ext]');
+  const t = e.target.closest('[data-unfav],[data-fav],[data-favsave],[data-pin],[data-result],[data-recent],[data-place],[data-close],[data-go],[data-save],[data-avoid],[data-ext]');
   if (!t) return;
   const d = t.dataset;
-  if (d.close !== undefined) return closeNavPanel();
+  if (d.close !== undefined) { dropPinMarker(); return closeNavPanel(); }
+  if (d.unfav !== undefined) { navPlaces.favs.splice(+d.unfav, 1); saveNavPlaces(); return openSearch(); }
+  if (d.fav !== undefined) return chooseDest(navPlaces.favs[+d.fav]);
+  if (d.favsave !== undefined) { toggleFav(NAV.dest); t.classList.toggle('on', isFav(NAV.dest)); return; }
+  if (d.pin) return pinAction(d.pin, t);
   if (d.result !== undefined) return chooseDest(navResults[+d.result]);
   if (d.recent !== undefined) return chooseDest(navPlaces.recent[+d.recent]);
   if (d.place) {
