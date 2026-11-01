@@ -3488,19 +3488,40 @@ function openSearch() {
     <div id="navList">${navPlaces.recent.map((x, i) => placeRow(x, 'recent', i, 'history')).join('')}</div>`;
   const q = $('navQ');
   q.focus();
+  warmNav();
   let wait = 0;
-  q.oninput = () => { clearTimeout(wait); wait = setTimeout(() => searchPlaces(q.value.trim()), 350); };
+  q.oninput = () => { clearTimeout(wait); wait = setTimeout(() => searchPlaces(q.value.trim()), 200); };
+}
+// The first search and route each waited ~1 s more for their connection (DNS, TLS) to be set up:
+// a tiny request to each server as the search opens has them ready by the first letter.
+let navWarmAt = 0;
+function warmNav() {
+  if (Date.now() - navWarmAt < 60000) return;
+  navWarmAt = Date.now();
+  const [lng, lat] = here();
+  fetch(`https://photon.komoot.io/api/?q=a&limit=1&lat=${lat}&lon=${lng}`).catch(() => {});
+  fetch(`https://router.project-osrm.org/nearest/v1/driving/${lng},${lat}`).catch(() => {});
 }
 function closeNavPanel(keepRoute) {
   $('navPanel').style.display = 'none';
   navSaving = null;
   if (!keepRoute && !NAV.active) clearRoute();
 }
+// Answers for the same words are kept, and an answer that comes back after a newer search has
+// gone out is dropped (typing fast, an older answer could replace the newer one's list).
+const placeCache = new Map();
+let searchSeq = 0, searchAbort = null;
 async function searchPlaces(q) {
   if (q.length < 2) return;
   const [lng, lat] = here();
+  const seq = ++searchSeq;
+  try { searchAbort && searchAbort.abort(); } catch {}
+  searchAbort = window.AbortController ? new AbortController() : null;
   try {
-    const j = await (await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=7&lat=${lat}&lon=${lng}`)).json();
+    const key = q.toLowerCase();
+    const j = placeCache.get(key) || await (await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=7&lat=${lat}&lon=${lng}`, searchAbort ? { signal: searchAbort.signal } : {})).json();
+    if (seq !== searchSeq) return;
+    placeCache.set(key, j); if (placeCache.size > 50) placeCache.delete(placeCache.keys().next().value);
     navResults = j.features.map((f) => {
       const p = f.properties;
       return { name: p.name || [p.street, p.housenumber].filter(Boolean).join(' ') || p.city || q,
@@ -3509,7 +3530,7 @@ async function searchPlaces(q) {
     });
     $('navList').innerHTML = navResults.map((x, i) => placeRow({ name: x.name, sub: `${x.sub ? x.sub + ' · ' : ''}${fmtDist(distM(here(), x.at))}` }, 'result', i, 'map-pin')).join('')
       || '<div class="row">Sonuç bulunamadı</div>';
-  } catch { $('navList').innerHTML = '<div class="row">Arama yapılamadı (internet bağlantısı?)</div>'; }
+  } catch (e) { if (seq === searchSeq && !(e && e.name === 'AbortError')) $('navList').innerHTML = '<div class="row">Arama yapılamadı (internet bağlantısı?)</div>'; }
 }
 function chooseDest(place) {
   if (navSaving) { navPlaces[navSaving] = place; navSaving = null; }
