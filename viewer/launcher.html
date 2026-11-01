@@ -3095,6 +3095,8 @@ function updateBlindSpot() {
     if (S.set.sigEdge && LIVE_CAM) {
       // The car's camera, drawn at once where the column will be (#sigSpot is that place), as the
       // column opens beneath it; the camera is kept running while driving, so its picture is there.
+      // Switched sides: the other side's column closes now, this one opens with its first frame.
+      if (sigW[bsSide === 'left' ? 'right' : 'left']) setSigCol(null);
       $('sigSpot').classList.toggle('right', bsSide === 'right');
       const [x, y, w, h] = screenRect($('sigSpot'));
       YunusNative.sideCam(x, y, w, h, JSON.stringify(SIDE_CAM[bsSide]));

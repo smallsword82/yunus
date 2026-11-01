@@ -73,6 +73,9 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         // The mirror stays where it was dragged to.
         val px = if (name == "rear") prefs.getInt("rearCamX", x) else x
         val py = if (name == "rear") prefs.getInt("rearCamY", y) else y
+        // Moved while up (the signal switched sides): shown afresh, as if it had just opened.
+        val moved = win.visible && (win.box.layoutParams as? FrameLayout.LayoutParams)?.let { it.leftMargin != px || it.topMargin != py } == true
+        if (moved) win.visible = false
         win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
         // the camera takes a moment); it shows with that frame.
