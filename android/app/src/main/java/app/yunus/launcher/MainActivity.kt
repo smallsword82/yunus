@@ -49,6 +49,8 @@ private val CAR_COMMON_PERMS = arrayOf(
 class MainActivity : Activity() {
     private lateinit var web: WebView
     private var carHal: CarHal? = null
+    @Volatile private var halWanted: Set<String>? = null // see carHalWant; null: all (before the page says)
+    private fun halWant(key: String) = halWanted?.contains(key) ?: true
     private lateinit var shell: ShellLink
     private lateinit var embed: AppEmbed
     private lateinit var carCam: CarCamera
@@ -103,6 +105,14 @@ class MainActivity : Activity() {
                 } catch (_: Throwable) { false }
 
                 // Opens an installed app by package name; false if it is not installed.
+                // The car values the page uses ("Dev 0xID" / "Get key"): only these are passed on. The car
+                // pushes many more (one cluster value flips 20 times a second), each one evaluated in
+                // both pages; that alone kept Yunus busy while nothing on the screen changed.
+                @JavascriptInterface
+                fun carHalWant(keys: String) {
+                    halWanted = try { org.json.JSONArray(keys).let { a -> (0 until a.length()).map { a.getString(it) }.toHashSet() } } catch (_: Throwable) { null }
+                }
+
                 @JavascriptInterface
                 fun openApp(pkg: String): Boolean = try {
                     val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return false
@@ -379,7 +389,7 @@ class MainActivity : Activity() {
         fixPermissions()
         // Live vehicle data the way 3rd-party apps on this head unit do it (BYD Road Computer /
         // electro.app.br): read the BYDAuto HAL devices directly via listeners, in-process.
-        carHal = CarHal(applicationContext, ::postToPage).also { it.start() }
+        carHal = CarHal(applicationContext, ::halWant, ::postToPage).also { it.start() }
     }
 
     private fun isNightMode() =
@@ -429,7 +439,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Re-start the HAL reader so any devices unlocked by a fresh grant get listeners attached.
-        if (requestCode == 1) { carHal?.close(); carHal = CarHal(applicationContext, ::postToPage).also { it.start() } }
+        if (requestCode == 1) { carHal?.close(); carHal = CarHal(applicationContext, ::halWant, ::postToPage).also { it.start() } }
         sendPermissions()
     }
 
@@ -551,7 +561,7 @@ class MainActivity : Activity() {
     private fun carFromHelper(line: String) {
         if (line.startsWith("msg ")) return postToPage(line.substring(4)) // a reply for the page as it is (Wi-Fi, …)
         val f = line.split(' ')
-        if (f.size != 5 || f[0] != "ev") return
+        if (f.size != 5 || f[0] != "ev" || !halWant(f[1] + " " + f[2])) return
         val v = f[4].toDoubleOrNull() ?: return
         val key = when (f[3]) { "i" -> "int"; "f" -> "float"; else -> "double" }
         val o = JSONObject().put("dev", f[1]).put("type", f[2]).put(key, if (key == "int") v.toInt() else v)
@@ -1065,7 +1075,7 @@ private class AdbAuth(dir: File) : java.io.Closeable {
  * BYDAUTO permissions, in-process (no ADB). Each distinct event is forwarded to the page as
  * {carHal:{dev,type,int|float|double}} only when its value changes.
  */
-private class CarHal(private val ctx: android.content.Context, private val emit: (String) -> Unit) {
+private class CarHal(private val ctx: android.content.Context, private val want: (String) -> Boolean, private val emit: (String) -> Unit) {
     // Every device we can construct once the _COMMON perms are granted. Each one that constructs
     // gets a listener; the car pushes live values through onDataEventChanged (not permission-gated).
     // speed/bodywork are listed too but enforce _GET even on getInstance, so they simply fail here.
@@ -1115,7 +1125,7 @@ private class CarHal(private val ctx: android.content.Context, private val emit:
     }
 
     private fun onEvent(dev: String, type: Int, value: Any?) {
-        if (value == null) return
+        if (value == null || !want(dev + " " + String.format("0x%08X", type))) return
         val o = JSONObject().put("dev", dev).put("type", String.format("0x%08X", type))
         var meaningful = false
         for (f in arrayOf("intValue", "floatValue", "doubleValue")) {
