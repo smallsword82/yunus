@@ -3392,21 +3392,6 @@ function mapEmbedFailed() {
   clearTimeout(mapRetry);
   mapRetry = setTimeout(() => { if (!mapEmbedded && S.set.navApp !== 'yunus') startMapArea(); }, 10000);
 }
-const adasLast = {}, adasRate = {}, adasBuf = [];
-let adasFlush = 0;
-function adasNote(k, v) {
-  if (adasLast[k] === v) return;
-  const first = !(k in adasLast);
-  adasLast[k] = v;
-  const now = Date.now(), r = (adasRate[k] = (adasRate[k] || []).filter((t) => now - t < 60000));
-  r.push(now);
-  if (first || r.length > 20) return;
-  adasBuf.push(new Date().toTimeString().slice(0, 8) + ' ' + k + '=' + v + ' sig=' + (S.signal || '-'));
-  if (!adasFlush) adasFlush = setTimeout(() => {
-    adasFlush = 0;
-    try { const log = JSON.parse(localStorage.getItem('adasLog') || '[]').concat(adasBuf.splice(0)); localStorage.setItem('adasLog', JSON.stringify(log.slice(-2000))); } catch {}
-  }, 3000);
-}
 const MAPS_APPS = ['com.google.android.apps.maps', 'app.revanced.android.apps.maps'];
 // The navigation app chosen in Yunus's settings (Harita ve telefon) first, then Google Maps.
 // "yunus" is Yunus's own map, so it is not a package.
@@ -5114,8 +5099,8 @@ const CAR_HAL_MAP = {
   'Get lampHigh': (v) => (v === 0 || v === 1 ? { highBeam: v === 1 } : {}),
   'Get drl': (v) => (v === 1 || v === 2 ? { drl: v === 1 } : {}), // getDayRunningLightState: 1 on, 2 off
   // Driver assist (updateTelltales, #adasR): blind spot / lane keeping switched on; cruise state and set speed.
-  // ADAS_BSD_STATE: 1 on, 2 on and warning, a car in the blind spot (seen on the car, a car on the
-  // left; the value says no side).
+  // ADAS_BSD_STATE: 1 on, 2 on and warning, a car in the blind spot. It gives no side, and no other
+  // event does (searched on drives: ADAS, instrument, mirror and collision devices).
   'Adas 0x41800008': (v) => ({ adas: { bsd: v === 1 || v === 2, bsdAlarm: v === 2 } }),
   // Door-open warning (ADAS_DOW_WARN_LEFT/RIGHT): the same rear radars, with a side, while stopped.
   'Adas 0x41800020': (v) => ({ adas: { dowL: v === 1 } }),
@@ -5329,13 +5314,6 @@ window.yunusCar = (m) => {
   // charging. Inspect window.YunusCarData to see what the car is actually sending.
   if (m.carHal) {
     const data = (window.YunusCarData = window.YunusCarData || {});
-    // Temporary: changes of the blind-spot ids (Adas 0x418000xx) and of every event from the
-    // devices that may carry the warning's side, kept with their time in localStorage 'adasLog'.
-    // A value only when it changed; an id changing more than 20 times a minute (the belt and
-    // others that flap) is dropped as noise; written to storage at most every 3 s.
-    const ak = m.carHal.dev + ' ' + m.carHal.type;
-    const av = m.carHal.int != null ? m.carHal.int : m.carHal.float != null ? m.carHal.float : m.carHal.double;
-    if (ak.startsWith('Adas 0x418') || /^(ADAS|Instrument|RearViewMirror|Collision) /.test(ak)) adasNote(ak, av);
     data[m.carHal.dev + ' ' + m.carHal.type] = m.carHal;
     if (window.__dbg) console.log('carHal', m.carHal);
     const key = m.carHal.dev + ' ' + m.carHal.type, map = CAR_HAL_MAP[key];
