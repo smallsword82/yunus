@@ -216,7 +216,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         Math.toRadians(o.optDouble("fov", 190.0) / 2).toFloat(),
         Math.toRadians(o.optDouble("yaw", 15.0)).toFloat(), Math.toRadians(o.optDouble("pitch", 15.0)).toFloat(),
         o.optDouble("back", -1.0).toFloat(), Math.toRadians(o.optDouble("hfov", 70.0) / 2).toFloat(),
-        if (o.optBoolean("mirror", true)) 1f else 0f, o.optDouble("rot", 0.0).toFloat(), 0f, 0f, 0f)
+        if (o.optBoolean("mirror", true)) 1f else 0f, o.optDouble("rot", 0.0).toFloat(), Math.toRadians(o.optDouble("roll", 0.0)).toFloat(), 0f, 0f)
 
     /** Opens the camera into [st] (the renderer's camera texture). Called on the renderer's thread. */
     private fun open(st: SurfaceTexture) {
@@ -348,7 +348,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         attribute vec2 aPos;
         varying vec2 vPos; // -1..1, y up
         void main() { vPos = aPos; gl_Position = vec4(aPos, 0.0, 1.0); }"""
-    // uP (column-major mat4): [0] mode, sector, cx, cy | [1] rx, ry, half fov, yaw | [2] pitch, back, half hfov, mirror | [3] rot
+    // uP (column-major mat4): [0] mode, sector, cx, cy | [1] rx, ry, half fov, yaw | [2] pitch, back, half hfov, mirror | [3] rot, roll
     private val FRAGMENT = """
         #extension GL_OES_EGL_image_external : require
         precision highp float;
@@ -378,6 +378,11 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
             vec3 up = vec3(0.0, 0.0, -1.0);
             vec3 right = normalize(cross(f, up));
             vec3 u = cross(right, f);
+            // Turned about the view's axis, to level the road: the side cameras sit tilted.
+            float cr = cos(uP[3][1]), sr = sin(uP[3][1]);
+            vec3 r0 = right;
+            right = r0 * cr + u * sr;
+            u = u * cr - r0 * sr;
             float t = tan(uP[2][2]);
             float sx = vPos.x * (uP[2][3] > 0.5 ? -1.0 : 1.0);
             vec3 d = normalize(f + right * sx * t + u * vPos.y * t / uAspect);

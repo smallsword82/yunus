@@ -507,7 +507,7 @@ button { font-family:inherit; color:inherit; }
 /* The knob on AUTO: an A in the lamp, as on the car's own tell-tale. */
 #indLow .a { display:none; fill:var(--pn); stroke:none; font:700 13px Inter,sans-serif; }
 #indLow.auto .a { display:block; }
-#indLow.auto { stroke:#2fd06a; } #indLow.auto path:first-child { fill:#2fd06a; } /* the cluster's AUTO lamp is lit */
+#indLow.auto:not(.on):not(.high) path:first-child { fill:var(--cd2); } /* knob on AUTO, beams off: grey with the A; green only once they are lit */
 #indLow.high { stroke:#3e8bff; } #indLow.high path:first-child { fill:#3e8bff; } /* high beam or a flash: after AUTO, so blue wins */
 /* Rear camera while driving (as on Cybertruck): a wide, thin strip above the car shaped and
    mirrored like the interior rear-view mirror. Placed each frame above the car (placeRearCam). */
@@ -830,10 +830,10 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
 @keyframes shineAcross { from { background-position:100% 0; } to { background-position:0 0; } }
 .clim.lit .ico, .clim.heat .ico {
   background:linear-gradient(0deg, currentColor 0%, currentColor 45%, rgba(255,255,255,.8) 50%, currentColor 55%, currentColor 100%);
-  background-size:100% 300%; animation:shineUp 1.8s linear infinite; }
+  background-size:100% 300%; animation:shineUp 1.8s steps(10) infinite; }
 .clim.vent .ico {
   background:linear-gradient(90deg, currentColor 0%, currentColor 45%, rgba(255,255,255,.8) 50%, currentColor 55%, currentColor 100%);
-  background-size:300% 100%; animation:shineAcross 1.6s linear infinite; }
+  background-size:300% 100%; animation:shineAcross 1.6s steps(10) infinite; }
 
 #recirc .air { width:66px; height:66px; stroke-width:0; }
 #recirc .air.in, #recirc.lit .air.out { display:none; }
@@ -1551,9 +1551,9 @@ function bendRoad() {
 }
 // Only the lines are drawn, no dark road under them. As on a Tesla they end a little behind the car,
 // fading out between 2.5 m and 7 m behind it (front is +z), so they don't run under the cards, and
-// they fade the same way ahead, from 16 m to 34 m, towards the top bar.
+// they fade the same way ahead, from 9 m to 18 m, ending well below the top bar. Chosen on the car.
 asphalt.visible = false;
-const ROAD_FADE = { near: -2.5, far: -7, ahead: 16, horizon: 34 };
+const ROAD_FADE = { near: -2.5, far: -7, ahead: 9, horizon: 18 };
 for (const m of [roadMat, dashMat, laneLine.left, laneLine.right]) {
   m.transparent = true;
   m.customProgramCacheKey = () => 'roadFade'; // else three.js reuses the ground's program, unfaded
@@ -1669,6 +1669,9 @@ function onCarLoaded(gltf) {
     // gets its colour from a black texture, so single-tone swaps in the body paint material.
     if (mat === 'PCrPaint_2' && !o.name.startsWith('antena')) { o.userData.blackMat = o.material; upperMeshes.push(o); }
     if (/^(f_gls|b_gls|sunroof|Window_)/.test(o.name)) { o.material = o.material.clone(); o.material.color.set(0x050608); }
+    // See-through and two-sided (the glass): three.js would otherwise draw these twice and look up
+    // their shader program anew each time, every frame.
+    if (o.material.transparent && o.material.side === THREE.DoubleSide) o.material.forceSinglePass = true;
   });
   applyPaint();
   // dolphin_parts.glb has the moving parts cut out in Blender (tools/split_parts.py);
@@ -1782,8 +1785,10 @@ const LAMP_PARTS = {
   lens: /^(outer_glass_Light_glass|glass_Light_glass)/,
   tail: /^(red_led_strip|Outer_glas)/,
   rearSignal: /^side_ind_tex/,
+  brake: /^rare_break_gls/, // the high stop lamp
+  reverse: /^side_tex_TL/,
 };
-const lamps = { drl: { left: [], right: [] }, drlBar: [], low: [], high: [], lens: [], tail: [], rearSignal: { left: [], right: [] } };
+const lamps = { drl: { left: [], right: [] }, drlBar: [], low: [], high: [], lens: [], tail: [], brake: [], reverse: [], rearSignal: { left: [], right: [] } };
 let beams = null;
 // Emissive alone barely shows on these textured lamp materials, so every lamp mesh also gets an
 // additive overlay on the same geometry that shines in the lamp's colour while it is lit.
@@ -1824,7 +1829,7 @@ function setupLamps(car) {
   for (const o of found) {
     if (LAMP_PARTS.drl.test(o.name)) { splitBySide(o, lamps.drl); continue; }
     if (LAMP_PARTS.rearSignal.test(o.name)) { splitBySide(o, lamps.rearSignal); continue; }
-    for (const role of ['drlBar', 'low', 'high', 'lens', 'tail']) {
+    for (const role of ['drlBar', 'low', 'high', 'lens', 'tail', 'brake', 'reverse']) {
       if (!LAMP_PARTS[role].test(o.name)) continue;
       o.material = o.material.clone();
       o.material.emissive = new THREE.Color(0x000000);
@@ -1851,11 +1856,12 @@ function setupLamps(car) {
     halos.low.push(addHalo(0xfff6e8, 0.45, sx * 0.60, 0.83, 1.86, [sx * 0.3, 0, 1]));
     halos.high.push(addHalo(0xeef4ff, 0.6, sx * 0.47, 0.80, 1.95, [sx * 0.2, 0, 1]));
     halos.tail.push(addHalo(0xff2020, 0.4, sx * 0.68, 1.0, -1.98, [sx * 0.3, 0, -1]));
+    halos.reverse.push(addHalo(0xffffff, 0.34, sx * 0.5, 1.0, -2.0, [sx * 0.3, 0, -1]));
     halos.signal[side].push(addHalo(0xff7a00, 0.34, sx * 0.66, 0.79, 1.80, [sx, 0, 0.8]));
     halos.signal[side].push(addHalo(0xff7a00, 0.32, sx * 0.70, 1.0, -1.92, [sx, 0, -0.8]));
   }
 }
-const halos = { low: [], high: [], tail: [], signal: { left: [], right: [] } };
+const halos = { low: [], high: [], tail: [], reverse: [], signal: { left: [], right: [] } };
 let glowTex = null;
 function glowTexture() {
   if (glowTex) return glowTex;
@@ -1907,10 +1913,14 @@ function updateLamps(now) {
   glow(lamps.low, 0xfff6e8, L.low ? 3 : 0);
   glow(lamps.high, 0xeef4ff, L.high ? 3.5 : 0);
   glow(lamps.lens, 0xffffff, L.high ? 0.45 : L.low ? 0.25 : 0);
-  glow(lamps.tail, 0xff1a1a, L.park ? 2.0 : 0);
+  // The stop lamps as the car reports them; brighter than the tail lamps sharing their lens.
+  glow(lamps.tail, S.brake ? 0xff0000 : 0xff1a1a, S.brake ? 1.5 : L.park ? 0.9 : 0);
+  glow(lamps.brake, 0xff0000, S.brake ? 1.5 : 0);
+  glow(lamps.reverse, 0xffffff, S.gear === 'R' ? 3 : 0);
   fade(halos.low, L.low ? 0.85 : 0);
   fade(halos.high, L.high ? 1 : 0);
-  fade(halos.tail, L.park ? 0.75 : 0);
+  fade(halos.tail, S.brake ? 1 : L.park ? 0.75 : 0);
+  fade(halos.reverse, S.gear === 'R' ? 0.8 : 0);
   for (const side of ['left', 'right']) {
     const signalling = S.signal === side || S.hazard, lit = signalling && blink;
     // Daytime running light: white whenever the car is on, dimmed while the low beam is on,
@@ -2223,16 +2233,19 @@ function stepDrive(dt, now) {
     SIM.histAt = now + 500;
   }
 }
+// Setting a text lays the page out again even when it is the same text, and these run every frame.
+const setText = (el, t) => { t = String(t); if (el.textContent !== t) el.textContent = t; };
+const setHtml = (el, h) => { if (el.dataset.html !== h) { el.dataset.html = h; el.innerHTML = h; } };
 function updateDriveHud() {
-  $('speed').textContent = Math.round(S.set.speedUnit === 'mph' ? S.speed * 0.621371 : S.speed);
-  $('spdUnit').textContent = S.set.speedUnit === 'mph' ? 'mph' : 'km/h';
+  setText($('speed'), Math.round(S.set.speedUnit === 'mph' ? S.speed * 0.621371 : S.speed));
+  setText($('spdUnit'), S.set.speedUnit === 'mph' ? 'mph' : 'km/h');
   const kw = S.powerKw;
   $('powerBar').querySelector('.power').style.height = Math.min(240, Math.max(0, kw) / 150 * 240) + 'px';
   $('powerBar').querySelector('.regen').style.height = Math.min(100, Math.max(0, -kw) / 60 * 100) + 'px';
-  $('powerKw').textContent = kw < -0.5 ? `Rejen ${Math.round(-kw)} kW` : `${Math.round(Math.max(0, kw))} kW`;
+  setText($('powerKw'), kw < -0.5 ? `Rejen ${Math.round(-kw)} kW` : `${Math.round(Math.max(0, kw))} kW`);
   const sign = $('limitSign');
   sign.classList.toggle('hide', !S.set.tsr || S.gear !== 'D');
-  $('limitVal').textContent = S.speedLimit;
+  setText($('limitVal'), S.speedLimit);
   sign.classList.toggle('over', S.set.tsrWarn !== 'off' && S.speed > S.speedLimit + 3);
 }
 // Blind-spot warning, as the mirrors' lamps: a car in the zone turns that side's lane line (and
@@ -2475,6 +2488,7 @@ $('mmPrev').onclick = () => liveMedia && liveMedia.access && YunusNative.media('
 $('mmNext').onclick = () => liveMedia && liveMedia.access && YunusNative.media('next');
 if (window.YunusNative && YunusNative.mediaRefresh) YunusNative.mediaRefresh(); // first now playing
 let mmPos = 84;
+let enDrawn = '';
 function updateCards() {
   if (liveMedia) { if (liveMedia.dur > 0 && !mmSeeking) $('mmProg').style.width = (livePos() / liveMedia.dur * 100) + '%'; }
   else {
@@ -2483,21 +2497,23 @@ function updateCards() {
   }
   // Energy: instant power and consumption, plus the recent consumption trace.
   const whkm = S.speed > 3 ? Math.round(S.powerKw * 1000 / S.speed) : null;
-  $('enNow').textContent = `${Math.round(S.powerKw)} kW · ${whkm === null ? '—' : whkm} Wh/km`;
+  setText($('enNow'), `${Math.round(S.powerKw)} kW · ${whkm === null ? '—' : whkm} Wh/km`);
   const vals = SIM.hist.filter((v) => v !== null);
-  $('enAvg').textContent = vals.length ? `Son ${vals.length >> 1} sn ortalaması ${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} Wh/km` : 'Sürüşe başlayınca tüketim burada çizilir';
-  drawEnergy();
+  const enAvg = vals.length ? `Son ${vals.length >> 1} sn ortalaması ${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} Wh/km` : 'Sürüşe başlayınca tüketim burada çizilir';
+  setText($('enAvg'), enAvg);
+  const enKey = `${S.theme} ${SIM.hist.length} ${SIM.hist[SIM.hist.length - 1]}`;
+  if (enKey !== enDrawn) { enDrawn = enKey; drawEnergy(); }
   const t = S.tyres, low = ['FL', 'FR', 'RL', 'RR'].some(tyreLow), none = Object.values(t).every((v) => v == null);
-  $('tyreState').textContent = none ? 'Bekleniyor' : low ? 'Düşük basınç' : 'Normal';
+  setText($('tyreState'), none ? 'Bekleniyor' : low ? 'Düşük basınç' : 'Normal');
   $('tyreState').style.color = low ? 'var(--dn)' : '';
   const tyre = (k, pos) => `<div style="${pos}" class="${tyreLow(k) ? 'low' : ''}">${pressNum(t[k])}<span>${pressUnit()}</span></div>`;
-  $('ccTyres').innerHTML = `<img src="img/overhead.png" alt="">` +
-    tyre('FL', 'left:22%;top:28px') + tyre('FR', 'right:22%;top:28px') + tyre('RL', 'left:22%;bottom:22px') + tyre('RR', 'right:22%;bottom:22px');
+  setHtml($('ccTyres'), `<img src="img/overhead.png" alt="">` +
+    tyre('FL', 'left:22%;top:28px') + tyre('FR', 'right:22%;top:28px') + tyre('RL', 'left:22%;bottom:22px') + tyre('RR', 'right:22%;bottom:22px'));
   const tr = SIM.trip, mins = Math.floor((Date.now() - tr.start) / 60000);
-  $('trDist').innerHTML = `${tr.km.toFixed(1).replace('.', ',')}<span>km</span>`;
-  $('trKwh').innerHTML = `${Math.max(0, tr.kwh).toFixed(2).replace('.', ',')}<span>kWh</span>`;
-  $('trAvg').innerHTML = `${tr.km > 0.05 ? Math.round(tr.kwh * 1000 / tr.km) : '—'}<span>Wh/km ortalama</span>`;
-  $('trTime').innerHTML = `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}<span>süre</span>`;
+  setHtml($('trDist'), `${tr.km.toFixed(1).replace('.', ',')}<span>km</span>`);
+  setHtml($('trKwh'), `${Math.max(0, tr.kwh).toFixed(2).replace('.', ',')}<span>kWh</span>`);
+  setHtml($('trAvg'), `${tr.km > 0.05 ? Math.round(tr.kwh * 1000 / tr.km) : '—'}<span>Wh/km ortalama</span>`);
+  setHtml($('trTime'), `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}<span>süre</span>`);
 }
 function drawEnergy() {
   const c = $('enChart').getContext('2d'), W = 620, H = 130, max = 400, min = -200;
@@ -2638,10 +2654,9 @@ function syncEmbedSoon() {
 function syncEmbedNow() {
   try { if (!mapEmbedded && !sidePkg) return; } catch { return; }
   clearTimeout(embedSyncAt);
-  // While a signal column is open the apps are shifted, not resized (see setSigCol); a third window
-  // beside the map is lent to it (hidden till it closes).
+  // While a signal column is open the apps are shifted, not resized (see setSigCol).
   const sigOpen = !!(sigW.left || sigW.right);
-  if (sidePkg && !sigSideTaken && !sigOpen) embedSide();
+  if (sidePkg && !sigOpen) embedSide();
   if (!mapEmbedded || sigOpen) return;
   const r = $('map').getBoundingClientRect();
   if (r.width < 80 || r.height < 80 || current || appTabOn()) YunusNative.embedVisible('map', false); // map area closed, a card over it, or the app's tab
@@ -2680,6 +2695,9 @@ $('divider').ondblclick = () => setCarW(carW === CAR_W ? LEN() : CAR_W, true);
 renderer.setAnimationLoop(() => {
   // The dock overlay has no car or map, and it now stays loaded behind other apps: nothing to run.
   if (DOCK_ONLY) return;
+  // Performance mode, parked and nothing moving: the page's per-frame work ten times a second.
+  const tickAt = performance.now();
+  if (S.set.perf && DEVICE && !camAnim && !glassDrag && S.gear !== 'D' && S.gear !== 'R' && !S.signal && !S.hazard && !chargeGear.visible && tickAt >= awakeUntil && tickAt - lastFrame < 100) return;
   if (camAnim) {
     camAnim.t = Math.min(1, camAnim.t + 0.025);
     const k = 1 - Math.pow(1 - camAnim.t, 3);
@@ -3034,19 +3052,22 @@ $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'
 // rear, left, right, front side by side (sector 0-3). "dewarp" takes the fisheye out: a virtual
 // straight-lens camera looking back along the car, tipped down (the camera's view ends just above
 // the horizon looking back) and mirrored, like a door mirror. The car's rear is at the left camera's
-// left edge and the right camera's right edge (back -1 / 1). Chosen on the car (option 3 of 4).
+// left edge and the right camera's right edge (back -1 / 1). Turned by roll to level the road and
+// the horizon, wide enough to show the car's own side, as a door mirror does. Chosen on the car.
 // ("flat", rot: the plain camera picture turned 90° and stretched, the earlier view.)
+// On the upright screen the window is wide and low: wider, and a little higher, to keep the next lane.
+const SIDE_CAM_PORTRAIT = { pitch: 30, hfov: 95 };
 const SIDE_CAM = {
-  left: { mode: 'dewarp', sector: 1, back: -1, yaw: 10, pitch: 40, hfov: 60, mirror: true },
-  right: { mode: 'dewarp', sector: 2, back: 1, yaw: 10, pitch: 40, hfov: 60, mirror: true },
+  left: { mode: 'dewarp', sector: 1, back: -1, yaw: 5, pitch: 35, hfov: 75, roll: -45, mirror: true },
+  right: { mode: 'dewarp', sector: 2, back: 1, yaw: 5, pitch: 35, hfov: 75, roll: 45, mirror: true },
 };
 // The rear-view mirror (floating window) from the rear camera (sector 0), or the front one (sector 3)
 // with its switch: the virtual camera looks along the lens's axis tipped up towards the picture's
-// top (the horizon), 90° across. The rear one is mirrored, as a mirror shows the road behind; set
+// top (the horizon), 60° across: wider stretched the cars at the edges and made them look far. The rear one is mirrored, as a mirror shows the road behind; set
 // on the car by eye.
 const MIRROR_CAM = {
-  rear: { mode: 'dewarp', sector: 0, back: 1, yaw: 90, pitch: 55, hfov: 90, mirror: true, label: 'Arka ⇄' },
-  front: { mode: 'dewarp', sector: 3, back: 1, yaw: 90, pitch: 70, hfov: 90, mirror: false, label: 'Ön ⇄' },
+  rear: { mode: 'dewarp', sector: 0, back: 1, yaw: 90, pitch: 55, hfov: 60, mirror: true, label: 'Arka ⇄' },
+  front: { mode: 'dewarp', sector: 3, back: 1, yaw: 90, pitch: 70, hfov: 60, mirror: false, label: 'Ön ⇄' },
 };
 let mirrorView = 'rear', mirrorShown = false;
 const LIVE_CAM = !!(window.YunusNative && YunusNative.sideCam);
@@ -3061,13 +3082,10 @@ function blindSpotWanted() {
 // Trial: the signal's side view as a column at that edge (landscape); the map gives up the room.
 // The column opens and closes at once (no sliding: the 3D view and the map would follow it every
 // frame), and the embedded Maps is not resized for it - that made it redraw: late, black, jerky.
-// The room comes first from the third window, which steps back for that moment (its app hidden,
-// not resized), so the map keeps its width; only what the third window can't give comes off the
-// map. A left column pushes Maps right by its width; whatever the map area loses is cut off
-// Maps' right side.
-const SIG_COL = 520;
+// The room comes off the map, cut off its far side: a left column pushes it right, a right column
+// pushes the third window left, which stays live and at its width.
+const SIG_COL = 520, SIG_MAP_MIN = 120;
 const sigW = { left: 0, right: 0 };
-let sigSideTaken = 0; // px of the third window lent to the signal column
 const SIG_MS = 220; // as CarCamera.SLIDE_MS
 let sigAnimEnd = 0;
 function setSigCol(side) {
@@ -3076,9 +3094,11 @@ function setSigCol(side) {
   sigW.left = side === 'left' ? SIG_COL : 0; sigW.right = side === 'right' ? SIG_COL : 0;
   // Third window under the map or in a tab: it narrows with the map (shifted and cut the same way), nothing lent.
   const stacked = STACK() || TABS();
-  sigSideTaken = side && !stacked ? Math.min(sideW, SIG_COL) : 0;
   stage.style.setProperty('--sigL', sigW.left + 'px'); stage.style.setProperty('--sigR', sigW.right + 'px');
-  stage.style.setProperty('--sideW', (sideW - sigSideTaken) + 'px');
+  // Beside the map the third window keeps its width and stays live: the map gives up the column,
+  // down to a strip, and the car the rest.
+  const carGives = side && !stacked ? Math.min(carW, Math.max(0, SIG_COL + SIG_MAP_MIN - (LEN() - carW - sideW))) : 0;
+  stage.style.setProperty('--carW', (carW - carGives) + 'px');
   placeHandles(); wake(1500);
   // No app is resized for the column (a resized app redraws, black for a moment): each is shifted
   // past the column and its far edge cut off, and put back as it was when the column closes. Under
@@ -3090,8 +3110,9 @@ function setSigCol(side) {
     try { if (mapEmbedded) YunusNative.embedShift('map', dx, cut, SIG_MS); if (sidePkg) YunusNative.embedShift('side', dx, cut, SIG_MS); } catch {}
     return;
   }
-  try { if (mapEmbedded) YunusNative.embedShift('map', dx, Math.round((side ? SIG_COL - sigSideTaken : 0) * stageScale), SIG_MS); } catch {}
-  try { if (sidePkg) { if (sigSideTaken) YunusNative.embedVisible('side', false); else setTimeout(embedSide, SIG_MS); } } catch {}
+  const give = Math.round(carGives * stageScale), mapCut = side ? Math.round(SIG_COL * stageScale) - give : 0;
+  try { if (mapEmbedded) YunusNative.embedShift('map', side === 'left' ? mapCut : -give, mapCut, SIG_MS); } catch {}
+  try { if (sidePkg) YunusNative.embedShift('side', side === 'right' ? -Math.round(SIG_COL * stageScale) : 0, 0, SIG_MS); } catch {}
 }
 function updateBlindSpot() {
   const cam = $('bsCam');
@@ -3111,7 +3132,7 @@ function updateBlindSpot() {
       if (sigW[bsSide === 'left' ? 'right' : 'left']) setSigCol(null);
       $('sigSpot').classList.toggle('right', bsSide === 'right');
       const [x, y, w, h] = screenRect($('sigSpot'));
-      YunusNative.sideCam(x, y, w, h, JSON.stringify(SIDE_CAM[bsSide]));
+      YunusNative.sideCam(x, y, w, h, JSON.stringify(PORTRAIT ? Object.assign({}, SIDE_CAM[bsSide], SIDE_CAM_PORTRAIT) : SIDE_CAM[bsSide]));
       // The column opens with the camera's first frame (sideCamReady), not before: a column waiting
       // for the camera was black. Without a frame in 1.5 s it opens anyway.
       if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = setTimeout(sigCamReady, 1500); }
@@ -3439,9 +3460,11 @@ if (navigator.geolocation) {
   navigator.geolocation.watchPosition((p) => onFix(p.coords), (e) => console.warn('location', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
 }
 function onFix(c) {
-  const prev = myPos, first = !prev;
-  myPos = [c.longitude, c.latitude];
+  const prev = myPos, first = !prev, pos = [c.longitude, c.latitude];
   if (c.heading != null && !isNaN(c.heading)) NAV.heading = c.heading;
+  // Standing still the same place comes about twice a second, and each jump redrew the map.
+  if (!first && distM(prev, pos) < 3) { if (NAV.active) updateNav(); return; }
+  myPos = pos;
   if (meMarker) meMarker.setLngLat(myPos);
   // The first fix, or a jump of more than 2 km (a late first real fix), moves the map there.
   if (map && (first || distM(prev, myPos) > 2000)) map.jumpTo({ center: myPos });
@@ -4138,7 +4161,7 @@ function placeHandles() {
     return;
   }
   h.right = ''; h.top = '';
-  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - (sideW - sigSideTaken) - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
+  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - sideW - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
   $('sideHandle').style.left = PORTRAIT ? '' : at;
   $('sideHandle').style.top = PORTRAIT ? at : '';
 }
@@ -5167,6 +5190,9 @@ const carCmd = (cmd, args = {}) => {
 // Opens one of the car's own screens ("package/.Activity").
 const openCarApp = (component) => window.YunusNative && YunusNative.open(component);
 function setBattery(soc, range) {
+  // A 0 here is the car not having a value at that moment (it comes while the percentage changes), not an empty battery.
+  if (!(soc > 0)) soc = null;
+  if (!(range > 0)) range = null;
   if (soc != null) { $('socTxt').textContent = Math.round(soc) + '%'; $('socBar').style.width = soc + '%'; if (S.charging) updateChargeInfo(); }
   if (range != null) { S.rangeKm = range; $('rangeTxt').textContent = Math.round(range) + ' km'; }
 }
@@ -5219,6 +5245,7 @@ const CAR_HAL_MAP = {
   'Instrument 0x2A600008': (v) => ({ adas: { iccSpeed: v > 0 ? v : null } }), // DD_ACC_CRUISING_SPEED, km/h
   'Light 0x4FE0000E': (v) => (v === 1 || v === 2 ? { drl: v === 1 } : {}), // LIGHT_LEFT_DAYTIME_LIGHT_STATE
   'Light 0x38A00008': (v) => ({ sideLamp: v === 1 }), // LIGHT_SIDE_LIGHT
+  'Light 0x38A00012': (v) => ({ brake: v === 1 }), // LIGHT_CMD_STOP_LIGHT_STATE: 1 on, 3 off (seen on a drive)
   // LIGHT_TURN_SIGNAL_LIGHT: 1 off, 2/3 left, 4/5 right, 6-9 hazard and emergency flashing.
   'Light 0x38A0002C': (v) => ({ signal: v === 2 || v === 3 ? 'left' : v === 4 || v === 5 ? 'right' : null, hazard: v >= 6 }),
   // GEARBOX_AUTOMATIC_GEAR (GEARBOX_AUTO_MODE_*): 1 P, 2 R, 3 N, 4 D, 6 S.
@@ -5296,7 +5323,7 @@ const CAR_HAL_MAP = {
   'Bodywork 0x4B900018': (v) => ({ windows: { RR: v } }),
   'Bodywork 0x41A00010': (v) => ({ sunshade: v }),
   // Through the shell helper's getters (as Kinex reads them), when this car allows it:
-  'Get speed': (v) => { realSpeed = true; return { speed: Math.round(v) }; },
+  'Get speed': (v) => { if (!realSpeed) { realSpeed = true; sendCarHalWant(); } return { speed: Math.round(v) }; },
   'Get lock': (v) => (v === 1 || v === 2 ? { locked: v === 2 } : {}), // DOOR_LOCK_STATE_UNLOCK 1, LOCK 2
   // Live lock state from the DoorLock/OTA listener (the getter returns 0): OTA_LF_DOOR_LOCK, UNLOCK 1 / LOCK 2.
   'Ota 0x40700008': (v) => (v === 1 || v === 2 ? { locked: v === 2 } : {}),
@@ -5338,7 +5365,11 @@ const CAR_HAL_MAP = {
 let KMH_PER_RPM = 0.0108, realSpeed = false;
 try { KMH_PER_RPM = +localStorage.getItem('kmhPerRpm') || KMH_PER_RPM; } catch {}
 // Only these car values are passed to the page (the car pushes many more; see carHalWant).
-try { if (window.YunusNative && YunusNative.carHalWant) YunusNative.carHalWant(JSON.stringify(Object.keys(CAR_HAL_MAP))); } catch {}
+// With the real speed the motor's rpm (many a second while driving) is no longer needed.
+function sendCarHalWant() {
+  try { if (window.YunusNative && YunusNative.carHalWant) YunusNative.carHalWant(JSON.stringify(Object.keys(CAR_HAL_MAP).filter((k) => !(realSpeed && k === 'Engine 0x44100008')))); } catch {}
+}
+sendCarHalWant();
 const CAR_HAL_KEEP = ['Ota 0x40700008', 'Statistic 0x4A502010', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
   'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400038', 'Ac 0x40400010', 'Ac 0x4040001C', 'Charging 0x44400008',
   // The light knob and the lamps: the car reports them only when they change, so a start shows
@@ -5428,7 +5459,8 @@ window.yunusCar = (m) => {
     data[m.carHal.dev + ' ' + m.carHal.type] = m.carHal;
     if (window.__dbg) console.log('carHal', m.carHal);
     const key = m.carHal.dev + ' ' + m.carHal.type, map = CAR_HAL_MAP[key];
-    const val = m.carHal.int != null ? m.carHal.int : m.carHal.float != null ? m.carHal.float : m.carHal.double;
+    // The car's value object has all three fields and fills one: a value sent as a double reads 0 as int.
+    const val = m.carHal.int || m.carHal.float || m.carHal.double || 0;
     if (map && val != null) {
       window.yunusCar(map(val));
       if (CAR_HAL_KEEP.includes(key)) {
@@ -5438,7 +5470,7 @@ window.yunusCar = (m) => {
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
-    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'drl', 'adas', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
+    'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'brake', 'drl', 'adas', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
     'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle', 'belts'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
@@ -5475,6 +5507,7 @@ window.yunusCar = (m) => {
   if (m.highBeam != null) S.highBeam = m.highBeam;
   if (m.lowLamp != null) S.lowLamp = m.lowLamp;
   if (m.sideLamp != null) S.sideLamp = m.sideLamp;
+  if (m.brake != null && m.brake !== S.brake) { S.brake = m.brake; wake(1000); }
   if (m.drl != null) S.drl = m.drl;
   if (m.adas) {
     const a = Object.assign(S.adas = S.adas || {}, m.adas);
@@ -5580,11 +5613,13 @@ $('projOpen').onclick = openProjection;
 $('projLater').onclick = () => $('projPrompt').classList.remove('show');
 
 // Touch click (Settings > Sound > "Dokunma sesi"): a short soft tick on buttons and tiles.
-let clickCtx = null;
+let clickCtx = null, clickIdle = 0;
 document.addEventListener('pointerdown', (e) => {
   if (!S.set.touchSound || !e.target.closest('button,.btn,.dk,[data-card]')) return;
   try {
     clickCtx = clickCtx || new AudioContext();
+    // Left running it keeps an audio stream open to the car's sound system, also in silence.
+    clickCtx.resume(); clearTimeout(clickIdle); clickIdle = setTimeout(() => clickCtx.suspend(), 1000);
     const o = clickCtx.createOscillator(), g = clickCtx.createGain(), t = clickCtx.currentTime;
     o.frequency.value = 1800; g.gain.setValueAtTime(0.05 * (S.vol / 15 + 0.2), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
     o.connect(g).connect(clickCtx.destination); o.start(t); o.stop(t + 0.035);

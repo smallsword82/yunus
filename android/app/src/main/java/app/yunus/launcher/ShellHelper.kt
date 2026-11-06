@@ -70,7 +70,7 @@ object ShellHelper {
                 val yunus = line.endsWith("yunus")
                 val sh = { c: String -> try { Runtime.getRuntime().exec(arrayOf("sh", "-c", c)).waitFor() } catch (t: Throwable) { System.err.println("$c: $t") } }
                 sh("cmd package set-home-activity " + if (yunus) "app.yunus.launcher/.MainActivity" else "com.android.launcher3/.home.MainActivity")
-                sh(if (yunus) "wm overscan 0,-84,0,-90" else "wm overscan reset")
+                sh(if (yunus) CarWatch.barsCommand() else "wm overscan reset")
                 if (!yunus) sh("input keyevent 3") // KEYCODE_HOME: over to DiLink's home
                 continue
             }
@@ -78,7 +78,8 @@ object ShellHelper {
             // its code), which Yunus's mode keeps above the screen: while it talks the status bar comes
             // back on the screen, then goes back up. Yunus's own window stays where it is.
             if (line.startsWith("voice ")) {
-                val c = if (line.endsWith("1")) "wm overscan 0,0,0,-90" else "wm overscan 0,-84,0,-90"
+                CarWatch.voiceUp = line.endsWith("1")
+                val c = CarWatch.barsCommand()
                 try { Runtime.getRuntime().exec(arrayOf("sh", "-c", c)).waitFor() } catch (t: Throwable) { System.err.println("$c: $t") }
                 continue
             }
@@ -364,6 +365,11 @@ private object CarWatch {
                 // Driver assist: the lane camera's lines come as events at once (the poll is once a second).
                 "adas.BYDAutoADASDevice"))
             try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
+        // TEMPORARY, to find the blind spot's side on a drive: every other device, while this file exists.
+        if (java.io.File("/data/local/tmp/yunus_rec").exists()) for (name in listOf("radar.BYDAutoRadarDevice", "signal.BYDAutoSignalDevice",
+                "funcnotice.BYDAutoFuncNoticeDevice", "reminder.BYDAutoReminderDevice", "vehicledata.BYDAutoVehicleDataDevice", "collision.BYDAutoCollisionDevice",
+                "doormirror.BYDAutoRearViewMirrorDevice", "special.BYDAutoSpecialDevice", "panorama.BYDAutoPanoramaDevice", "auxiliary.BYDAutoAuxDevice", "motor.BYDAutoMotorDevice", "instrument.BYDAutoInstrumentDevice"))
+            try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
         // Also the getters Kinex reads, once a second (SOC, range and speed don't come as events
         // while parked). A getter that is refused is not asked again.
         for ((name, gets) in GETTERS) try {
@@ -388,6 +394,7 @@ private object CarWatch {
         } catch (t: Throwable) { System.err.println("watch instrument: ${t.cause ?: t}") }
         poll()
         steerPoll()
+        speedPoll()
     }
 
     // Device → (key sent, getter, its int argument or null).
@@ -426,7 +433,16 @@ private object CarWatch {
     private var instrumentDev: Any? = null
     private var featGet: java.lang.reflect.Method? = null
     private var lightsDead = false
-    private class Poll(val dev: Any, val cls: Class<*>, val get: Get) { var dead = false }
+    private class Poll(val dev: Any, val cls: Class<*>, val get: Get) {
+        var dead = false
+        val method: java.lang.reflect.Method by lazy { if (get.arg == null) cls.getMethod(get.method) else cls.getMethod(get.method, Integer.TYPE) }
+        fun read(): Any? = if (get.arg == null) method.invoke(dev) else method.invoke(dev, get.arg)
+    }
+    // Read in their own loops.
+    private val FAST = setOf("steer", "speed")
+    // These also come as events when they change, and change slowly: read every 5 s, not every second.
+    private val SLOW = setOf("soc", "range", "odo", "chgGun", "chgState", "chgPower", "restMin", "shade")
+    private var pollTurn = 0
     private val polls = ArrayList<Poll>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -447,11 +463,34 @@ private object CarWatch {
         }
     } catch (_: Throwable) { } }
 
+    // BYD's bars off the screen: wm overscan is given in the landscape frame and turns with the screen,
+    // so upright it would push the sides off and leave the bars on. Top and bottom of the screen as it
+    // is turned now, in that frame (the status bar 84 px, the navigation bar 90 px).
+    @Volatile var voiceUp = false // the status bar back on the screen for the voice assistant
+    private fun displayInfo() = Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null)
+        .let { it.javaClass.getMethod("getDisplayInfo", Integer.TYPE).invoke(it, 0) }
+    fun barsCommand(): String {
+        val top = if (voiceUp) 0 else -84
+        return when (displayInfo().let { it.javaClass.getField("rotation").getInt(it) }) {
+            1 -> "wm overscan -90,0,$top,0"
+            2 -> "wm overscan 0,-90,0,$top"
+            3 -> "wm overscan $top,0,-90,0"
+            else -> "wm overscan 0,$top,0,-90"
+        }
+    }
+    // The screen was turned: the bars' sides are off the screen instead of its top and bottom.
+    private fun keepBars() { try {
+        val i = displayInfo(); val c = i.javaClass
+        if (c.getField("overscanLeft").getInt(i) < 0 || c.getField("overscanRight").getInt(i) < 0)
+            Runtime.getRuntime().exec(arrayOf("sh", "-c", barsCommand())).waitFor()
+    } catch (t: Throwable) { System.err.println("bars: $t") } }
+
     private fun poll() {
         copyDabSlide()
-        for (p in polls) if (!p.dead && p.get.key != "steer") try { // steer: steerPoll
-            val m = if (p.get.arg == null) p.cls.getMethod(p.get.method) else p.cls.getMethod(p.get.method, Integer.TYPE)
-            val raw = if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)
+        keepBars()
+        val slowTurn = pollTurn++ % 5 == 0
+        for (p in polls) if (!p.dead && p.get.key !in FAST && (slowTurn || p.get.key !in SLOW)) try {
+            val raw = p.read()
             // getChargingRestTime returns [hour, minute]; everything else a single number.
             val dv = when (raw) {
                 is Number -> raw.toDouble()
@@ -465,7 +504,8 @@ private object CarWatch {
         } catch (t: Throwable) { p.dead = true; System.err.println("watch ${p.get.method}: ${t.cause ?: t}") }
         val inst = instrumentDev; val fg = featGet
         if (inst != null && fg != null && !lightsDead) try {
-            for (id in LIGHTS) {
+            // Their events carry any change at once; this is for a light already on at the start.
+            if (slowTurn) for (id in LIGHTS) {
                 val v = fg.invoke(inst, 1007, id) as Int // BYDAUTO_DEVICE_INSTRUMENT
                 if (v in 0..15) event("Instrument", id, v) // 65535 and the like: no such light here
             }
@@ -494,12 +534,22 @@ private object CarWatch {
         val p = polls.firstOrNull { it.get.key == "steer" } ?: return
         if (p.dead) return
         try {
-            val m = if (p.get.arg == null) p.cls.getMethod(p.get.method) else p.cls.getMethod(p.get.method, Integer.TYPE)
-            val raw = if (p.get.arg == null) m.invoke(p.dev) else m.invoke(p.dev, p.get.arg)
-            val v = Math.round((raw as Number).toDouble()).toDouble()
+            val v = Math.round((p.read() as Number).toDouble()).toDouble()
             if (v !in invalid && !(Math.abs(v - steerSent) < 2.0)) { steerSent = v; send("ev Get steer d $v") }
         } catch (t: Throwable) { p.dead = true; System.err.println("watch steer: ${t.cause ?: t}"); return }
         main.postDelayed({ steerPoll() }, 100)
+    }
+
+    // The speedometer: four times a second, sent only when the whole km/h changes.
+    private var speedSent = Double.NaN
+    private fun speedPoll() {
+        val p = polls.firstOrNull { it.get.key == "speed" } ?: return
+        if (p.dead) return
+        try {
+            val v = Math.round((p.read() as Number).toDouble()).toDouble()
+            if (v !in invalid && v != speedSent) { speedSent = v; send("ev Get speed d $v") }
+        } catch (t: Throwable) { p.dead = true; System.err.println("watch speed: ${t.cause ?: t}"); return }
+        main.postDelayed({ speedPoll() }, 250)
     }
 
     private fun listen(ctx: android.content.Context, clsName: String) {
@@ -769,7 +819,9 @@ private object CarWatch {
         val cand: List<Pair<String, Number>> = if (value is Number) listOf("i" to value)
             else listOf("intValue" to "i", "floatValue" to "f", "doubleValue" to "d").mapNotNull { (f, k) ->
                 (try { value.javaClass.getField(f).get(value) as? Number } catch (_: Throwable) { null })?.let { k to it } }
-        for ((k, v) in cand) {
+        // The value object has all three fields and fills one: take the first that holds something,
+        // or a value sent as a double would go out as int 0.
+        for ((k, v) in cand.sortedBy { it.second.toDouble() == 0.0 }) {
             if (v.toDouble() in invalid) continue
             val id = String.format("0x%08X", type)
             val line = "ev $dev $id $k $v"
