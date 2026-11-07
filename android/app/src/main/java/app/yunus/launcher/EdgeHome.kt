@@ -52,6 +52,9 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         if (active && (!fullScreen || peek)) showDock() else hideDock()
         strip?.let { s ->
             val touch = active && fullScreen && !peek
+            // Full screen, some apps leave the screen's last pixels unpainted and Yunus's own dock
+            // showed through there: the strip covers that edge in black.
+            s.setBackgroundColor(if (touch) Color.BLACK else Color.TRANSPARENT)
             try { wm.updateViewLayout(s, overlayParams(stripH, if (touch) WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE else hiddenFlags)) } catch (_: Throwable) { }
         }
     }
