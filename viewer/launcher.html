@@ -466,7 +466,7 @@ button { font-family:inherit; color:inherit; }
 #topBar { position:absolute; top:0; left:0; right:0; height:56px; display:flex; align-items:center; padding:0 28px; font-size:25px; font-weight:500; background:var(--pn); color:var(--tx); z-index:4; }
 #topBar > * + * { margin-left:26px; }
 /* Landscape: from the car column's edge to the screen's right edge (a signal camera column aside). */
-#stage:not(.portrait) #topBar { left:calc(var(--sigL, 0px) + var(--carW, 720px)); right:var(--sigR, 0px); overflow:hidden; transition:left .35s cubic-bezier(.2,.8,.2,1); }
+#stage:not(.portrait) #topBar { left:calc(var(--sigL, 0px) + var(--carW, 720px)); right:0; overflow:hidden; transition:left .35s cubic-bezier(.2,.8,.2,1); }
 #stage.dragging #topBar, #stage.noColAnim #topBar { transition:none; }
 #stage:not(.portrait):not(.stack):not(.tabbed) #sidePanel { margin-top:56px; } /* side by side: under the bar */
 #topBar { touch-action:none; } /* pulled down for the car's quick panel */
@@ -556,7 +556,7 @@ button { font-family:inherit; color:inherit; }
 /* Where the car's live side camera goes (CarCamera draws it there): the signal column's place
    (upright: over the edge). Never seen itself. */
 #sigSpot { position:absolute; top:0; bottom:112px; left:0; width:520px; visibility:hidden; pointer-events:none; }
-#sigSpot.right { left:auto; right:0; }
+#sigSpot.right { left:auto; right:0; top:56px; } /* under the status bar, which keeps its full width */
 #stage.portrait #sigSpot { top:140px; bottom:auto; height:370px; width:620px; left:24px; }
 #stage.portrait #sigSpot.right { left:auto; right:24px; }
 #sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:#000;
@@ -2266,11 +2266,17 @@ function updateDriveHud() {
 // Blind-spot warning, as the mirrors' lamps: a car in the zone turns that side's lane line (and
 // the car) orange; signalling towards it turns them red and frames the side camera in red.
 // On the car each line is clear while the lane camera sees it and faint while it doesn't (Tesla).
+// A line the camera loses for a moment (worn paint, a junction) stays clear: it fades only after
+// it has been lost for LINE_LOST_MS; seen again, it is clear at once.
+const LINE_LOST_MS = 800, lineLostAt = { left: 0, right: 0 };
 function updateBlindSpotWarning() {
   const a = S.adas || {};
+  const now = performance.now();
   for (const side of ['left', 'right']) {
     const seen = side === 'left' ? a.lineL : a.lineR;
-    const want = seen === false ? 0.3 : 1, m = laneLine[side];
+    if (seen !== false) lineLostAt[side] = 0; else if (!lineLostAt[side]) lineLostAt[side] = now;
+    const lost = lineLostAt[side] && now - lineLostAt[side] > LINE_LOST_MS;
+    const want = lost ? 0.3 : 1, m = laneLine[side];
     if (Math.abs(m.opacity - want) > 0.01) m.opacity += (want - m.opacity) * 0.15; // eases over a few frames
     const danger = bsd[side] && S.gear === 'D';
     const urgent = danger && S.signal === side;
@@ -3164,8 +3170,8 @@ $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'
 // On the upright screen the window is wide and low: wider, and a little higher, to keep the next lane.
 const SIDE_CAM_PORTRAIT = { pitch: 30, hfov: 95 };
 const SIDE_CAM = {
-  left: { mode: 'dewarp', sector: 1, back: -1, yaw: 5, pitch: 35, hfov: 75, roll: -40, mirror: true },
-  right: { mode: 'dewarp', sector: 2, back: 1, yaw: 5, pitch: 35, hfov: 75, roll: 40, mirror: true },
+  left: { mode: 'dewarp', sector: 1, back: -1, yaw: -5, pitch: 50, hfov: 75, roll: -40, mirror: true },
+  right: { mode: 'dewarp', sector: 2, back: 1, yaw: -5, pitch: 50, hfov: 75, roll: 40, mirror: true },
 };
 // The rear-view mirror (floating window) from the rear camera (sector 0), or the front one (sector 3)
 // with its switch: the virtual camera looks along the lens's axis tipped up towards the picture's
