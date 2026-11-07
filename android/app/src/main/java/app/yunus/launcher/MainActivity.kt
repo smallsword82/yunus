@@ -397,7 +397,7 @@ class MainActivity : Activity() {
         media.wake = { pkg ->
             packageManager.getLaunchIntentForPackage(pkg)?.component?.flattenToShortString()?.let { shell.send("launch ${bgDisplayId()} $it") }
         }
-        media.sleep = { bgDisplay?.let { shell.send("close ${it.display.displayId}") } }
+        media.sleep = { bgDisplay?.let { android.util.Log.d("YunusMedia", "close ${it.display.displayId}"); shell.send("close ${it.display.displayId}") } }
         bt = BtBridge(this, ::postToPage)
         edge = EdgeHome(this, { shell.send("recents") }) { dock ->
             // The dock overlay's page: the same app bridge and assets as the main page.

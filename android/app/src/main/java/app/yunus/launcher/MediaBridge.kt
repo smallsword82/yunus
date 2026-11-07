@@ -327,7 +327,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private fun wakePlay(list: List<MediaController>) {
         val pkg = waking ?: return
         val c = list.firstOrNull { it.packageName == pkg } ?: return
-        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) { waking = null; main.postDelayed({ sleep?.invoke() }, 3000); return }
+        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) { android.util.Log.d("YunusMedia", "$pkg plays; hidden screen closes"); waking = null; main.postDelayed({ sleep?.invoke() }, 3000); return }
         c.transportControls.play()
     }
     fun start(pkg: String) {

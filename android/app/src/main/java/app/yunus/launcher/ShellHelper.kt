@@ -122,7 +122,7 @@ object ShellHelper {
     // swiping an app away in recents does; the next launch starts the app afresh.
     private fun close(display: Int) {
         synchronized(watching) { watching.remove(display) }
-        for ((task, onDisplay, _) in Tasks.roots()) if (onDisplay == display) Tasks.remove(task)
+        for ((task, onDisplay, _) in Tasks.roots()) if (onDisplay == display) try { Tasks.remove(task) } catch (t: Throwable) { System.err.println("close $display task $task: $t") }
     }
 
     // Some apps start over in a new task right after launch (Chrome's restart, splash screens,
@@ -285,7 +285,13 @@ private object Tasks {
         }
     }
 
-    fun remove(id: Int) { atm.javaClass.getMethod("removeTask", Int::class.javaPrimitiveType).invoke(atm, id) }
+    // roots() gives root task ids (Android 12+) or, on Android 10, stack ids: each is removed by its
+    // own call (removeTask with a stack id removed nothing, or another task with that number).
+    fun remove(id: Int) {
+        val rootTasks = atm.javaClass.methods.any { it.name == "getAllRootTaskInfos" && it.parameterCount == 0 }
+        if (rootTasks) atm.javaClass.getMethod("removeTask", Int::class.javaPrimitiveType).invoke(atm, id)
+        else atm.javaClass.getMethod("removeStack", Int::class.javaPrimitiveType).invoke(atm, id)
+    }
 
     fun move(id: Int, display: Int) {
         val m = atm.javaClass.methods.firstOrNull { it.name == "moveRootTaskToDisplay" }
