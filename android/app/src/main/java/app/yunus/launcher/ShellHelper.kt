@@ -478,11 +478,16 @@ private object CarWatch {
             else -> "wm overscan 0,$top,0,-90"
         }
     }
-    // The screen was turned: the bars' sides are off the screen instead of its top and bottom.
+    // The screen was turned while the bars are off (some overscan negative): set them again for the new
+    // rotation. The overscan values themselves don't change on a turn, so the rotation is what's watched.
+    private var barsRotation = -1
     private fun keepBars() { try {
         val i = displayInfo(); val c = i.javaClass
-        if (c.getField("overscanLeft").getInt(i) < 0 || c.getField("overscanRight").getInt(i) < 0)
+        val rot = c.getField("rotation").getInt(i)
+        if (rot == barsRotation) return
+        if (listOf("overscanLeft", "overscanTop", "overscanRight", "overscanBottom").any { c.getField(it).getInt(i) < 0 })
             Runtime.getRuntime().exec(arrayOf("sh", "-c", barsCommand())).waitFor()
+        barsRotation = rot
     } catch (t: Throwable) { System.err.println("bars: $t") } }
 
     private fun poll() {

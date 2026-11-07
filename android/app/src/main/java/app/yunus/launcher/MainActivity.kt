@@ -68,6 +68,33 @@ class MainActivity : Activity() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
+    // A small display nobody sees, for an app's screen that must exist but not show: a closed music
+    // app started from the card (MediaBridge.wake), the car's media center switching its source.
+    private var bgDisplay: android.hardware.display.VirtualDisplay? = null
+    private fun bgDisplayId(): Int = (bgDisplay ?: run {
+        val reader = android.media.ImageReader.newInstance(480, 320, android.graphics.PixelFormat.RGBA_8888, 2)
+        reader.setOnImageAvailableListener({ r -> r.acquireLatestImage()?.close() }, null)
+        getSystemService(android.hardware.display.DisplayManager::class.java).createVirtualDisplay("yunus-bg", 480, 320, 160, reader.surface,
+            android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or (1 shl 8))
+    }.also { bgDisplay = it }).display.displayId
+
+    /** The car's media center to [mode] (0 radio, 9 DAB, 1 music, 2 video; [source] 0 local, 1 USB,
+     *  3 Bluetooth for music and video), as the steering wheel's MODE key does but without its screen:
+     *  its activity takes the request (its service needs BYD's signature) on the hidden display. */
+    fun mediaMode(mode: Int, source: Int) {
+        val i = android.content.Intent("byd.intent.action.START_MEDIA").setClassName("com.byd.mediacenter", "com.byd.mediacenter.main.MediaActivity")
+            .putExtra("MediaMode", mode).putExtra("MediaAction", 1)
+            .putExtra("MediaParams", android.os.Bundle().apply { if (source >= 0) putInt("source", source); putString("package", packageName); putString("withui", "false") })
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            startActivity(i, android.app.ActivityOptions.makeBasic().setLaunchDisplayId(bgDisplayId()).toBundle())
+        } catch (t: Throwable) {
+            System.err.println("mediaMode: $t"); startActivity(i)
+        }
+        // Yunus stays in front in any case (the media center may come up on the main screen).
+        web.postDelayed({ startActivity(android.content.Intent(this, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }, 400)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         alive = true
@@ -219,6 +246,8 @@ class MainActivity : Activity() {
 
                 @JavascriptInterface
                 fun mediaChoose(pkg: String) = runOnUiThread { media.choose(pkg) }
+                @JavascriptInterface
+                fun mediaMode(mode: Int, source: Int) = runOnUiThread { this@MainActivity.mediaMode(mode, source) }
 
                 // Permission status for Yunus › Sistem, and the "İzinleri tazele" button.
                 @JavascriptInterface
@@ -363,6 +392,12 @@ class MainActivity : Activity() {
         carCam = CarCamera(this, root) { ev -> postToPage(JSONObject().put(ev, true).toString()) } // sideCamDismissed, rearClosed
         volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
+        // A closed music app started from the card: its screen opens on a small display nobody sees
+        // (see MediaBridge.wake), then closes once it plays.
+        media.wake = { pkg ->
+            packageManager.getLaunchIntentForPackage(pkg)?.component?.flattenToShortString()?.let { shell.send("launch ${bgDisplayId()} $it") }
+        }
+        media.sleep = { bgDisplay?.let { shell.send("close ${it.display.displayId}") } }
         bt = BtBridge(this, ::postToPage)
         edge = EdgeHome(this, { shell.send("recents") }) { dock ->
             // The dock overlay's page: the same app bridge and assets as the main page.

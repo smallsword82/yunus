@@ -113,7 +113,7 @@ input { user-select:text; -webkit-user-select:text; }
 #stage.noColAnim { transition:none; }
 /* The signal camera's column slides in and out in 0.22 s, with Maps and the camera window (moved
    natively over the same time and curve; see setSigCol). */
-#stage.sigAnim, #stage.stack.sigAnim { transition:grid-template-columns .22s cubic-bezier(.2,.8,.2,1); }
+#stage.sigAnim, #stage.stack.sigAnim { transition:grid-template-columns .15s cubic-bezier(.2,.8,.2,1); }
 /* hidden third column on the right: an app window, pulled out from the right edge */
 #sidePanel { min-width:0; min-height:0; overflow:clip; background:var(--pn); border-left:1px solid var(--cd); display:flex; flex-direction:column; }
 #sideHandle { position:absolute; top:0; bottom:112px; width:36px; z-index:7; cursor:ew-resize; touch-action:none;
@@ -266,7 +266,7 @@ button { font-family:inherit; color:inherit; }
 #powerBar .zero { position:absolute; left:-5px; top:239px; width:16px; height:2px; background:var(--mu); }
 #powerKw { font-size:18px; color:var(--mu); margin-top:8px; }
 
-/* Cards under the car, swiped sideways (Tesla: media, energy, tyre pressure, trip) */
+/* Cards under the car, swiped sideways (Tesla: media, energy, trip, tyre pressure) */
 #carCards { position:absolute; left:24px; right:24px; bottom:20px; height:196px; z-index:4; background:var(--cd); border-radius:18px; overflow:hidden; touch-action:pan-y; }
 /* Wide car view (car column dragged wide or full screen): like Tesla, the cards, tell-tales and
    warning stay a centred block instead of stretching across the screen, and grow a little. */
@@ -301,6 +301,7 @@ button { font-family:inherit; color:inherit; }
 /* Media source: the name in the card header opens the list of the car's sources */
 .srcBtn { display:flex; align-items:center; gap:6px; background:var(--cd2); border:0; border-radius:14px; padding:4px 10px 4px 8px; color:var(--tx); font:500 16px Inter,sans-serif; cursor:pointer; }
 .srcBtn i { font-size:18px; }
+.mmHeadR { display:flex; gap:8px; }
 .srcBtn .ti-chevron-down { color:var(--mu); font-size:15px; }
 #srcPop { position:absolute; z-index:20; width:360px; max-height:620px; overflow-y:auto; padding:10px; border-radius:20px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
   opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; }
@@ -344,6 +345,14 @@ button { font-family:inherit; color:inherit; }
 .ccTyres div span { display:block; font-size:14px; color:var(--mu); }
 .trip { display:grid; grid-template-columns:1fr 1fr; gap:8px 30px; }
 .trip div { font-size:26px; font-weight:300; }
+/* Two pages, swiped up and down: this drive, since the last charge. */
+#tripView { position:relative; height:108px; overflow:hidden; }
+#stage.car-wide #tripView { height:136px; }
+#tripPages { height:100%; transition:transform .25s cubic-bezier(.2,.8,.2,1); }
+#tripPages .trip { height:100%; padding-right:22px; align-content:start; }
+#tripDots { position:absolute; right:0; top:50%; transform:translateY(-50%); }
+#tripDots i { display:block; width:8px; height:8px; margin:6px 0; border-radius:50%; background:var(--cd2); }
+#tripDots i.on { background:var(--tx); }
 .trip span { display:block; font-size:16px; color:var(--mu); }
 
 /* instrument cluster tell-tales: only active warnings, in the status bar so they never cover the car */
@@ -950,7 +959,7 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
         <!-- Like Android's own media card: the cover fills the card behind a dark veil, title and
              artist on it, a big play button on the right, then previous · progress · next. -->
         <div class="cc mmCard" id="mmCard"><div id="mmBg"></div>
-          <h4>Müzik <button id="srcBtn" class="srcBtn" aria-label="Kaynak seç"></button></h4>
+          <h4>Müzik <span class="mmHeadR"><button id="mmMode" class="srcBtn" aria-label="Mod (MODE tuşu)" style="display:none"></button><button id="srcBtn" class="srcBtn" aria-label="Kaynak seç"></button></span></h4>
           <div class="mm"><div class="art" id="mmArt"></div>
             <div class="mmText"><b id="mmTitle" style="cursor:pointer">Sahil Yolu</b><span id="mmSub">Örnek Sanatçı</span></div>
             <button id="mmPlay" class="mmBig" aria-label="Oynat / duraklat"><i class="ti ti-player-play"></i></button></div>
@@ -959,11 +968,13 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
         <div class="cc"><h4>Enerji <b id="enNow">0 kW · — Wh/km</b></h4>
           <canvas id="enChart" width="620" height="130" style="width:100%;height:96px"></canvas>
           <div style="font-size:16px;color:var(--mu);margin-top:4px" id="enAvg">Son 5 km ortalaması —</div></div>
-        <div class="cc"><h4>Lastik basıncı <b id="tyreState">Normal</b></h4><div class="ccTyres" id="ccTyres"></div></div>
-        <div class="cc"><h4>Yolculuk <b>Son şarjdan beri</b></h4>
-          <div class="trip"><div id="trDist">0,0<span>km</span></div><div id="trKwh">0,00<span>kWh</span></div>
-            <div id="trAvg">—<span>Wh/km ortalama</span></div><div id="trTime">0:00<span>süre</span></div></div>
+        <div class="cc"><h4>Yolculuk <b id="tripName">Mevcut yolculuk</b></h4>
+          <div id="tripView"><div id="tripPages">
+            <div class="trip" id="tripDrive"></div>
+            <div class="trip" id="tripCharge"></div>
+          </div><div id="tripDots"><i class="on"></i><i></i></div></div>
           <div id="odoTxt" style="font-size:16px;color:var(--mu);margin-top:6px"></div></div>
+        <div class="cc"><h4>Lastik basıncı <b id="tyreState">Normal</b></h4><div class="ccTyres" id="ccTyres"></div></div>
       </div>
       <div id="ccDots"><i class="on"></i><i></i><i></i><i></i></div>
     </div>
@@ -1427,9 +1438,11 @@ function viewSize() {
 }
 // The screen upright (the Dolphin's display turns) gives the portrait stage, 1080×1920.
 let PORTRAIT = false;
+// Preview only (?car): as on the car's screen, landscape in any window, with one lane.
+const CAR_VIEW = new URLSearchParams(location.search).has('car');
 function fit() {
   const { w, h } = viewSize();
-  const portrait = h > w * 1.1;
+  const portrait = h > w * 1.1 && !CAR_VIEW;
   const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? 112 : portrait ? 1920 : 1080;
   const k = stageScale = Math.min(w / SW, h / SH);
   stage.style.transform = `translate(${(w - SW * k) / 2}px, ${(h - SH * k) / 2}px) scale(${k})`;
@@ -1524,7 +1537,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
 // Drive mode road: a dark strip with moving lane dashes. The number of lanes can't be read (the
 // car's lane camera is signature-locked and the map data has no lane counts), so on the device it
 // is the car's own lane only; the preview shows three.
-const ONE_LANE = !!window.YunusNative;
+const ONE_LANE = !!window.YunusNative || CAR_VIEW;
 const road = new THREE.Group(); road.visible = false; scene.add(road);
 const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e2024, roughness: 1 });
 const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(ONE_LANE ? 6 : 14, 120), roadMat);
@@ -1536,17 +1549,23 @@ const laneLine = { left: dashMat.clone(), right: dashMat.clone() };
 for (let i = -20; i < 20; i++) for (const x of ONE_LANE ? [-1.9, 1.9] : [-1.9, 1.9, 5.7, -5.7]) {
   const mat = x === 1.9 ? laneLine.left : x === -1.9 ? laneLine.right : dashMat;
   const d = new THREE.Mesh(new THREE.PlaneGeometry(x === 1.9 || x === -1.9 ? 0.16 : 0.12, 1.6), mat);
-  d.rotation.x = -Math.PI / 2; d.rotation.order = 'YXZ'; d.position.set(x, 0.01, i * 3.2); d.userData.x0 = x; dashes.add(d);
+  d.rotation.x = -Math.PI / 2; d.rotation.order = 'YXZ'; d.position.set(x, 0.01, i * 3.2); d.userData.x0 = x; d.userData.z0 = i * 3.2; dashes.add(d);
 }
 // The lines bend with the steering wheel (as Kinex shows it): they follow the arc the car would
-// drive at the front wheels' angle, curvature tan(angle) / wheelbase, offset kz²/2 at distance z.
-const WHEELBASE = 2.7;
+// drive at the front wheels' angle, a circle of curvature tan(angle) / wheelbase, each line on its
+// own radius. On a tight turn the circle would close: only the part ahead of the fade is drawn.
+const WHEELBASE = 2.7, ROAD_ARC_MAX = 1.9;
 function bendRoad() {
   const k = Math.tan(THREE.MathUtils.degToRad(roadWheelAngle())) / WHEELBASE;
   for (const d of dashes.children) {
-    const z = d.position.z + dashes.position.z;
-    d.position.x = d.userData.x0 + k * z * z / 2;
-    d.rotation.y = Math.atan(k * z);
+    const s = d.userData.z0 + dashes.position.z, a = k * s, x0 = d.userData.x0;
+    // The radius of this line; a line past the circle's centre has no place on the turn.
+    const r = Math.abs(k) > 1e-5 ? 1 / k - x0 : 0;
+    d.visible = Math.abs(a) < ROAD_ARC_MAX && (Math.abs(k) <= 1e-5 || r * k > 0);
+    if (!d.visible) continue;
+    d.position.x = Math.abs(k) > 1e-5 ? 1 / k - r * Math.cos(a) : x0;
+    d.position.z = (Math.abs(k) > 1e-5 ? r * Math.sin(a) : s) - dashes.position.z;
+    d.rotation.y = a;
   }
 }
 // Only the lines are drawn, no dark road under them. As on a Tesla they end a little behind the car,
@@ -2197,13 +2216,11 @@ const lastBox = { w: 0, h: 0 };
 
 // ---------- driving: speed, power and regen, speed limits, energy and trip ----------
 // Demo stand-in for the speed, motor power and TSR data the HAL bridge will provide.
-const SIM = { target: 0, nextTarget: 0, nextLimit: 0, histAt: 0, hist: [], trip: { km: 0, kwh: 0, start: Date.now() } };
+const SIM = { target: 0, nextTarget: 0, nextLimit: 0, histAt: 0, hist: [] };
 const LIMITS = [30, 50, 50, 70, 82, 90, 110];
 const MAX_ACCEL = { eco: 2.5, normal: 4, sport: 6 }; // km/h per second
 function stepDrive(dt, now) {
   if (S.live) { // the car reports speed and power; only the trip and the consumption trace are kept here
-    SIM.trip.km += S.speed * dt / 3600;
-    SIM.trip.kwh += S.powerKw * dt / 3600;
     if (now > SIM.histAt) { SIM.hist.push(S.speed > 3 ? S.powerKw * 1000 / S.speed : null); if (SIM.hist.length > 90) SIM.hist.shift(); SIM.histAt = now + 500; }
     return;
   }
@@ -2225,8 +2242,6 @@ function stepDrive(dt, now) {
   let kw = (1658 * a * v + 0.5 * 1.225 * 0.29 * 2.3 * v ** 3 + 0.012 * 1658 * 9.81 * v) / 1000;
   if (kw < 0) kw = Math.max(kw, S.set.regen === 'high' ? -60 : -35);
   S.powerKw += (kw - S.powerKw) * 0.15;
-  SIM.trip.km += S.speed * dt / 3600;
-  SIM.trip.kwh += S.powerKw * dt / 3600;
   if (now > SIM.histAt) {
     SIM.hist.push(S.speed > 3 ? S.powerKw * 1000 / S.speed : null);
     if (SIM.hist.length > 90) SIM.hist.shift();
@@ -2267,6 +2282,52 @@ function updateBlindSpotWarning() {
   $('bsCam').classList.toggle('warn', !!S.signal && bsd[S.signal] && S.gear === 'D');
 }
 
+// Holding the apps key shows the apps running in the background (the system's recent apps).
+document.addEventListener('pointerdown', (e) => {
+  const key = e.target.closest && e.target.closest('[data-card="apps"], #sideTabs button:last-child');
+  if (!key || !window.YunusNative || !YunusNative.recents) return;
+  const held = setTimeout(() => {
+    YunusNative.recents();
+    addEventListener('click', (c) => { c.stopPropagation(); c.preventDefault(); }, { capture: true, once: true });
+  }, 600);
+  const stop = () => clearTimeout(held);
+  addEventListener('pointerup', stop, { once: true });
+  addEventListener('pointercancel', stop, { once: true });
+}, true);
+// ---------- trips: this drive and since the last charge, kept across restarts ----------
+// Energy is what leaves the battery, climate included, regeneration back: the pack's current times
+// its voltage (see 'Statistic 0x44A00020'). A pause of 10 minutes starts a new drive; unplugging,
+// or charge found higher than it was left (charged while Yunus was off), starts a new count.
+const newTrip = () => ({ km: 0, kwh: 0, sec: 0 });
+const trips = { drive: newTrip(), charge: newTrip(), at: 0, soc: null };
+try { Object.assign(trips, JSON.parse(localStorage.getItem('trips')) || {}); } catch {}
+if (Date.now() - trips.at > 600000) trips.drive = newTrip();
+let tripPage = 0, tripTickAt = performance.now(), tripWasCharging = false, tripSaveAt = 0;
+const saveTrips = () => { trips.at = Date.now(); try { localStorage.setItem('trips', JSON.stringify(trips)); } catch {} };
+function tripSoc(soc) {
+  if (trips.soc != null && soc >= trips.soc + 2) { trips.charge = newTrip(); trips.drive = newTrip(); }
+  trips.soc = soc;
+}
+setInterval(() => {
+  const now = performance.now(), dt = Math.min(5, (now - tripTickAt) / 1000);
+  tripTickAt = now;
+  if (tripWasCharging && !S.charging) { trips.charge = newTrip(); trips.drive = newTrip(); }
+  tripWasCharging = !!S.charging;
+  if (S.charging) return;
+  const kw = S.live && S.battCurrent != null && S.battVolt ? (S.battCurrent - 5000) * 0.1 * S.battVolt / 1000 : S.powerKw;
+  for (const t of [trips.drive, trips.charge]) {
+    t.km += S.speed * dt / 3600;
+    t.kwh += kw * dt / 3600;
+    if (S.gear !== 'P') t.sec += dt;
+  }
+  if (now > tripSaveAt) { tripSaveAt = now + 20000; saveTrips(); }
+}, 1000);
+function tripGo(i) {
+  tripPage = i;
+  $('tripPages').style.transform = `translateY(${-i * 100}%)`;
+  [...$('tripDots').children].forEach((d, k) => d.classList.toggle('on', k === i));
+  setText($('tripName'), i ? 'Son şarjdan beri' : 'Mevcut yolculuk');
+}
 // ---------- cards under the car ----------
 let ccIndex = 0, ccDrag = null;
 function ccGo(i) {
@@ -2287,7 +2348,8 @@ $('carCards').addEventListener('pointerup', (e) => {
   if (ccDrag === null) return;
   const dx = (e.clientX - ccDrag.x) / stageScale, dy = (e.clientY - ccDrag.y) / stageScale; ccDrag = null;
   const off = stage.classList.contains('cc-off');
-  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) setCardsOpen(dy < 0);
+  // On the trip card up and down turn its pages; a further drag down from the first still hides the cards.
+  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) { if (!off && ccIndex === 2 && (dy < 0 || tripPage)) tripGo(dy < 0 ? (tripPage + 1) % 2 : 0); else setCardsOpen(dy < 0); }
   else if (off) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) setCardsOpen(true); }
   else if (Math.abs(dx) > 50) ccGo(ccIndex + (dx < 0 ? 1 : -1));
 });
@@ -2392,6 +2454,10 @@ function renderLiveMedia() {
   if (logo) m.art = logo;
   const look = appLook(m.pkg);
   const label = !m.access ? 'İzin gerekli' : m.pkg ? m.app : 'Medya';
+  // The car's media center: a MODE key as on the steering wheel (radio, DAB, Bluetooth, USB, video).
+  const car = m.access && m.pkg === 'com.byd.mediacenter' && window.YunusNative && YunusNative.mediaMode;
+  $('mmMode').style.display = car ? '' : 'none';
+  if (car) { const md = carModeNow(m); $('mmMode').innerHTML = `<i class="ti ti-${md.icon}"></i>${md.name}<i class="ti ti-switch-horizontal" data-next></i>`; }
   $('srcBtn').innerHTML = `${m.access && m.pkg ? appIcon(m, 22) : `<i class="ti ti-${m.access ? 'music' : 'lock'}" style="color:var(--mu)"></i>`}${label}<i class="ti ti-chevron-down"></i>`;
   // No cover (radio, some apps): the app's own icon on the tile.
   // A station logo is often a wide banner: whole, on white, not cropped like a cover.
@@ -2424,11 +2490,50 @@ function openSrcPop() {
   const r = $('srcBtn').getBoundingClientRect(), s = stage.getBoundingClientRect();
   const left = (r.right - s.left) / stageScale - 360, bottom = 1080 - (r.top - s.top) / stageScale + 10;
   Object.assign($('srcPop').style, { left: Math.max(16, left) + 'px', bottom: bottom + 'px' });
+  $('srcPop').dataset.kind = 'src';
   $('srcPop').classList.add('show');
 }
 $('srcBtn').addEventListener('pointerdown', (e) => e.stopPropagation()); // not a card swipe
+// The media center's modes in the MODE key's order; the one playing is told by its title (DAB …)
+// or by the last one picked here.
+const CAR_MODES = [
+  { mode: 0, source: -1, name: 'Radyo', icon: 'radio' },
+  { mode: 9, source: -1, name: 'DAB', icon: 'antenna' },
+  { mode: 1, source: 3, name: 'Bluetooth', icon: 'bluetooth' },
+  { mode: 1, source: 1, name: 'USB', icon: 'usb' },
+  { mode: 2, source: 1, name: 'Video', icon: 'movie' },
+];
+let carModeIdx = (() => { try { return +localStorage.getItem('carMode') || 0; } catch { return 0; } })();
+function carModeNow(m) {
+  const t = (m.title || '') + ' ' + (m.artist || '');
+  if (/^DAB/.test(m.title || '')) carModeIdx = 1;
+  else if (/(FM|AM)|MHz|kHz/.test(t) && carModeIdx === 1) carModeIdx = 0;
+  return CAR_MODES[carModeIdx % CAR_MODES.length];
+}
+$('mmMode').addEventListener('pointerdown', (e) => e.stopPropagation());
+function setCarMode(i) {
+  carModeIdx = (i + CAR_MODES.length) % CAR_MODES.length;
+  try { localStorage.setItem('carMode', carModeIdx); } catch {}
+  const md = CAR_MODES[carModeIdx];
+  YunusNative.mediaMode(md.mode, md.source);
+  $('mmMode').innerHTML = `<i class="ti ti-${md.icon}"></i>${md.name}<i class="ti ti-switch-horizontal" data-next></i>`;
+}
+// The ⇄ steps to the next mode as the MODE key does; the rest of the button lists them all.
+$('mmMode').onclick = (e) => {
+  e.stopPropagation();
+  if (e.target.closest('[data-next]')) { $('srcPop').classList.remove('show'); return setCarMode(carModeIdx + 1); }
+  if ($('srcPop').classList.contains('show') && $('srcPop').dataset.kind === 'mode') return $('srcPop').classList.remove('show');
+  $('srcPop').innerHTML = CAR_MODES.map((x, i) => `<button data-mode="${i}"><div class="ic" style="background:var(--cd2)"><i class="ti ti-${x.icon}"></i></div>
+    <span>${x.name}<small>Aracın medya merkezi</small></span>${i === carModeIdx ? '<i class="ti ti-check"></i>' : ''}</button>`).join('');
+  $('srcPop').dataset.kind = 'mode';
+  const r = $('mmMode').getBoundingClientRect(), st = stage.getBoundingClientRect();
+  Object.assign($('srcPop').style, { left: Math.max(16, (r.left - st.left) / stageScale) + 'px', bottom: (1080 - (r.top - st.top) / stageScale + 10) + 'px' });
+  $('srcPop').classList.add('show');
+};
 $('srcBtn').onclick = (e) => { e.stopPropagation(); $('srcPop').classList.contains('show') ? $('srcPop').classList.remove('show') : openSrcPop(); };
 $('srcPop').onclick = (e) => {
+  const md = e.target.closest('[data-mode]');
+  if (md) { $('srcPop').classList.remove('show'); setCarMode(+md.dataset.mode); return; }
   const p = e.target.closest('[data-pkg]');
   if (p) { YunusNative.mediaChoose(p.dataset.pkg); $('srcPop').classList.remove('show'); return; }
   const st = e.target.closest('[data-start]');
@@ -2446,7 +2551,7 @@ $('srcPop').onclick = (e) => {
   renderMedia();
   if (current === 'music') refreshCard();
 };
-document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#srcPop,#srcBtn')) $('srcPop').classList.remove('show'); });
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#srcPop,#srcBtn,#mmMode')) $('srcPop').classList.remove('show'); });
 renderMedia();
 // Live: the title opens the playing app (or, without access, the access setting); the buttons
 // control the session. Demo: as before.
@@ -2509,19 +2614,27 @@ function updateCards() {
   const tyre = (k, pos) => `<div style="${pos}" class="${tyreLow(k) ? 'low' : ''}">${pressNum(t[k])}<span>${pressUnit()}</span></div>`;
   setHtml($('ccTyres'), `<img src="img/overhead.png" alt="">` +
     tyre('FL', 'left:22%;top:28px') + tyre('FR', 'right:22%;top:28px') + tyre('RL', 'left:22%;bottom:22px') + tyre('RR', 'right:22%;bottom:22px'));
-  const tr = SIM.trip, mins = Math.floor((Date.now() - tr.start) / 60000);
-  setHtml($('trDist'), `${tr.km.toFixed(1).replace('.', ',')}<span>km</span>`);
-  setHtml($('trKwh'), `${Math.max(0, tr.kwh).toFixed(2).replace('.', ',')}<span>kWh</span>`);
-  setHtml($('trAvg'), `${tr.km > 0.05 ? Math.round(tr.kwh * 1000 / tr.km) : '—'}<span>Wh/km ortalama</span>`);
-  setHtml($('trTime'), `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}<span>süre</span>`);
+  setHtml($('tripDrive'), tripHtml(trips.drive));
+  setHtml($('tripCharge'), tripHtml(trips.charge));
 }
+const tripHtml = (t) => {
+  const mins = Math.floor(t.sec / 60);
+  return `<div>${t.km.toFixed(1).replace('.', ',')}<span>km</span></div><div>${Math.max(0, t.kwh).toFixed(1).replace('.', ',')}<span>kWh</span></div>`
+    + `<div>${t.km > 0.5 ? Math.round(t.kwh * 1000 / t.km) : '—'}<span>Wh/km ortalama</span></div><div>${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}<span>sürüş süresi</span></div>`;
+};
 function drawEnergy() {
-  const c = $('enChart').getContext('2d'), W = 620, H = 130, max = 400, min = -200;
+  // Drawn at the size it is shown (the canvas was 620×130 squeezed into the card, which stretched
+  // its text): the backing store follows the element, sharp at the page's scale.
+  const cv = $('enChart'), W = cv.offsetWidth || 620, H = cv.offsetHeight || 96, max = 400, min = -200;
+  const k = Math.max(1, stageScale * (window.devicePixelRatio || 1));
+  if (cv.width !== Math.round(W * k) || cv.height !== Math.round(H * k)) { cv.width = Math.round(W * k); cv.height = Math.round(H * k); }
+  const c = cv.getContext('2d');
+  c.setTransform(k, 0, 0, k, 0, 0);
   const y = (v) => H - (v - min) / (max - min) * H;
   c.clearRect(0, 0, W, H);
   c.strokeStyle = 'rgba(138,143,152,.35)'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(0, y(0)); c.lineTo(W, y(0)); c.stroke();
-  c.fillStyle = 'rgba(138,143,152,.8)'; c.font = '16px Inter, sans-serif'; c.fillText('0', 4, y(0) - 4);
+  c.fillStyle = 'rgba(138,143,152,.8)'; c.font = '14px Inter, sans-serif'; c.fillText('0', 4, y(0) - 4);
   c.fillText('400 Wh/km', 4, 16);
   const pts = SIM.hist, step = W / 90;
   c.lineWidth = 3;
@@ -2621,6 +2734,7 @@ function relayout() {
   setCarW(car, true);
   stage.classList.toggle('stack', STACK());
   stage.classList.toggle('tabbed', TABS());
+  renderSideTabs(); // the tabs show in landscape only: shown or hidden again on every turn
   setSideW(STACK() ? sideW : Math.min(sideW, LEN() - car), true);
   normalizeLayout();
   placeHandles();
@@ -2989,17 +3103,9 @@ window.addEventListener('pointerup', () => {
 });
 
 // Demo: tap the gear letters to toggle P / D. On the car this comes from the gearbox HAL.
-// Reverse: BYD brings its 360° view up full screen on its own; Yunus moves it into its third window
-// (the helper's launch takes the app's task off the main screen) once it has started, and closes
-// it again out of reverse. On trial: not yet seen on the car.
-let reverse360 = false;
-function reverseView(g) {
-  if (!DEVICE || !window.YunusNative) return;
-  if (g === 'R' && !reverse360) { reverse360 = true; setTimeout(() => { if (S.gear === 'R') openInSide('com.byd.avc'); }, 1200); }
-  else if (g !== 'R' && reverse360) { reverse360 = false; if (sidePkg === 'com.byd.avc') { YunusNative.embedClose('side'); closeSideApp(); setSideW(0, true); } }
-}
+// Reverse: BYD's own 360° view comes up full screen over Yunus and goes away out of reverse;
+// Yunus leaves it there (moving it into the third window made it too small).
 function setGear(g) {
-  reverseView(g);
   // The camera is kept running while driving, so the signal's window has its picture at once.
   // The camera is not kept warm in D any more: streaming it nonstop cost the car's camera services
   // about one whole core and made everything lag. It opens on the signal and stays 30 s after.
@@ -3058,8 +3164,8 @@ $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'
 // On the upright screen the window is wide and low: wider, and a little higher, to keep the next lane.
 const SIDE_CAM_PORTRAIT = { pitch: 30, hfov: 95 };
 const SIDE_CAM = {
-  left: { mode: 'dewarp', sector: 1, back: -1, yaw: 5, pitch: 35, hfov: 75, roll: -45, mirror: true },
-  right: { mode: 'dewarp', sector: 2, back: 1, yaw: 5, pitch: 35, hfov: 75, roll: 45, mirror: true },
+  left: { mode: 'dewarp', sector: 1, back: -1, yaw: 5, pitch: 35, hfov: 75, roll: -40, mirror: true },
+  right: { mode: 'dewarp', sector: 2, back: 1, yaw: 5, pitch: 35, hfov: 75, roll: 40, mirror: true },
 };
 // The rear-view mirror (floating window) from the rear camera (sector 0), or the front one (sector 3)
 // with its switch: the virtual camera looks along the lens's axis tipped up towards the picture's
@@ -3086,7 +3192,7 @@ function blindSpotWanted() {
 // pushes the third window left, which stays live and at its width.
 const SIG_COL = 520, SIG_MAP_MIN = 120;
 const sigW = { left: 0, right: 0 };
-const SIG_MS = 220; // as CarCamera.SLIDE_MS
+const SIG_MS = 150; // as CarCamera.SLIDE_MS
 let sigAnimEnd = 0;
 function setSigCol(side) {
   stage.classList.add('sigAnim');
@@ -3146,7 +3252,7 @@ function updateBlindSpot() {
     if (!bsRaf) bsRaf = requestAnimationFrame(drawBlindSpot);
   } else if (cam.classList.contains('show') && !bsHideTimer) {
     // Tesla keeps the view up briefly after the stalk is released.
-    const delay = S.gear === 'D' && !sigDismissed ? 2000 : 0; // closed with a tap: at once
+    const delay = S.gear === 'D' && !sigDismissed ? 1000 : 0; // closed with a tap: at once
     bsHideTimer = setTimeout(() => {
       cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null;
       sigPending = null; clearTimeout(sigPendTimer);
@@ -5190,6 +5296,7 @@ const carCmd = (cmd, args = {}) => {
 // Opens one of the car's own screens ("package/.Activity").
 const openCarApp = (component) => window.YunusNative && YunusNative.open(component);
 function setBattery(soc, range) {
+  if (soc > 0) tripSoc(soc);
   // A 0 here is the car not having a value at that moment (it comes while the percentage changes), not an empty battery.
   if (!(soc > 0)) soc = null;
   if (!(range > 0)) range = null;

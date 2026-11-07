@@ -237,7 +237,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { list -> use(list.orEmpty()) }
     private val callback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) { pickCurrent(); send() }
-        override fun onPlaybackStateChanged(state: PlaybackState?) { pickCurrent(); send() }
+        override fun onPlaybackStateChanged(state: PlaybackState?) { wakePlay(all); pickCurrent(); send() }
         override fun onSessionDestroyed() = refresh()
     }
 
@@ -261,6 +261,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         all.forEach { it.unregisterCallback(callback) }
         all = list
         all.forEach { it.registerCallback(callback, main) }
+        wakePlay(all)
         pickCurrent()
         send()
     }
@@ -317,8 +318,37 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
      * a few seconds, the card says so ({startFailed}); tapping its title opens the app.
      */
     private var browser: android.media.browse.MediaBrowser? = null
+    // BYD's system (ssc) lets no app or shell start a closed app's service or receiver - only its
+    // screen. [wake] opens that screen on a display nobody sees; once the app's session is up it
+    // gets play, and [sleep] closes the hidden screen again (the music plays on in its service).
+    var wake: ((String) -> Unit)? = null
+    var sleep: (() -> Unit)? = null
+    private var waking: String? = null
+    private fun wakePlay(list: List<MediaController>) {
+        val pkg = waking ?: return
+        val c = list.firstOrNull { it.packageName == pkg } ?: return
+        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) { waking = null; main.postDelayed({ sleep?.invoke() }, 3000); return }
+        c.transportControls.play()
+    }
     fun start(pkg: String) {
         chosen = pkg
+        // Open but paused: its own session plays it.
+        all.firstOrNull { it.packageName == pkg }?.let { it.transportControls.play(); checkStarted(pkg); return }
+        val w = wake
+        if (w != null && ctx.packageManager.getLaunchIntentForPackage(pkg) != null && !isBluetoothApp(pkg)) {
+            waking = pkg
+            w(pkg)
+            // Running now, its media service takes outside clients again: press play through it.
+            // Running now, BYD lets its own play-key receiver and media service take it again.
+            for (t in longArrayOf(2500, 5000, 8000)) main.postDelayed({ if (waking == pkg) { playKey(pkg, direct = true); browse(pkg) } }, t)
+            main.postDelayed({ if (waking == pkg) { waking = null; sleep?.invoke() } }, 12000)
+            checkStarted(pkg)
+            return
+        }
+        browse(pkg)
+    }
+
+    private fun browse(pkg: String) {
         val pm = ctx.packageManager
         val service = pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService").setPackage(pkg), 0).firstOrNull()?.serviceInfo
         if (service == null) return playKey(pkg)
@@ -331,16 +361,16 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
                 main.postDelayed({ if (browser === b) { b?.disconnect(); browser = null } }, 15000)
                 checkStarted(pkg)
             }
-            override fun onConnectionFailed() { if (browser === b) browser = null; playKey(pkg) }
+            override fun onConnectionFailed() { if (browser === b) browser = null; if (waking != pkg) playKey(pkg) }
         }, null)
         browser = b
         b.connect()
     }
 
-    private fun playKey(pkg: String) {
+    private fun playKey(pkg: String, direct: Boolean = false) {
         val keys = intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)
             .map { android.view.KeyEvent(it, android.view.KeyEvent.KEYCODE_MEDIA_PLAY) }
-        if (pkg == last) keys.forEach { ctx.getSystemService(android.media.AudioManager::class.java).dispatchMediaKeyEvent(it) }
+        if (pkg == last && !direct) keys.forEach { ctx.getSystemService(android.media.AudioManager::class.java).dispatchMediaKeyEvent(it) }
         else {
             val receiver = android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON).setPackage(pkg)
             // No receiver either (BYD's Spotify shell, com.vivid.music.byd): it can't be started
@@ -359,7 +389,7 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
         startFailed = null
         main.postDelayed({
             if (all.none { it.packageName == pkg && it.playbackState?.state == PlaybackState.STATE_PLAYING }) { startFailed = pkg; send() }
-        }, 6000)
+        }, if (waking == pkg) 12000 else 6000)
     }
 
     // The card's message is built off the main thread: covers (scaled, JPEG), app icons and the

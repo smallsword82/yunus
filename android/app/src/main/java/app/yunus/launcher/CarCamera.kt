@@ -39,7 +39,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         const val BUF_W = 1920
         const val BUF_H = 1080
         private const val IDLE_CLOSE_MS = 30_000L
-        const val SLIDE_MS = 220L // the signal window's slide, as long as the page's column (setSigCol)
+        const val SLIDE_MS = 150L // the signal window's slide, as long as the page's column (setSigCol)
     }
 
     private val loader by lazy { dalvik.system.PathClassLoader("/system/framework/bmmcamera.jar", "/system/lib64:/system/lib", activity.classLoader) }
@@ -79,7 +79,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
         // the camera takes a moment); it shows with that frame.
-        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 3 }
+        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2 }
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
