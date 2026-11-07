@@ -3172,7 +3172,7 @@ const SIDE_CAM = {
 // top (the horizon), 60° across: wider stretched the cars at the edges and made them look far. The rear one is mirrored, as a mirror shows the road behind; set
 // on the car by eye.
 const MIRROR_CAM = {
-  rear: { mode: 'dewarp', sector: 0, back: 1, yaw: 90, pitch: 55, hfov: 60, mirror: true, label: 'Arka ⇄' },
+  rear: { mode: 'dewarp', sector: 0, back: 1, yaw: 90, pitch: 62, hfov: 60, ry: 0.6, mirror: true, label: 'Arka ⇄' },
   front: { mode: 'dewarp', sector: 3, back: 1, yaw: 90, pitch: 70, hfov: 60, mirror: false, label: 'Ön ⇄' },
 };
 let mirrorView = 'rear', mirrorShown = false;
