@@ -70,6 +70,7 @@ object ShellHelper {
                 val yunus = line.endsWith("yunus")
                 val sh = { c: String -> try { Runtime.getRuntime().exec(arrayOf("sh", "-c", c)).waitFor() } catch (t: Throwable) { System.err.println("$c: $t") } }
                 sh("cmd package set-home-activity " + if (yunus) "app.yunus.launcher/.MainActivity" else "com.android.launcher3/.home.MainActivity")
+                if (!yunus) { CarWatch.appUp = false; sh("settings delete global policy_control") }
                 sh(if (yunus) CarWatch.barsCommand() else "wm overscan reset")
                 if (!yunus) sh("input keyevent 3") // KEYCODE_HOME: over to DiLink's home
                 continue
@@ -77,6 +78,14 @@ object ShellHelper {
             // "voice 1|0": BYD's voice assistant draws its bar inside the status bar (at 24,8 dp, fixed in
             // its code), which Yunus's mode keeps above the screen: while it talks the status bar comes
             // back on the screen, then goes back up. Yunus's own window stays where it is.
+            // "apps 1|0": another app in front of Yunus or not; its dock's room at the bottom (barsCommand).
+            if (line.startsWith("apps ")) {
+                CarWatch.appUp = line.endsWith("1")
+                val sh = { c: String -> try { Runtime.getRuntime().exec(arrayOf("sh", "-c", c)).waitFor() } catch (t: Throwable) { System.err.println("$c: $t") } }
+                if (CarWatch.appUp) sh("settings put global policy_control immersive.navigation=*")
+                sh(CarWatch.barsCommand())
+                continue
+            }
             if (line.startsWith("voice ")) {
                 CarWatch.voiceUp = line.endsWith("1")
                 val c = CarWatch.barsCommand()
@@ -473,15 +482,20 @@ private object CarWatch {
     // so upright it would push the sides off and leave the bars on. Top and bottom of the screen as it
     // is turned now, in that frame (the status bar 84 px, the navigation bar 90 px).
     @Volatile var voiceUp = false // the status bar back on the screen for the voice assistant
+    // Another app in front: the screen's bottom DOCK px kept free for Yunus's dock (an overlay drawn
+    // there), the app laid out above it; BYD's own navigation bar stays hidden (immersive).
+    @Volatile var appUp = false
+    const val DOCK = 112
     private fun displayInfo() = Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null)
         .let { it.javaClass.getMethod("getDisplayInfo", Integer.TYPE).invoke(it, 0) }
     fun barsCommand(): String {
         val top = if (voiceUp) 0 else -84
+        val bottom = if (appUp) DOCK else -90
         return when (displayInfo().let { it.javaClass.getField("rotation").getInt(it) }) {
-            1 -> "wm overscan -90,0,$top,0"
-            2 -> "wm overscan 0,-90,0,$top"
-            3 -> "wm overscan $top,0,-90,0"
-            else -> "wm overscan 0,$top,0,-90"
+            1 -> "wm overscan $bottom,0,$top,0"
+            2 -> "wm overscan 0,$bottom,0,$top"
+            3 -> "wm overscan $top,0,$bottom,0"
+            else -> "wm overscan 0,$top,0,$bottom"
         }
     }
     // The screen was turned while the bars are off (some overscan negative): set them again for the new

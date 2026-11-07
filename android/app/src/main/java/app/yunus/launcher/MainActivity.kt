@@ -213,7 +213,7 @@ class MainActivity : Activity() {
 
                 // The recent apps (BYD's bar with its key is off the screen); the shell sends the key.
                 @JavascriptInterface
-                fun recents() { runOnUiThread { edge.hideDock() }; shell.send("recents") }
+                fun recents() { shell.send("recents") }
 
                 // The car's cameras (CarCamera): the signal window and the rear-view mirror, each at
                 // a screen rect with its settings (JSON).
@@ -584,8 +584,9 @@ class MainActivity : Activity() {
 
     // Back from the notification-access setting, the music card may now read the media sessions.
     // The swipe-up-for-home strip is over the other apps only (Yunus has its own dock).
-    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide() }
-    override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
+    // Another app in front: its window ends above Yunus's dock, which stays on the screen over it.
+    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide(); shell.send("apps 0") }
+    override fun onPause() { web.onPause(); if (isDefaultHome()) { shell.send("apps 1"); edge.show() }; super.onPause() }
 
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
 
