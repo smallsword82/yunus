@@ -1356,7 +1356,10 @@ const ttColor = (t) => (typeof t.color === 'function' ? t.color() : t.color);
 // a light it has reported follows the car, the others their rule or (preview) the demo faults.
 const halTT = {};
 const ttLit = (t) => (t.id in halTT ? halTT[t.id].on : t.auto ? t.auto() : !!S.faults[t.id]);
-const ttFault = (t) => (t.id in halTT ? halTT[t.id].on : !t.auto && !!S.faults[t.id]);
+// At start the cluster lights its warnings for a few seconds as a lamp check (the airbag light among
+// them): a car light counts as a fault (the pop-up) only once it has stayed on TT_CONFIRM_MS.
+const TT_CONFIRM_MS = 8000;
+const ttFault = (t) => (t.id in halTT ? halTT[t.id].on && performance.now() - halTT[t.id].since > TT_CONFIRM_MS : !t.auto && !!S.faults[t.id]);
 const ttHtml = (t) => `<div class="tt ${ttColor(t)}${halTT[t.id] && halTT[t.id].flash ? ' flash' : ''}" title="${t.name}">${t.text ? `<b>${t.text()}</b>` : ICONS[t.id]}</div>`;
 // The status bar shows only active warnings (amber and red), and the park brake while it is on.
 // Always-on information lights (OK, drive mode, AVH standby, ...) stay in the Warnings list.
@@ -5533,7 +5536,9 @@ window.yunusCar = (m) => {
   if (m.tt) {
     for (const id in m.tt) {
       const v = m.tt[id];
-      if (v > 0) halTT[id] = { on: v === 1 || v >= 3, flash: v >= 3 }; else delete halTT[id]; // 0: unknown, the rule applies
+      const on = v === 1 || v >= 3, was = halTT[id];
+      // since: when it came on (kept while it stays on), for the lamp check above
+      if (v > 0) halTT[id] = { on, flash: v >= 3, since: on && was && was.on ? was.since : performance.now() }; else delete halTT[id]; // 0: unknown, the rule applies
     }
     updateTelltales();
     return;
