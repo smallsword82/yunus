@@ -3170,8 +3170,8 @@ $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'
 // On the upright screen the window is wide and low: wider, and a little higher, to keep the next lane.
 const SIDE_CAM_PORTRAIT = { pitch: 30, hfov: 95 };
 const SIDE_CAM = {
-  left: { mode: 'dewarp', sector: 1, back: -1, yaw: -5, pitch: 50, hfov: 75, roll: -40, mirror: true },
-  right: { mode: 'dewarp', sector: 2, back: 1, yaw: -5, pitch: 50, hfov: 75, roll: 40, mirror: true },
+  left: { mode: 'dewarp', sector: 1, back: -1, yaw: -5, pitch: 50, hfov: 65, ry: 0.6, roll: -40, mirror: true },
+  right: { mode: 'dewarp', sector: 2, back: 1, yaw: -5, pitch: 50, hfov: 65, ry: 0.6, roll: 40, mirror: true },
 };
 // The rear-view mirror (floating window) from the rear camera (sector 0), or the front one (sector 3)
 // with its switch: the virtual camera looks along the lens's axis tipped up towards the picture's
