@@ -584,9 +584,9 @@ class MainActivity : Activity() {
 
     // Back from the notification-access setting, the music card may now read the media sessions.
     // The swipe-up-for-home strip is over the other apps only (Yunus has its own dock).
-    // Another app in front: its window ends above Yunus's dock, which stays on the screen over it.
-    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide(); shell.send("apps 0") }
-    override fun onPause() { web.onPause(); if (isDefaultHome()) { shell.send("apps 1"); edge.show() }; super.onPause() }
+    // Another app in front: Yunus's dock stays on the screen over it (hidden while it is full screen).
+    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide() }
+    override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
 
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
 

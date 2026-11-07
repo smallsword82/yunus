@@ -10,35 +10,79 @@ import android.view.WindowManager
 import android.webkit.WebView
 
 /**
- * Yunus's bottom bar over any app. BYD's own bar is off the screen; while another app is in front
- * the helper keeps the screen's bottom 112 px free of it (overscan) and Yunus's dock (the page in its
- * dock-only mode, launcher.html#dock, in an overlay window) stays there, always on the screen. A
- * swipe up on it opens the recent apps (the page asks for it). Only while another app is in front
- * (Yunus has its own dock); needs the "display over other apps" permission.
+ * Yunus's bottom bar over any app. BYD's own bar is off the screen; while another app is in front,
+ * Yunus's dock (the page in its dock-only mode, launcher.html#dock, in an overlay window) stays on
+ * the screen over the bottom of the app, which is laid out full screen. While that app is itself
+ * full screen (a video), the dock hides; a swipe up from the bottom edge brings it for a few seconds.
+ * A swipe up on the dock opens the recent apps (the page asks for it). Only while another app is in
+ * front (Yunus has its own dock); needs the "display over other apps" permission.
  */
 class EdgeHome(private val ctx: Context, private val recents: () -> Unit, private val setupDock: (WebView) -> Unit) {
     private val wm = ctx.getSystemService(WindowManager::class.java)
     private var dock: WebView? = null
     private var dockShown = false
     private val dockH = 112 // the page's dock row; the page is laid out 1:1 with the screen
+    private var active = false // another app in front
+    private var fullScreen = false // that app hides the system bars (a video full screen)
+    private var peek = false // brought up by a swipe while full screen
+    private val endPeek = Runnable { peek = false; update() }
 
-    // The dock stays up over the other app, in the room kept free for it at the bottom of the screen
-    // (the helper's overscan, which the app's window doesn't reach).
+    // A thin strip along the bottom edge: it hears the system bars' state (an app going full screen
+    // hides them) and, while full screen, takes the swipe up that brings the dock.
+    private var strip: View? = null
+    private val stripH = (22 * ctx.resources.displayMetrics.density).toInt()
+    private val fullFlags = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+
     fun show() {
         if (!android.provider.Settings.canDrawOverlays(ctx)) return
-        showDock()
+        active = true
+        addStrip()
+        update()
     }
 
     fun hide() {
-        hideDock()
+        active = false; peek = false
+        update()
     }
 
     /** The dock overlay's page, while it is up (it gets the car's data like the main page). */
     fun dockWeb(): WebView? = if (dockShown) dock else null
 
+    private fun update() {
+        if (active && (!fullScreen || peek)) showDock() else hideDock()
+        strip?.let { s ->
+            val touch = active && fullScreen && !peek
+            try { wm.updateViewLayout(s, overlayParams(stripH, if (touch) WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE else hiddenFlags)) } catch (_: Throwable) { }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun addStrip() {
+        if (strip != null) return
+        val v = View(ctx)
+        var y0 = -1f
+        var fired = false
+        v.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { y0 = ev.rawY; fired = false }
+                MotionEvent.ACTION_MOVE -> if (!fired && y0 - ev.rawY > stripH * 1.5f) {
+                    fired = true
+                    peek = true; update()
+                    v.removeCallbacks(endPeek); v.postDelayed(endPeek, 5000)
+                }
+            }
+            true
+        }
+        v.setOnSystemUiVisibilityChangeListener { vis ->
+            val full = vis and fullFlags != 0
+            if (full != fullScreen) { fullScreen = full; if (!full) peek = false; update() }
+        }
+        try { wm.addView(v, overlayParams(stripH, hiddenFlags)); strip = v } catch (t: Throwable) { android.util.Log.w("Yunus", "edge: $t") }
+    }
+
     // The dock's window is made once, page loaded, and then stays on the screen hidden and
-    // untouchable: a swipe only turns it visible. Adding the window (and on the first swipe loading
-    // the page) at every swipe made the dock come up late.
+    // untouchable: showing only turns it visible. Adding the window (and loading the page) each
+    // time made the dock come up late.
     private val hiddenFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
     private val shownFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
     private var dockAdded = false
@@ -52,6 +96,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
             settings.loadWithOverviewMode = true
             setupDock(this)
             loadUrl("https://appassets.androidplatform.net/assets/launcher.html#dock")
+            setOnTouchListener { _, _ -> if (peek) { removeCallbacks(endPeek); postDelayed(endPeek, 5000) }; false } // kept while in use
         }.also { dock = it }
         if (!dockAdded) {
             w.visibility = View.INVISIBLE
@@ -81,13 +126,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     private fun overlayParams(height: Int, flags: Int) = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT, height,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN
-            or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+        flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT,
-    ).apply {
-        // Below the app's frame, in the room the helper keeps free (the frame ends dockH above the
-        // screen's bottom): placed from the top at the screen's full height.
-        gravity = Gravity.BOTTOM
-        y = -height
-    }
+    ).apply { gravity = Gravity.BOTTOM }
 }
