@@ -61,7 +61,36 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         var out: SurfaceTexture? = null
         var w = 0; var h = 0
         var label: android.widget.TextView? = null // the mirror's front/rear switch
+        // The signal window is a window of its own over everything (another app in front too);
+        // its place on the screen (the mirror sits in Yunus's own layout).
+        var overlay = false
+        var x = 0; var y = 0
     }
+
+    private val wm = activity.getSystemService(android.view.WindowManager::class.java)
+    private fun overlayParams(win: Win, w: Int, h: Int, touchable: Boolean) = android.view.WindowManager.LayoutParams(
+        w, h, android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+            or android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            or (if (touchable) 0 else android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
+        android.graphics.PixelFormat.TRANSLUCENT,
+    ).apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START; x = win.x - originX; y = win.y - originY }
+    // Where an overlay's 0,0 is, in Yunus's window's coordinates (the page's): with BYD's bars off
+    // the screen, the overlays count from the screen's hidden top. Measured from the window itself.
+    private var originX = 0; private var originY = 0
+    private fun measureOrigin(win: Win) {
+        win.box.post {
+            val lp = win.box.layoutParams as? android.view.WindowManager.LayoutParams ?: return@post
+            val a = IntArray(2); val r = IntArray(2)
+            win.box.getLocationOnScreen(a); root.getLocationOnScreen(r)
+            val ox = a[0] - lp.x - r[0]; val oy = a[1] - lp.y - r[1]
+            if (ox != originX || oy != originY) {
+                originX = ox; originY = oy
+                try { wm.updateViewLayout(win.box, overlayParams(win, lp.width, lp.height, win.visible)) } catch (_: Throwable) { }
+            }
+        }
+    }
+    private fun canOverlay() = android.provider.Settings.canDrawOverlays(activity)
 
     /** Shows window [name] at x,y w×h (screen px) with the page's settings [json] (see pack). */
     fun show(name: String, x: Int, y: Int, w: Int, h: Int, json: String) {
@@ -74,9 +103,14 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         val px = if (name == "rear") prefs.getInt("rearCamX", x) else x
         val py = if (name == "rear") prefs.getInt("rearCamY", y) else y
         // Moved while up (the signal switched sides): shown afresh, as if it had just opened.
-        val moved = win.visible && (win.box.layoutParams as? FrameLayout.LayoutParams)?.let { it.leftMargin != px || it.topMargin != py } == true
+        val moved = win.visible && (if (win.overlay) win.x != px || win.y != py
+            else (win.box.layoutParams as? FrameLayout.LayoutParams)?.let { it.leftMargin != px || it.topMargin != py } == true)
         if (moved) win.visible = false
-        win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
+        if (win.overlay) {
+            win.x = px; win.y = py
+            try { wm.updateViewLayout(win.box, overlayParams(win, w, h, true)) } catch (t: Throwable) { android.util.Log.w("Yunus", "sidecam: $t") }
+            measureOrigin(win)
+        } else win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
         // the camera takes a moment); it shows with that frame.
         if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2 }
@@ -95,12 +129,17 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         if (name == "side" && win.box.alpha > 0f) win.box.animate().translationX(edgeOffset(win)).setDuration(SLIDE_MS)
             .setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).withEndAction { if (!win.visible) win.box.visibility = View.GONE }.start()
         else win.box.visibility = View.GONE
+        if (win.overlay) { // hidden: touches go through it to what is below
+            val lp = win.box.layoutParams as? android.view.WindowManager.LayoutParams
+            if (lp != null) try { wm.updateViewLayout(win.box, overlayParams(win, lp.width, lp.height, false)) } catch (_: Throwable) { }
+        }
         idleLater()
     }
     // Off the screen at the edge the window sits by (left half: to the left).
     private fun edgeOffset(win: Win): Float {
-        val lp = win.box.layoutParams as FrameLayout.LayoutParams
-        return if (lp.leftMargin + lp.width / 2 < root.width / 2) -lp.width.toFloat() else lp.width.toFloat()
+        val left = if (win.overlay) win.x else (win.box.layoutParams as FrameLayout.LayoutParams).leftMargin
+        val width = win.box.width.takeIf { it > 0 } ?: win.box.layoutParams.width
+        return if (left + width / 2 < root.width / 2) -width.toFloat() else width.toFloat()
     }
 
     /**
@@ -122,7 +161,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         root.removeCallbacks(idle)
         stop()
         gl?.release(); gl = null
-        for (win in windows.values) root.removeView(win.box)
+        for (win in windows.values) if (win.overlay) try { wm.removeView(win.box) } catch (_: Throwable) { } else root.removeView(win.box)
         windows.clear()
     }
 
@@ -164,6 +203,10 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
             override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, vw: Int, vh: Int) { win.w = vw; win.h = vh }
             override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
             override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean { gl?.detach(win); win.out = null; return true }
+        }
+        if (name == "side" && canOverlay()) {
+            win.box.visibility = View.GONE
+            try { wm.addView(win.box, overlayParams(win, w, h, false)); win.overlay = true; return win } catch (t: Throwable) { android.util.Log.w("Yunus", "sidecam overlay: $t") }
         }
         root.addView(win.box, FrameLayout.LayoutParams(w, h))
         return win
