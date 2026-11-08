@@ -3184,7 +3184,8 @@ $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'
 // ("flat", rot: the plain camera picture turned 90° and stretched, the earlier view.)
 // On the upright screen the window is wide and low: wider, and a little higher, to keep the next lane.
 // Upright: lower and wider, and turned a touch further out (the car's side took too much of it).
-const SIDE_CAM_PORTRAIT = { left: { pitch: 30, hfov: 95, yaw: -5 }, right: { pitch: 30, hfov: 95, yaw: 5 } };
+// The window is also cut by a fifth from the car's side (the left camera has the car on its right).
+const SIDE_CAM_PORTRAIT = { left: { pitch: 30, hfov: 95, yaw: -5, crop: 0.2, cropEdge: 'right' }, right: { pitch: 30, hfov: 95, yaw: 5, crop: 0.2, cropEdge: 'left' } };
 const SIDE_CAM = {
   left: { mode: 'dewarp', sector: 1, back: -1, yaw: -10, pitch: 50, hfov: 65, ry: 0.6, roll: -40, mirror: true },
   right: { mode: 'dewarp', sector: 2, back: 1, yaw: -5, pitch: 50, hfov: 65, ry: 0.6, roll: 40, mirror: true },

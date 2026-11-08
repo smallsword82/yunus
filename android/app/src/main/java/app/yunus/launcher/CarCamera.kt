@@ -100,8 +100,20 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         win.params = pack(o)
         o.optString("label").takeIf { it.isNotEmpty() }?.let { win.label?.text = it }
         // The mirror stays where it was dragged to.
-        val px = if (name == "rear") prefs.getInt("rearCamX", x) else x
+        var px = if (name == "rear") prefs.getInt("rearCamX", x) else x
         val py = if (name == "rear") prefs.getInt("rearCamY", y) else y
+        // Cropped: the window narrowed from the car's side ("cropEdge", left or right) by "crop" of its
+        // width; the picture keeps its full size inside it, so the car's strip falls outside.
+        var w = w
+        val full = w
+        val crop = o.optDouble("crop", 0.0).coerceIn(0.0, 0.6)
+        val cutLeft = o.optString("cropEdge") == "left"
+        if (crop > 0) { val w2 = Math.round(w * (1 - crop)).toInt(); if (cutLeft) px += w - w2; w = w2 }
+        win.view.layoutParams = FrameLayout.LayoutParams(if (crop > 0) full else FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT,
+            if (cutLeft) android.view.Gravity.END else android.view.Gravity.START)
+        // Held to the window: the window's surface reaches past it (room for the shadow) and the
+        // picture drew on there.
+        win.box.clipBounds = if (crop > 0) android.graphics.Rect(0, 0, w, h) else null
         // Moved while up (the signal switched sides): shown afresh, as if it had just opened.
         val moved = win.visible && (if (win.overlay) win.x != px || win.y != py
             else (win.box.layoutParams as? FrameLayout.LayoutParams)?.let { it.leftMargin != px || it.topMargin != py } == true)
