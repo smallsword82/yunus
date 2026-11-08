@@ -399,7 +399,7 @@ class MainActivity : Activity() {
         }
         media.sleep = { bgDisplay?.let { android.util.Log.d("YunusMedia", "close ${it.display.displayId}"); shell.send("close ${it.display.displayId}") } }
         bt = BtBridge(this, ::postToPage)
-        edge = EdgeHome(this, { shell.send("recents") }) { dock ->
+        edge = EdgeHome(this, { shell.send("recents") }, { val d = window.decorView; val l = IntArray(2); d.getLocationOnScreen(l); l[1] + d.height }) { dock ->
             // The dock overlay's page: the same app bridge and assets as the main page.
             dock.addJavascriptInterface(nativeApi, "YunusNative")
             dock.webViewClient = object : WebViewClientCompat() {

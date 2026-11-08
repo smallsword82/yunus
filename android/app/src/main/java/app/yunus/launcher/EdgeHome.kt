@@ -17,7 +17,7 @@ import android.webkit.WebView
  * A swipe up on the dock opens the recent apps (the page asks for it). Only while another app is in
  * front (Yunus has its own dock); needs the "display over other apps" permission.
  */
-class EdgeHome(private val ctx: Context, private val recents: () -> Unit, private val setupDock: (WebView) -> Unit) {
+class EdgeHome(private val ctx: Context, private val recents: () -> Unit, private val visibleBottom: () -> Int, private val setupDock: (WebView) -> Unit) {
     private val wm = ctx.getSystemService(WindowManager::class.java)
     private var dock: WebView? = null
     private var dockShown = false
@@ -26,6 +26,38 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     private var fullScreen = false // that app hides the system bars (a video full screen)
     private var peek = false // brought up by a swipe while full screen
     private val endPeek = Runnable { peek = false; update() }
+
+    // Full screen, the system lays overlay windows out down to the screen's hidden bottom (BYD's bar
+    // is moved off the screen there), so a window at the bottom ends up below the visible screen.
+    // How far is measured from the strip, and that tells also that the app went full screen: some
+    // players (HakoPlayer) hide the bars without the change ever reaching the strip's listener.
+    private var lift = 0
+    private val poll = object : Runnable { override fun run() { measure(); if (active) strip?.postDelayed(this, 700) } }
+
+    private var seen = -1 // the last reading: one is acted on only when read the same twice (the
+    // window's place on the screen is known a moment after it was moved)
+
+    @Suppress("DEPRECATION")
+    private fun measure() {
+        val s = strip ?: return
+        if (!s.isAttachedToWindow || s.height == 0) return
+        val loc = IntArray(2); s.getLocationOnScreen(loc)
+        val anchor = loc[1] + s.height + ((s.layoutParams as? WindowManager.LayoutParams)?.y ?: 0) // where the bottom of a window is put
+        val bottom = visibleBottom()
+        if (bottom <= 0) return
+        val over = (anchor - bottom).coerceAtLeast(0)
+        val full = over > 0 || (s.windowSystemUiVisibility and fullFlags != 0)
+        val reading = over * 2 + (if (full) 1 else 0)
+        val same = reading == seen; seen = reading
+        if (!same) return
+        if (over != lift || full != fullScreen) {
+            android.util.Log.i("Yunus", "edge: anchor=$anchor bottom=$bottom lift=$over full=$full")
+            lift = over
+            if (full != fullScreen) { fullScreen = full; if (!full) peek = false }
+            if (dockAdded) dock?.let { try { wm.updateViewLayout(it, overlayParams(dockH, if (dockShown) shownFlags else hiddenFlags)) } catch (_: Throwable) { } }
+            update()
+        }
+    }
 
     // A thin strip along the bottom edge: it hears the system bars' state (an app going full screen
     // hides them) and, while full screen, takes the swipe up that brings the dock.
@@ -38,6 +70,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         active = true
         addStrip()
         update()
+        strip?.let { it.removeCallbacks(poll); it.post(poll) }
     }
 
     fun hide() {
@@ -79,6 +112,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         v.setOnSystemUiVisibilityChangeListener { vis ->
             val full = vis and fullFlags != 0
             if (full != fullScreen) { fullScreen = full; if (!full) peek = false; update() }
+            v.post { measure() }
         }
         try { wm.addView(v, overlayParams(stripH, hiddenFlags)); strip = v } catch (t: Throwable) { android.util.Log.w("Yunus", "edge: $t") }
     }
@@ -131,5 +165,5 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT,
-    ).apply { gravity = Gravity.BOTTOM }
+    ).apply { gravity = Gravity.BOTTOM; y = lift }
 }
