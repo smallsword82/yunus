@@ -130,9 +130,19 @@ object ShellHelper {
 
     // The window's close button: every task on that display (only Yunus's own) is removed, as
     // swiping an app away in recents does; the next launch starts the app afresh.
+    // The app is then stopped as well (it kept running in the background otherwise), unless it is
+    // also open somewhere else (the map window, the main screen).
     private fun close(display: Int) {
         synchronized(watching) { watching.remove(display) }
-        for ((task, onDisplay, _) in Tasks.roots()) if (onDisplay == display) try { Tasks.remove(task) } catch (t: Throwable) { System.err.println("close $display task $task: $t") }
+        val roots = Tasks.roots()
+        val pkgs = HashSet<String>()
+        for ((task, onDisplay, names) in roots) if (onDisplay == display) {
+            pkgs.addAll(names)
+            try { Tasks.remove(task) } catch (t: Throwable) { System.err.println("close $display task $task: $t") }
+        }
+        val elsewhere = roots.filter { it.second != display }.flatMap { it.third }.toSet()
+        for (pkg in pkgs) if (pkg !in elsewhere && pkg != OWNER && Regex("[A-Za-z0-9_.]+").matches(pkg))
+            ProcessBuilder("am", "force-stop", pkg).inheritIO().start().waitFor()
     }
 
     // The window's full-screen key: the app's task goes onto the main screen, in front, as it is.
