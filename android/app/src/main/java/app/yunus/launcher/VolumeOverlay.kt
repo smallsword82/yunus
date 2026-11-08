@@ -17,10 +17,7 @@ import android.widget.FrameLayout
  * bar (the page passes its place, size and colours) and sets the level as the finger moves.
  * It hides 2 s after the last change, like the page's.
  */
-class VolumeOverlay(ctx: Context, private val onSet: (Int) -> Unit, private val onIconHold: () -> Unit = {}) : View(ctx) {
-    // The speaker icon held down: the car's sound settings (a touch there doesn't set the level).
-    private var onIcon = false
-    private val iconHeld = Runnable { onIcon = false; visibility = GONE; onIconHold() }
+class VolumeOverlay(ctx: Context, private val onSet: (Int) -> Unit) : View(ctx) {
     private val main = Handler(Looper.getMainLooper())
     private val hide = Runnable { if (!dragging) visibility = GONE }
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -33,11 +30,6 @@ class VolumeOverlay(ctx: Context, private val onSet: (Int) -> Unit, private val 
     private var max = 15
     private var scale = 1f // page px per design px, for the bar's inner sizes
     private var dragging = false
-    /** Places the bar itself (x, y, w, h with its shadow's room) when it is in a window of its own. */
-    var place: ((Int, Int, Int, Int) -> Unit)? = null
-    /** Told when the bar shows or hides (its own window then takes touches or lets them through). */
-    var shownHook: ((Boolean) -> Unit)? = null
-    override fun setVisibility(v: Int) { super.setVisibility(v); shownHook?.invoke(v == VISIBLE) }
 
     init {
         visibility = GONE
@@ -51,10 +43,9 @@ class VolumeOverlay(ctx: Context, private val onSet: (Int) -> Unit, private val 
         pad = 28 * k
         bgPaint.setShadowLayer(20 * k, 0f, 8 * k, 0x73000000)
         val p = pad.toInt()
-        place?.invoke(x - p, y - p, w + 2 * p, h + 2 * p)
-            ?: run { layoutParams = FrameLayout.LayoutParams(w + 2 * p, h + 2 * p).apply { leftMargin = x - p; topMargin = y - p } }
+        layoutParams = FrameLayout.LayoutParams(w + 2 * p, h + 2 * p).apply { leftMargin = x - p; topMargin = y - p }
         visibility = VISIBLE
-        if (place == null) bringToFront()
+        bringToFront()
         invalidate()
         main.removeCallbacks(hide); main.postDelayed(hide, 2000)
     }
@@ -88,15 +79,6 @@ class VolumeOverlay(ctx: Context, private val onSet: (Int) -> Unit, private val 
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (e.actionMasked == MotionEvent.ACTION_DOWN && e.x < trackLeft() - 6 * scale) {
-            onIcon = true; main.removeCallbacks(hide); main.postDelayed(iconHeld, 600); return true
-        }
-        if (onIcon) {
-            if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) {
-                onIcon = false; main.removeCallbacks(iconHeld); main.postDelayed(hide, 2000)
-            }
-            return true
-        }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
                 dragging = true

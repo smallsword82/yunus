@@ -5172,7 +5172,8 @@ function setVol(v, fromSystem) {
   if (!fromSystem && level !== S.vol && window.YunusNative && YunusNative.volumeSet) YunusNative.volumeSet(level);
   S.vol = level;
   volIcon();
-  // Steering-wheel and console keys: Yunus's bar shows instead of BYD's dialog (the app closes that).
+  // Steering-wheel keys and the car's own bar already show BYD's volume dialog: only the key follows.
+  if (fromSystem && window.YunusNative) return;
   if (window.YunusNative && YunusNative.volumePopup) return showNativeVolPop();
   $('volPop').classList.add('show');
   clearTimeout(volHide);
