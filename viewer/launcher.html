@@ -1779,7 +1779,9 @@ function onCarLoaded(gltf) {
   placePlates(car);
   controls.target.copy(target);
   cam.position.copy(presetPos(PRESETS.default));
-  if (S.charging && S.gear === 'P') camTo('charge'); // already plugged in at load: show the charge view
+  // Already plugged in at load: straight in the charge view, as the start's saved picture shows it
+  // (moved there from the default view, the car flew in close and out again for 2 s as it appeared).
+  if (S.charging && S.gear === 'P') { cam.position.copy(presetPos(PRESETS.charge, CHARGE_TARGET)); controls.target.copy(CHARGE_TARGET); }
   // Performance mode only draws on demand; wake the loop so the freshly loaded car is drawn
   // (and then kept on screen) instead of staying black until the first touch.
   wake(2000);
@@ -3069,7 +3071,7 @@ function setCharge(v, fromCar) {
   updateChargeInfo();
   wake(1500);
   $('hCharge').style.color = v ? 'var(--ok)' : '';
-  if (v) camTo('charge');
+  if (v) { if (carObj) camTo('charge'); } // before the car is in, its load puts the view there at once
   else if (S.gear === 'P' && !current) camTo('default'); // back to the usual view after charging
   refreshCard();
 }
