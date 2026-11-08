@@ -662,14 +662,20 @@ class MainActivity : Activity() {
 
 /**
  * Other apps' screens inside Yunus (Google Maps in the map area, …), the way Kinex does it: each
- * slot is a private virtual display drawn into a TextureView over its area. The app is started on
+ * slot is a private virtual display shown by a SurfaceView over its area. A SurfaceView's picture
+ * is put on the screen by the system on its own, under Yunus's window (seen through a hole the view
+ * leaves in it): the app's frames don't make Yunus draw again. A TextureView drew them inside the
+ * window, so every frame Maps drew (it moves all the time) cost a whole frame of Yunus's page as
+ * well, ~45 ms with a pop-up over the map: everything over it stuttered. The app is started on
  * the display by the shell helper (`am start --display <id>`; the shell may launch onto a display
  * it does not own) and touches on the view are injected into that display by the same helper.
  */
 private class AppEmbed(private val activity: Activity, private val root: android.widget.FrameLayout, private val shell: ShellLink,
                        private val onEvent: (String) -> Unit) {
-    private class Slot(val view: android.view.TextureView) {
+    // box: the slot's area (its clip is the hole, see shift); view: the app's picture inside it.
+    private class Slot(val box: android.widget.FrameLayout, val view: android.view.SurfaceView) {
         var display: android.hardware.display.VirtualDisplay? = null
+        var pending: ((android.view.Surface) -> Unit)? = null // makes the display once the surface is there
         var component: String? = null // the app shown, so a different one can replace it
         val displayId get() = display?.display?.displayId ?: -1
         var keys: List<android.view.View> = emptyList() // the third window's floating back and close keys
@@ -703,25 +709,22 @@ private class AppEmbed(private val activity: Activity, private val root: android
     fun show(name: String, packages: List<String>, x: Int, y: Int, w: Int, h: Int, onReady: (Int) -> Unit) {
         // -1: none of the apps is installed, so the page keeps its own content there.
         val launch = packages.firstNotNullOfOrNull { activity.packageManager.getLaunchIntentForPackage(it)?.component } ?: return onReady(-1)
-        val slot = slots.getOrPut(name) {
-            Slot(android.view.TextureView(activity)).also { s ->
-                root.addView(s.view)
-                s.view.setOnTouchListener { _, ev -> shell.send(touchLine(s, ev)); true }
-            }
-        }
-        slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
+        val slot = slots.getOrPut(name) { newSlot(name) }
+        slot.box.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
         // Android Auto lays its 16:9 picture out for a car screen: in a window-sized display it came out
         // wider than the window (its app bar cut off) with bars above and below. It gets a display of
-        // the car screen's size instead, drawn into the window whole, keeping its shape.
+        // the car screen's size instead, shown in the window whole, keeping its shape.
         val (dw, dh) = if (launch.packageName == "com.byd.androidauto") 1920 to 1080 else w to h
         slot.w = w; slot.h = h; slot.vw = if (dw != w || dh != h) dw else 0; slot.vh = if (slot.vw > 0) dh else 0
-        if (slot.vw > 0) {
-            val k = minOf(w.toFloat() / dw, h.toFloat() / dh)
-            slot.cw = dw * k; slot.ch = dh * k
-            slot.view.setTransform(android.graphics.Matrix().apply { setScale(slot.cw / w, slot.ch / h, w / 2f, h / 2f) })
-        } else slot.view.setTransform(null)
-        slot.view.translationX = 0f; slot.view.clipBounds = null // placed for real: no shift (see shift)
-        slot.view.visibility = android.view.View.VISIBLE
+        val k = if (slot.vw > 0) minOf(w.toFloat() / dw, h.toFloat() / dh) else 1f
+        slot.cw = dw * k; slot.ch = dh * k
+        // The picture: the window's size, or the display's shape fitted in it and centred (the system
+        // scales the buffer to the view).
+        slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(slot.cw.toInt(), slot.ch.toInt()).apply {
+            leftMargin = ((w - slot.cw) / 2).toInt(); topMargin = ((h - slot.ch) / 2).toInt() }
+        slot.view.translationX = 0f; slot.box.clipBounds = null // placed for real: no shift (see shift)
+        cuts.remove(name)
+        slot.box.visibility = android.view.View.VISIBLE
         if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
         val dpi = activity.resources.displayMetrics.densityDpi
         val component = launch.flattenToShortString()
@@ -745,27 +748,50 @@ private class AppEmbed(private val activity: Activity, private val root: android
                 }, 4500)
             }
         }
-        fun attach(texture: android.graphics.SurfaceTexture) {
-            texture.setDefaultBufferSize(dw, dh)
-            val existing = slot.display
-            if (existing != null) { existing.resize(dw, dh, dpi); launchIfNew(); onReady(slot.displayId); return }
+        slot.view.holder.setFixedSize(dw, dh)
+        val existing = slot.display
+        if (existing != null) { existing.resize(dw, dh, dpi); launchIfNew(); onReady(slot.displayId); return }
+        // The display is made once its surface is there (now, or when the view's surface comes).
+        slot.pending = { surface ->
             val dm = activity.getSystemService(android.hardware.display.DisplayManager::class.java)
             // OWN_CONTENT_ONLY | DESTROY_CONTENT_ON_REMOVAL (hidden flag 1 << 8), as Kinex uses.
             val flags = android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or (1 shl 8)
-            slot.display = dm.createVirtualDisplay("yunus-$name", dw, dh, dpi, android.view.Surface(texture), flags)
+            slot.display = dm.createVirtualDisplay("yunus-$name", dw, dh, dpi, surface, flags)
             launchIfNew()
             onReady(slot.displayId)
         }
-        val texture = slot.view.surfaceTexture
-        if (texture != null) attach(texture)
-        else slot.view.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(t: android.graphics.SurfaceTexture, width: Int, height: Int) = attach(t)
-            // The view sets its own size on the buffer when it is laid out; a display of its own size keeps it.
-            override fun onSurfaceTextureSizeChanged(t: android.graphics.SurfaceTexture, width: Int, height: Int) { if (slot.vw > 0) t.setDefaultBufferSize(slot.vw, slot.vh) }
-            override fun onSurfaceTextureUpdated(t: android.graphics.SurfaceTexture) {}
-            // Keep the texture (and so the display's surface) across a pause.
-            override fun onSurfaceTextureDestroyed(t: android.graphics.SurfaceTexture) = false
-        }
+        val sf = slot.view.holder.surface
+        if (sf != null && sf.isValid) slot.pending?.let { slot.pending = null; it(sf) }
+    }
+
+    private fun newSlot(name: String): Slot {
+        val box = android.widget.FrameLayout(activity).apply { clipChildren = true }
+        val view = android.view.SurfaceView(activity)
+        // The third window's surface over the map's where they meet (both under Yunus's window).
+        if (name != "map") view.setZOrderMediaOverlay(true)
+        box.addView(view)
+        root.addView(box)
+        val slot = Slot(box, view)
+        view.setOnTouchListener { _, ev -> shell.send(touchLine(slot, ev)); true }
+        view.holder.addCallback(object : android.view.SurfaceHolder.Callback {
+            // The surface comes and goes with the view on the screen (hidden, Yunus in the
+            // background): the app keeps running on its display, drawn again into the new surface.
+            override fun surfaceCreated(holder: android.view.SurfaceHolder) {
+                val p = slot.pending
+                if (p != null) { slot.pending = null; p(holder.surface); return }
+                val d = slot.display ?: return
+                d.surface = holder.surface
+                // The app draws only when something changes: the new surface stayed black for a few
+                // seconds (back to Yunus from another app). A pixel's resize and back makes it draw now.
+                val dpi = activity.resources.displayMetrics.densityDpi
+                val m = android.util.DisplayMetrics().also { d.display.getRealMetrics(it) }
+                d.resize(m.widthPixels, m.heightPixels - 1, dpi)
+                root.postDelayed({ if (slot.display === d) d.resize(m.widthPixels, m.heightPixels, dpi) }, 60)
+            }
+            override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {}
+            override fun surfaceDestroyed(holder: android.view.SurfaceHolder) { slot.display?.surface = null }
+        })
+        return slot
     }
 
     /** Closes the app in slot [name]: its tasks on the display go, the view hides, and the next
@@ -774,13 +800,13 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val slot = slots[name] ?: return
         if (slot.displayId > 0) shell.send("close ${slot.displayId}")
         slot.component = null
-        slot.view.visibility = android.view.View.GONE
+        slot.box.visibility = android.view.View.GONE
         showKeys(slot, false)
     }
 
     fun setVisible(name: String, visible: Boolean) {
         val slot = slots[name] ?: return
-        slot.view.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        slot.box.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
         showKeys(slot, visible)
     }
 
@@ -795,10 +821,12 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val slot = slots[name] ?: return
         val v = slot.view
         shifting.remove(name)?.cancel()
+        // The picture slides inside its box, and the box's right side is cut off (its clip, and so the
+        // hole the picture is seen through, is that much narrower).
         fun place(x: Float, c: Float) {
             v.translationX = x
             cuts[name] = c
-            v.clipBounds = if (c > 0.5f) android.graphics.Rect(0, 0, (v.width - c).toInt().coerceAtLeast(0), v.height) else null
+            slot.box.clipBounds = if (c > 0.5f || x != 0f) android.graphics.Rect(0, 0, (slot.w - c).toInt().coerceAtLeast(0), slot.h) else null
         }
         val x0 = v.translationX; val c0 = cuts[name] ?: 0f
         if (ms <= 0) return place(dx.toFloat(), cut.toFloat())
@@ -811,7 +839,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
     }
 
     fun close() {
-        for (s in slots.values) { s.display?.release(); root.removeView(s.view); s.keys.forEach(root::removeView) }
+        for (s in slots.values) { s.display?.release(); root.removeView(s.box); s.keys.forEach(root::removeView) }
         slots.clear()
     }
 
@@ -821,7 +849,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
         append("t ").append(s.displayId).append(' ').append(ev.action)
         for (i in 0 until ev.pointerCount) {
             var x = ev.getX(i); var y = ev.getY(i)
-            if (s.vw > 0) { x = (x - (s.w - s.cw) / 2) * s.vw / s.cw; y = (y - (s.h - s.ch) / 2) * s.vh / s.ch }
+            if (s.vw > 0) { x = x * s.vw / s.cw; y = y * s.vh / s.ch } // the view is the picture itself
             append(' ').append(ev.getPointerId(i)).append(' ').append(x).append(' ').append(y)
         }
     }
