@@ -4449,7 +4449,9 @@ function renderRecent() {
   $('dockRecent').innerHTML = shown.map((p) => { const a = appInfo(p);
     return `<button class="dk dkApp" data-recent="${p}" aria-label="${a.app}">${dockIcon([a.app, null, null, a.icon])}</button>`; }).join('');
 }
-$('dockRecent').onclick = (e) => { const b = e.target.closest('[data-recent]'); if (b) launchApp(b.dataset.recent); };
+// In Yunus a recent app opens in the third window (its ⛶ key takes it full screen); the dock over
+// another app opens it full screen as before.
+$('dockRecent').onclick = (e) => { const b = e.target.closest('[data-recent]'); if (!b) return; if (DOCK_ONLY) launchApp(b.dataset.recent); else openInSide(b.dataset.recent); };
 function renderDock() {
   $('dockApps').innerHTML = dockIds.map((id) => {
     const it = dockItem(id);
