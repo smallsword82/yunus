@@ -874,7 +874,8 @@ private class AppEmbed(private val activity: Activity, private val root: android
         fun place(x: Float, c: Float) {
             v.translationX = x
             cuts[name] = c
-            slot.box.clipBounds = if (c > 0.5f || x != 0f) android.graphics.Rect(0, 0, (slot.w - c).toInt().coerceAtLeast(0), slot.h) else null
+            // The box doesn't move, the picture does: its clip is where the moved picture is, less the cut.
+            slot.box.clipBounds = if (c > 0.5f || x != 0f) android.graphics.Rect(x.toInt().coerceIn(0, slot.w), 0, (x + slot.w - c).toInt().coerceIn(0, slot.w), slot.h) else null
         }
         val x0 = v.translationX; val c0 = cuts[name] ?: 0f
         if (ms <= 0) return place(dx.toFloat(), cut.toFloat())
