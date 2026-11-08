@@ -134,8 +134,10 @@ input { user-select:text; -webkit-user-select:text; }
 /* A pop-up is up: the app under the page shows through its place; the panel's colour is drawn
    around it by a shadow (the panel itself is see-through then). */
 html.sideUnder #sidePanel.appOpen { background:transparent; }
-html.sideUnder #sidePanel.appOpen #sideApp { background:transparent; box-shadow:0 0 0 2400px var(--pn); } /* the whole panel round the app covered (the key row above it was more than 40 px: black there) */
-html.sideUnder #sidePanel.appOpen .sideHead { position:relative; z-index:1; }
+html.sideUnder #sidePanel.appOpen #sideApp { background:transparent; }
+/* The key row above the app keeps its colour (it showed black). A wide shadow round the app did
+   that before, but it covered the car column too (the model and the gear row vanished). */
+html.sideUnder #sidePanel.appOpen .sideHead { position:relative; z-index:1; background:var(--pn); }
 /* On the car the keys float over the app (AppEmbed): no header at all, or under the map only a thin
    strip that holds the window's drag handle. */
 html.nativeKeys #sidePanel.appOpen .sideHead { display:none; }
