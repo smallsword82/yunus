@@ -111,6 +111,8 @@ object ShellHelper {
         if (upright.add(display)) lockRotation(display)
         val pkg = component.substringBefore('/')
         val running = try { Tasks.roots().firstOrNull { (_, d, names) -> d != display && pkg in names } } catch (_: Throwable) { null }
+        // Never taken from Yunus's other window (the map area would be left empty).
+        if (running != null && ownedByYunus(running.second)) { System.err.println("launch $pkg: in Yunus's display ${running.second}, left there"); return }
         val moved = running != null && try { Tasks.move(running.first, display); true } catch (t: Throwable) { System.err.println("move $pkg: ${t.cause ?: t}"); false }
         if (!moved) {
             if (running != null) ProcessBuilder("am", "force-stop", pkg).inheritIO().start().waitFor()

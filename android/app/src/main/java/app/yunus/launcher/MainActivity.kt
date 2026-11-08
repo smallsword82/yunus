@@ -620,6 +620,11 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     // The swipe-up-for-home strip is over the other apps only (Yunus has its own dock).
     // Another app in front: Yunus's dock stays on the screen over it (hidden while it is full screen).
+    // Yunus is home: the back key goes to the page (the third window back from full screen) instead
+    // of leaving Yunus for the app behind it.
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() { postToPage(JSONObject().put("back", true).toString()) }
+
     override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide(); embed.backFromFull() }
     override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
 

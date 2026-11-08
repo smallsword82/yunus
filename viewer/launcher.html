@@ -205,6 +205,8 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait #divider div, #stage.portrait #sideHandle div { width:110px; height:8px; }
 #stage.portrait #card { max-height:100%; }
 #stage.portrait #volPop { bottom:236px; }
+/* The third window full screen (its ⛶ key). */
+#stage.sideMax #sidePanel { grid-column:1 / -1 !important; grid-row:1 / -1 !important; position:fixed !important; left:0 !important; top:0 !important; right:0 !important; bottom:0 !important; width:auto !important; height:auto !important; max-width:none !important; transform:none !important; z-index:40 !important; border:0 !important; margin:0 !important; display:flex !important; }
 #appTray { position:absolute; left:50%; bottom:128px; width:1100px; max-width:calc(100% - 40px); max-height:780px; background:var(--pn); color:var(--tx);
   border-radius:28px; box-shadow:0 16px 40px rgba(0,0,0,.4); z-index:30; display:flex; flex-direction:column;
   opacity:0; visibility:hidden; pointer-events:none; transform:translate(-50%, 24px); will-change:transform, opacity;
@@ -4370,6 +4372,9 @@ function screenRect(el) {
 }
 // Opens an app in the third window, opening the window first when it is closed.
 function openInSide(pkg) {
+  // The map app already in the map area: shown there (moved into this window and closed, the map
+  // area was left black).
+  if (document.documentElement.classList.contains('mapsIn') && navPackages().includes(pkg)) { if (TABS()) setSideTab('map'); return; }
   if (TABS()) setSideTab('app');
   else if (!sideW) setSideW(sideSnaps()[1], true);
   fillSideApps();
@@ -4405,6 +4410,7 @@ function openSideApp(k) {
   $('sideApp').innerHTML = `<div class="big" style="background:${c}"><i class="ti ti-${i}"></i></div><b style="color:var(--tx);font-size:26px">${n}</b>Araçta uygulama bu pencerede açılacak`;
 }
 function closeSideApp() {
+  if (stage.classList.contains('sideMax')) setSideMax(false);
   if (sidePkg) { sidePkg = null; YunusNative.embedVisible('side', false); }
   $('sidePanel').classList.remove('appOpen');
   $('sideTitle').textContent = 'Uygulamalar';
@@ -4542,10 +4548,16 @@ $('sideApps').onclick = (e) => {
   const p = e.target.closest('[data-side-pkg]'); if (p) return openSidePkg(p.dataset.sidePkg);
   const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp);
 };
-$('sideBack').onclick = closeSideApp;
-// Full screen: the app leaves the window for the whole screen; going back to Yunus (back out of
-// it, or home) puts it in the window again, as it was.
-$('sideFull').onclick = () => { if (sidePkg && YunusNative.embedFull) YunusNative.embedFull('side'); };
+// From full screen the ← key brings the window back (the app stays open); otherwise back to the list.
+$('sideBack').onclick = () => (stage.classList.contains('sideMax') ? setSideMax(false) : closeSideApp());
+// Full screen: the window itself grows over the whole screen (the app stays in Yunus, so nothing is
+// moved and its video keeps playing; moved out to the main screen YouTube's video went black).
+// The key again, or the back key, puts it back in its place.
+function setSideMax(on) {
+  stage.classList.toggle('sideMax', on);
+  requestAnimationFrame(() => requestAnimationFrame(embedSide));
+}
+$('sideFull').onclick = () => { if (sidePkg) setSideMax(!stage.classList.contains('sideMax')); };
 // The X closes the app itself (the back arrow only returns to the list and leaves it running).
 $('sideClose').onclick = () => {
   if (sidePkg) { YunusNative.embedClose('side'); sidePkg = null; }
@@ -5675,6 +5687,7 @@ window.yunusCar = (m) => {
     if (mirrorShown) { const [bx, by] = screenRect(box); YunusNative.rearCam(Math.round(bx + box.clientWidth / 2 - 270), Math.round(by + 90), 540, 200, JSON.stringify(MIRROR_CAM[mirrorView])); }
     return;
   }
+  if (m.back) { if (stage.classList.contains('sideMax')) setSideMax(false); return; } // the back key
   if (m.sideBack) { closeSideApp(); return; } // the floating keys over the third window's app
   if (m.sideClose) { $('sideClose').onclick(); return; }
   if (m.sideCamReady) { sigCamReady(); return; } // the signal camera's first frame: open its column
