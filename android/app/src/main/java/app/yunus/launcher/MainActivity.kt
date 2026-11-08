@@ -140,6 +140,26 @@ class MainActivity : Activity() {
                     halWanted = try { org.json.JSONArray(keys).let { a -> (0 until a.length()).map { a.getString(it) }.toHashSet() } } catch (_: Throwable) { null }
                 }
 
+                // The app tray's long press, as the car's own launcher: the app's info screen, and
+                // removing it (Android asks to confirm). System apps can't be removed: the page hides that.
+                @JavascriptInterface
+                fun appDetails(pkg: String) = runOnUiThread {
+                    try { startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:$pkg")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) { }
+                }
+
+                @JavascriptInterface
+                fun appUninstall(pkg: String) = runOnUiThread {
+                    try { startActivity(android.content.Intent(android.content.Intent.ACTION_DELETE,
+                        android.net.Uri.parse("package:$pkg")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) { }
+                }
+
+                @JavascriptInterface
+                fun appRemovable(pkg: String): Boolean = try {
+                    val f = packageManager.getApplicationInfo(pkg, 0).flags
+                    f and android.content.pm.ApplicationInfo.FLAG_SYSTEM == 0 && f and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP == 0
+                } catch (_: Throwable) { false }
+
                 @JavascriptInterface
                 fun openApp(pkg: String): Boolean = try {
                     val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return false
@@ -229,7 +249,12 @@ class MainActivity : Activity() {
                 fun camWarm(on: Boolean) = runOnUiThread { carCam.warm(on) }
 
                 @JavascriptInterface
-                fun mapUnder(under: Boolean) = runOnUiThread { web.translationZ = if (under) 10f else 0f }
+                fun mapUnder(under: Boolean) = runOnUiThread {
+                    // Raised over the map, without the shadow a raised view casts (a full-screen
+                    // shadow redrawn every frame made the app tray stutter as it slid in).
+                    if (web.outlineProvider != null) web.outlineProvider = null
+                    web.translationZ = if (under) 10f else 0f
+                }
 
                 // Closes the app running in a slot (the third window's close button).
                 @JavascriptInterface

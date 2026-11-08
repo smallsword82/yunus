@@ -204,10 +204,20 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait #card { max-height:100%; }
 #stage.portrait #volPop { bottom:236px; }
 #appTray { position:absolute; left:50%; bottom:128px; width:1100px; max-width:calc(100% - 40px); max-height:780px; background:var(--pn); color:var(--tx);
-  border-radius:28px; box-shadow:0 24px 80px rgba(0,0,0,.45); z-index:30; display:flex; flex-direction:column;
-  opacity:0; pointer-events:none; transform:translate(-50%, 24px); transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1); }
-#appTray.show { opacity:1; pointer-events:auto; transform:translate(-50%, 0); }
+  border-radius:28px; box-shadow:0 16px 40px rgba(0,0,0,.4); z-index:30; display:flex; flex-direction:column;
+  opacity:0; visibility:hidden; pointer-events:none; transform:translate(-50%, 24px); will-change:transform, opacity;
+  transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1), visibility 0s .25s; }
+#appTray.show { opacity:1; visibility:visible; pointer-events:auto; transform:translate(-50%, 0); transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1), visibility 0s; }
 #stage.portrait #appTray { bottom:240px; width:1000px; max-height:1100px; }
+/* An app held down in the tray: its menu beside it, as the car's own launcher. */
+#trayMenu { position:absolute; z-index:3; min-width:300px; padding:8px; border-radius:20px; background:var(--pn); color:var(--tx);
+  box-shadow:0 12px 40px rgba(0,0,0,.28), 0 0 0 1px var(--cd); display:none; }
+#trayMenu.show { display:block; animation:keyPop .18s ease-out; }
+#trayMenu button { display:flex; align-items:center; gap:16px; width:100%; padding:18px 20px; border:0; border-radius:14px; background:none; color:inherit; font:inherit; font-size:22px; text-align:left; }
+#trayMenu button:active { background:var(--cd); }
+#trayMenu button i { font-size:28px; }
+#trayMenu button.dn { color:var(--dn); }
+#trayGrid .app.held { transform:scale(.92); transition:transform .15s; }
 .trayHead { display:flex; align-items:center; padding:24px 28px 8px 32px; font-size:28px; font-weight:600; }
 .trayHead button { margin-left:auto; background:var(--cd); border:0; width:52px; height:52px; border-radius:50%; font-size:26px; cursor:pointer; }
 .trayGrid { overflow-y:auto; min-height:0; touch-action:pan-y; overscroll-behavior:contain; /* more apps than fit: scroll down */ padding:12px 22px 28px; display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:28px 6px; }
@@ -1091,6 +1101,7 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
   <div id="appTray" role="dialog" aria-label="Uygulamalar">
     <div class="trayHead">Uygulamalar<button id="trayClose" aria-label="Kapat"><i class="ti ti-x"></i></button></div>
     <div id="trayGrid" class="trayGrid"></div>
+    <div id="trayMenu" role="menu"></div>
   </div>
   <footer id="dock">
     <!-- The Dolphin from the side, traced from the 3D model (dolphin_parts.glb). -->
@@ -1548,9 +1559,17 @@ controls.zoomSpeed = 0.8;
 controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
 
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x1b1d21, roughness: 1 });
-const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 64), groundMat);
-ground.rotation.x = -Math.PI / 2; scene.add(ground);
+// No floor disc under the car (Tesla has none): the car stands on the page's own background, with
+// a soft shadow under it so it doesn't float.
+const groundMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, color: 0x000000, map: (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, 'rgba(255,255,255,.55)'); r.addColorStop(.55, 'rgba(255,255,255,.3)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+})() });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 5.6), groundMat);
+ground.rotation.x = -Math.PI / 2; ground.position.y = 0.005; ground.renderOrder = -1; scene.add(ground);
 
 // Drive mode road: a dark strip with moving lane dashes. The number of lanes can't be read (the
 // car's lane camera is signature-locked and the map data has no lane counts), so on the device it
@@ -2323,21 +2342,31 @@ document.addEventListener('pointerdown', (e) => {
 // its voltage (see 'Statistic 0x44A00020'). A pause of 10 minutes starts a new drive; unplugging,
 // or charge found higher than it was left (charged while Yunus was off), starts a new count.
 const newTrip = () => ({ km: 0, kwh: 0, sec: 0 });
-const trips = { drive: newTrip(), charge: newTrip(), at: 0, soc: null };
+const trips = { drive: newTrip(), charge: newTrip(), at: 0, soc: null, socMin: null, moveAt: 0 };
 try { Object.assign(trips, JSON.parse(localStorage.getItem('trips')) || {}); } catch {}
-if (Date.now() - trips.at > 600000) trips.drive = newTrip();
+// A new drive after 10 minutes without moving: Yunus keeps running while the car is off, so the
+// time it was closed alone never told (the two pages then counted the same since the charge).
+const TRIP_PAUSE_MS = 600000;
+if (Date.now() - Math.max(trips.at, trips.moveAt || 0) > TRIP_PAUSE_MS) trips.drive = newTrip();
 let tripPage = 0, tripTickAt = performance.now(), tripWasCharging = false, tripSaveAt = 0;
 const saveTrips = () => { trips.at = Date.now(); try { localStorage.setItem('trips', JSON.stringify(trips)); } catch {} };
+// A charge is the battery up 3 points on the lowest it read since the last one: a blip of the
+// charging state, or a SOC a point or two apart between the car's readings, started the count
+// again before (asked: the whole span between two charges, all drives in it).
 function tripSoc(soc) {
-  if (trips.soc != null && soc >= trips.soc + 2) { trips.charge = newTrip(); trips.drive = newTrip(); }
+  if (trips.socMin == null || soc < trips.socMin) trips.socMin = soc;
+  if (soc >= trips.socMin + 3) { trips.charge = newTrip(); trips.drive = newTrip(); trips.socMin = soc; saveTrips(); }
   trips.soc = soc;
 }
 setInterval(() => {
   const now = performance.now(), dt = Math.min(5, (now - tripTickAt) / 1000);
   tripTickAt = now;
-  if (tripWasCharging && !S.charging) { trips.charge = newTrip(); trips.drive = newTrip(); }
   tripWasCharging = !!S.charging;
   if (S.charging) return;
+  if (S.speed > 1) {
+    if (trips.moveAt && Date.now() - trips.moveAt > TRIP_PAUSE_MS) trips.drive = newTrip();
+    trips.moveAt = Date.now();
+  }
   const kw = S.live && S.battCurrent != null && S.battVolt ? (S.battCurrent - 5000) * 0.1 * S.battVolt / 1000 : S.powerKw;
   for (const t of [trips.drive, trips.charge]) {
     t.km += S.speed * dt / 3600;
@@ -2881,6 +2910,9 @@ renderer.setAnimationLoop(() => {
   frames++;
   let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || S.signal || S.hazard || chargeGear.visible || now < awakeUntil;
   if (draw && (S.set.perf || S.gear === 'D') && now - lastDraw < 32) draw = false; // driving: 30/s is smooth enough for the lines
+  // The app tray up or sliding (parked): the car behind it holds still, so the tray's own movement
+  // has the whole frame (drawing the car under it made the tray stutter as it opened and closed).
+  if (draw && S.gear !== 'D' && (trayOpen || now < trayMovingUntil)) draw = false;
   if (resized) draw = true;
   if (draw) {
     controls.update();
@@ -4565,12 +4597,24 @@ function openCarCard(name) {
 // ---------- app tray ----------
 // Opens over everything (the embedded map and third-window apps are drawn above the page, so they
 // hide while it is open and come back after), in the middle above the dock.
-let trayOpen = false;
-function openAppTray() {
-  const real = deviceApps();
+let trayOpen = false, trayMovingUntil = 0;
+// The grid is built only when the list of apps changed (its pictures decoded again each time made
+// the tray stutter as it opened); the list itself is asked for after the tray has closed.
+let trayBuilt = '';
+function buildTray(cached) {
+  const real = cached && appsCache ? appsCache : deviceApps();
+  const key = real ? real.map((a) => a.pkg + (a.icon ? a.icon.length : 0)).join() : 'demo';
+  if (key === trayBuilt) return;
+  trayBuilt = key;
   $('trayGrid').innerHTML = real
-    ? real.map((a) => `<button class="app" data-tray="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('')
+    ? real.map((a) => `<button class="app" data-tray="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="" decoding="async">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('')
     : APPS.map(([n, i, c]) => `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('');
+}
+if (window.YunusNative && YunusNative.apps) setTimeout(() => { if (!trayOpen) buildTray(); }, 8000); // ready before the first open
+function openAppTray() {
+  trayMovingUntil = performance.now() + 400;
+  buildTray(true);
+  $('trayGrid').scrollTop = 0;
   trayOpen = true;
   $('appTray').classList.add('show');
   document.querySelectorAll('[data-card="apps"]').forEach((b) => b.classList.add('on'));
@@ -4579,16 +4623,62 @@ function openAppTray() {
 function closeAppTray() {
   if (!trayOpen) return;
   trayOpen = false;
+  trayMovingUntil = performance.now() + 400;
+  hideTrayMenu();
   $('appTray').classList.remove('show');
+  // Fresh list for next time (an app installed or removed meanwhile), once the tray is gone.
+  setTimeout(() => { if (!trayOpen) { appsAt = -Infinity; buildTray(); } }, 600);
   document.querySelectorAll('[data-card="apps"]').forEach((b) => b.classList.remove('on'));
   popTouch(false);
 }
 $('trayClose').onclick = closeAppTray;
 $('trayGrid').onclick = (e) => {
   const b = e.target.closest('[data-tray]'); if (!b) return;
+  if (trayHeld) { trayHeld = false; return; } // the long press's own release: the menu is up
   closeAppTray();
   launchApp(b.dataset.tray);
 };
+// Held down (half a second, without moving): Uygulama bilgisi and Kaldır, as the car's own launcher.
+let trayHold = null, trayHeld = false;
+$('trayGrid').addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('[data-tray]'); if (!b || !window.YunusNative || !YunusNative.appDetails) return;
+  trayHeld = false; hideTrayMenu();
+  const x0 = e.clientX, y0 = e.clientY;
+  clearTimeout(trayHold);
+  trayHold = setTimeout(() => { trayHeld = true; showTrayMenu(b); }, 500);
+  const move = (m) => { if (Math.hypot(m.clientX - x0, m.clientY - y0) > 12) clearTimeout(trayHold); };
+  const up = () => { clearTimeout(trayHold); removeEventListener('pointermove', move); };
+  addEventListener('pointermove', move); addEventListener('pointerup', up, { once: true }); addEventListener('pointercancel', up, { once: true });
+});
+$('trayGrid').addEventListener('contextmenu', (e) => e.preventDefault());
+function showTrayMenu(b) {
+  const pkg = b.dataset.tray, m = $('trayMenu'), tray = $('appTray');
+  b.classList.add('held');
+  m.innerHTML = `<button data-menu="info"><i class="ti ti-info-circle"></i>Uygulama bilgisi</button>`
+    + (YunusNative.appRemovable(pkg) ? `<button data-menu="del" class="dn"><i class="ti ti-trash"></i>Kaldır</button>` : '');
+  m.dataset.pkg = pkg;
+  m.classList.add('show');
+  // Under the app, kept inside the tray (in its own, unscaled pixels).
+  const k = stageScale, tr = tray.getBoundingClientRect(), r = b.getBoundingClientRect();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  let x = (r.left + r.width / 2 - tr.left) / k - w / 2, y = (r.bottom - tr.top) / k + 6;
+  x = Math.max(12, Math.min(x, tr.width / k - w - 12));
+  if (y + h > tr.height / k - 12) y = (r.top - tr.top) / k - h - 6;
+  m.style.left = x + 'px'; m.style.top = (y + tray.scrollTop) + 'px';
+}
+function hideTrayMenu() {
+  $('trayMenu').classList.remove('show');
+  document.querySelectorAll('#trayGrid .held').forEach((b) => b.classList.remove('held'));
+}
+$('trayMenu').onclick = (e) => {
+  const b = e.target.closest('[data-menu]'); if (!b) return;
+  const pkg = $('trayMenu').dataset.pkg;
+  hideTrayMenu(); closeAppTray();
+  // After the tray has gone: the screen that opens is a pop-up, and Yunus behind it stops drawing.
+  setTimeout(() => (b.dataset.menu === 'info' ? YunusNative.appDetails(pkg) : YunusNative.appUninstall(pkg)), 260);
+};
+// A tap anywhere else in the tray puts the menu away.
+$('appTray').addEventListener('pointerdown', (e) => { if (!e.target.closest('#trayMenu,[data-tray]')) hideTrayMenu(); });
 // A tap outside the tray (and not on the apps button) closes it.
 document.addEventListener('pointerdown', (e) => { if (trayOpen && !e.target.closest('#appTray,[data-card="apps"]')) closeAppTray(); });
 function openCard(name) {
@@ -5763,7 +5853,7 @@ document.addEventListener('pointerdown', (e) => {
 function setTheme(t) {
   S.theme = t;
   stage.classList.toggle('light', t === 'light');
-  groundMat.color.set(t === 'light' ? 0xd9dce1 : 0x1b1d21);
+  groundMat.opacity = t === 'light' ? 0.55 : 0.9; // the shadow a touch lighter on the light page
   roadMat.color.set(t === 'light' ? 0xb9bdc4 : 0x1e2024);
   darkMapLayers();
 }

@@ -44,6 +44,8 @@
     <uses-permission android:name="android.permission.BYDAUTO_STATISTIC_COMMON" />
     <uses-permission android:name="android.permission.BYDAUTO_TIME_COMMON" />
     <uses-permission android:name="android.permission.BYDAUTO_TYRE_COMMON" />
+    <!-- The app tray's "Kaldır": Android's own uninstall screen. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <!-- Android 11+ hides other apps unless declared: Yunus opens and embeds launchable apps
          (Google Maps, YouTube, …). -->

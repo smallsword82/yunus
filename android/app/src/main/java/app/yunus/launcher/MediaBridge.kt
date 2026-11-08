@@ -17,7 +17,17 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /** An app's launcher icon as a small PNG data URL for the page, or null. */
-fun appIconData(ctx: Context, pkg: String): String? = try {
+// Drawn and encoded once per app version: doing it for every app on every call held the page up
+// half a second (the app tray stuttered as it opened).
+private val iconCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String?>>()
+
+fun appIconData(ctx: Context, pkg: String): String? {
+    val stamp = try { ctx.packageManager.getPackageInfo(pkg, 0).lastUpdateTime } catch (_: Exception) { 0L }
+    iconCache[pkg]?.let { if (it.first == stamp) return it.second }
+    return drawIcon(ctx, pkg).also { iconCache[pkg] = stamp to it }
+}
+
+private fun drawIcon(ctx: Context, pkg: String): String? = try {
     val d = ctx.packageManager.getApplicationIcon(pkg)
     val bmp = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
     d.setBounds(0, 0, 96, 96); d.draw(android.graphics.Canvas(bmp))
