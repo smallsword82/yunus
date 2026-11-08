@@ -188,7 +188,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
    handles lie across; the dock takes two rows (climate, then apps and volume). */
 #stage.portrait { width:1080px; height:1920px; grid-template-columns:minmax(0, 1fr); /* not wider than the screen (the dock's rows made it 1138) */ grid-template-rows:56px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 180px;
   transition:grid-template-rows .35s cubic-bezier(.2,.8,.2,1); }
-#stage.portrait.dragging { transition:none; }
+#stage.portrait.dragging, #stage.portrait.noColAnim { transition:none; }
 /* The status bar (time, temperature, Wi-Fi, cellular) runs across the top of the screen upright;
    in landscape it sits over the map, as in Tesla. fit() moves the element between the two. */
 #stage.portrait #topBar { grid-row:1; grid-column:1; position:relative; border-bottom:1px solid var(--cd); }
@@ -885,6 +885,7 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
 #airFlow { position:relative; }
 #airFlow .ico { position:absolute; left:0; top:0; width:80px; height:80px; }
 #airFlow .ico:not(.on):not(.fig) { opacity:.3; }
+#stage.portrait #airFlow .ico { top:-12px; left:calc(50% - 40px); } /* centred like the other climate icons upright */
 #airFlow .ico.on { color:#3e6ae1; opacity:1; }
 /* The trunk key on the car model is not wanted for now. */
 #hTrunk { display:none !important; }
@@ -2823,7 +2824,9 @@ function renderLayoutSeg() {
   document.querySelectorAll('#layoutSeg button').forEach((b) => b.classList.toggle('on', b.dataset.layout === layoutNow()));
 }
 function setLayout(k) {
-  if (k === layoutNow() && !(PORTRAIT && k === 'stack' && !S.set.stackSide)) return;
+  // Upright, side by side already shows under each other: only the setting is saved (no re-layout).
+  if (PORTRAIT && k === 'stack' && !S.set.tabSide) { if (!S.set.stackSide) { S.set.stackSide = true; saveSettings(); renderLayoutSeg(); } return; }
+  if (k === layoutNow()) return;
   S.set.tabSide = k === 'tabs'; S.set.stackSide = k === 'stack';
   saveSettings();
   applyStack();
@@ -2872,7 +2875,8 @@ function balanceDock() {
   car.style.marginRight = Math.max(0, Math.min(right - cr.width / stageScale, free)) + 'px';
 }
 function relayout() {
-  const car = carW >= 1900 || carW >= LEN() ? LEN() : Math.min(carW, LEN());
+  const prevLen = PORTRAIT ? 1920 : 1920 - 180 - 56; // the other orientation's length: full there is full here
+  const car = carW >= prevLen - 20 || carW >= LEN() ? LEN() : Math.min(carW, LEN());
   setCarW(car, true);
   stage.classList.toggle('stack', STACK());
   stage.classList.toggle('tabbed', TABS());
@@ -3361,6 +3365,7 @@ function setSigCol(side) {
   const carGives = side && !stacked ? Math.min(carW, Math.max(0, SIG_COL + SIG_MAP_MIN - (LEN() - carW - sideW))) : 0;
   stage.style.setProperty('--carW', (carW - carGives) + 'px');
   placeHandles(); wake(1500);
+  if (!side) syncEmbedSoon(); // a layout switched while the column was open fits the apps now
   // No app is resized for the column (a resized app redraws, black for a moment): each is shifted
   // past the column and its far edge cut off, and put back as it was when the column closes. Under
   // the map or in a tab the third window shares the map's width, so it moves the same way.
@@ -3680,6 +3685,7 @@ function startMapArea() {
   mapEmbedded = true; mapsIn(true);
   if (!/hazır/.test(window.YunusEmbedStatus || '')) $('map').dataset.wait = 'Harita hazırlanıyor…'; // the helper not up yet
   YunusNative.embedApp('map', navPackages().join(','), x, y, w, h);
+  if (current || appTabOn()) YunusNative.embedVisible('map', false); // a card or the Apps tab is over it
 }
 // The chosen navigation app was not found (not installed, or not yet at power-on): the area says
 // so and tries again shortly; Yunus's own map is not put in its place.
@@ -4434,6 +4440,8 @@ function placeHandles() {
   const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - sideW - 36) + (PORTRAIT ? 56 : 0) + 'px'; // upright, below the status bar (56 px, as LEN counts it)
   $('sideHandle').style.left = PORTRAIT ? '' : at;
   $('sideHandle').style.top = PORTRAIT ? at : '';
+  // Upright with the car at full height it lay over the dock's climate row and took its taps.
+  $('sideHandle').style.visibility = PORTRAIT && !sideW && carW >= LEN() ? 'hidden' : '';
 }
 stage.classList.toggle('stack', STACK()); // the saved setting, from the start
 stage.classList.toggle('tabbed', TABS());
@@ -4442,7 +4450,7 @@ renderSideTabs();
 renderLayoutSeg();
 $('layoutSeg').onclick = (e) => { const b = e.target.closest('[data-layout]'); if (b) setLayout(b.dataset.layout); };
 // Outside the tabbed layout a tab first switches to it.
-$('tabMap').onclick = () => { if (!TABS()) setLayout('tabs'); setSideTab('map'); };
+$('tabMap').onclick = () => { const sw = !TABS(); if (sw) setLayout('tabs'); setSideTab('map', sw); }; // a new layout: Maps refitted once it settles
 $('tabApp').onclick = () => { if (!TABS()) setLayout('tabs'); fillSideApps(); setSideTab('app'); };
 // On the device the third window lists the real apps (filled the first time it opens: reading the
 // icons takes a moment) and runs the chosen one inside the window, like Google Maps in the map
@@ -4583,7 +4591,7 @@ function setDockEditing(on) {
 function openDockItem(id) {
   if (id.startsWith('card:')) return openCard(id.slice(5));
   if (id.startsWith('pkg:')) return launchApp(id.slice(4));
-  if (!sideW) setSideW(sideSnaps()[1], true);
+  if (TABS()) setSideTab('app'); else if (!sideW) setSideW(sideSnaps()[1], true);
   openSideApp(APPS.findIndex((a) => a[0] === id.slice(4)));
 }
 // Hold 0.5 s to start editing; keep holding and move to drag that icon to a new place.
@@ -4646,7 +4654,8 @@ document.addEventListener('pointerdown', (e) => { if (dockEditing() && !e.target
 renderDock();
 setTimeout(balanceDock, 600); // started upright: centre the apps once the dock is laid out
 $('sideApps').onclick = (e) => {
-  const p = e.target.closest('[data-side-pkg]'); if (p) return openSidePkg(p.dataset.sidePkg);
+  const p = e.target.closest('[data-side-pkg]');
+  if (p) { const pkg = p.dataset.sidePkg; if (document.documentElement.classList.contains('mapsIn') && navPackages().includes(pkg)) { if (TABS()) setSideTab('map'); return; } return openSidePkg(pkg); } // the map app is the map area's
   const b = e.target.closest('[data-side-app]'); if (b) openSideApp(+b.dataset.sideApp);
 };
 // From full screen the ← key brings the window back (the app stays open); otherwise back to the list.
@@ -4833,7 +4842,8 @@ function openCard(name) {
 function closeCard() {
   current = null; card.classList.remove('open', 'full');
   if (appTabOn()) { if (sidePkg) embedSide(); }
-  else if (mapEmbedded) YunusNative.embedVisible('map', true);
+  // Refitted, not just shown: the screen may have turned or the layout changed while the card was open.
+  else if (mapEmbedded) { if (sigW.left || sigW.right) YunusNative.embedVisible('map', true); else syncEmbedNow(); }
   document.querySelectorAll('[data-card]').forEach((b) => b.classList.remove('on'));
   if (S.gear === 'P') camTo('default');
 }
@@ -5793,6 +5803,7 @@ window.yunusCar = (m) => {
   // it does nothing (it used to bring the app behind Yunus forward).
   if (m.back) { if (sidePkg && YunusNative.embedBack) YunusNative.embedBack('side'); return; }
   if (m.sideMaxOff) { setSideMax(false); return; }
+  if (m.sideRefused) { if (sidePkg) { sidePkg = null; closeSideApp(); } return; } // the helper did not start it there
   if (m.sideBack) { closeSideApp(); return; } // the floating keys over the third window's app
   if (m.sideClose) { $('sideClose').onclick(); return; }
   if (m.sideCamReady) { sigCamReady(); return; } // the signal camera's first frame: open its column

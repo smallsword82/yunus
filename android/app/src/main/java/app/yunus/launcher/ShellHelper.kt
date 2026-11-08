@@ -94,16 +94,21 @@ object ShellHelper {
                     "t" -> injector.touch(display, fields.drop(2))
                     // Its own thread (a cold start is waited for), then "shown <display>" back: Yunus
                     // keeps the page's colour over the window until the app's first frame is there.
+                    // On one ordered worker with close and full (a close tapped while the app was still
+                    // starting ran first, and the start then put the app back). "refused": not started
+                    // here (it is in Yunus's other window), so Yunus hides the empty window.
                     "launch" -> { val c = fields.getOrNull(2) ?: continue
-                        Thread { try { launch(display, c) } catch (t: Throwable) { System.err.println("launch: $t") }
-                            try { synchronized(out) { out.write(("shown $display" + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } }.start() }
+                        taskExec.execute { val ok = try { launch(display, c) } catch (t: Throwable) { System.err.println("launch: $t"); true }
+                            try { synchronized(out) { out.write(((if (ok) "shown " else "refused ") + display + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } } }
+                    "pause" -> synchronized(paused) { paused.add(display) }
+                    "resume" -> synchronized(paused) { paused.remove(display) }
                     // "redrawn <display> <w> <h>": the window was resized; "shown <display>" once its app
                     // has laid out and drawn at that size (a resized app took up to 4 s, black till then).
                     "redrawn" -> { val w = fields.getOrNull(2)?.toIntOrNull() ?: continue; val h = fields.getOrNull(3)?.toIntOrNull() ?: continue
                         Thread { waitDrawn(display, w, h)
                             try { synchronized(out) { out.write(("shown $display" + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } }.start() }
-                    "close" -> close(display)
-                    "full" -> full(display, fields.getOrNull(2) ?: continue)
+                    "close" -> taskExec.execute { try { close(display) } catch (t: Throwable) { System.err.println("close: $t") } }
+                    "full" -> { val c = fields.getOrNull(2) ?: continue; taskExec.execute { try { full(display, c) } catch (t: Throwable) { System.err.println("full: $t") } } }
                     // The back key for the app in that window (its own back: out of a full-screen channel…).
                     "back" -> ProcessBuilder("input", "-d", display.toString(), "keyevent", "4").inheritIO().start().waitFor()
                 }
@@ -117,14 +122,17 @@ object ShellHelper {
     // app force-stopped so it always started cold. Now the display is set upright once, and an app
     // already running is moved over as it is (warm, at once); only an app not running is started.
     private val upright = HashSet<Int>()
-    private fun launch(display: Int, component: String) {
-        if (!COMPONENT.matches(component)) return
+    private val taskExec = java.util.concurrent.Executors.newSingleThreadExecutor()
+    // Windows Yunus can't show now (hidden, or Yunus in the background): their app is not pulled back.
+    private val paused = HashSet<Int>()
+    private fun launch(display: Int, component: String): Boolean {
+        if (!COMPONENT.matches(component)) return true
         // Alongside the start, not before it: four window commands, ~0.4 s a launch was kept waiting.
         if (upright.add(display)) Thread { lockRotation(display) }.start()
         val pkg = component.substringBefore('/')
         val running = try { Tasks.roots().firstOrNull { (_, d, names) -> d != display && pkg in names } } catch (_: Throwable) { null }
         // Never taken from Yunus's other window (the map area would be left empty).
-        if (running != null && ownedByYunus(running.second)) { System.err.println("launch $pkg: in Yunus's display ${running.second}, left there"); return }
+        if (running != null && ownedByYunus(running.second)) { System.err.println("launch $pkg: in Yunus's display ${running.second}, left there"); return false }
         val moved = running != null && try { Tasks.move(running.first, display); true } catch (t: Throwable) { System.err.println("move $pkg: ${t.cause ?: t}"); false }
         if (!moved) {
             if (running != null) ProcessBuilder("am", "force-stop", pkg).inheritIO().start().waitFor()
@@ -132,6 +140,7 @@ object ShellHelper {
             ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
         }
         keepOnDisplay(display, pkg)
+        return true
     }
 
     // Polls the window manager until an app window on the display has laid out at w×h and drawn
@@ -143,7 +152,9 @@ object ShellHelper {
             val dump = try { ProcessBuilder("dumpsys", "window", "windows").start().inputStream.bufferedReader().readText() } catch (_: Throwable) { return }
             for (block in dump.split("  Window #")) {
                 if (!block.contains("mDisplayId=$display ")) continue
-                if (block.contains("Requested w=$w h=$h") && block.contains("mDrawState=HAS_DRAWN")) return
+                // Laid out at the new size and drawn: its new picture reaches the screen a few frames
+                // later (YouTube going full screen showed the old one, half black, for 0.2 s).
+                if (block.contains("Requested w=$w h=$h") && block.contains("mDrawState=HAS_DRAWN")) { SystemClock.sleep(300); return }
             }
         }
     }
@@ -199,9 +210,12 @@ object ShellHelper {
             // full screen on this display): Android Auto starts its screen again on the main display
             // whenever the phone connects, and an app's own later screens (HakoPlayer's live TV, an
             // activity not allowed on a virtual display) land on the main screen any time.
+            val start = SystemClock.uptimeMillis()
             while (synchronized(watching) { watching[display] == id }) {
-                // Often (one binder call, no process): an escape shows full screen until it is moved back.
-                SystemClock.sleep(150)
+                // Often at first (an app's own screens come soon after its start: an escape shows full
+                // screen until it is moved back), then calmer.
+                SystemClock.sleep(if (SystemClock.uptimeMillis() - start < 20000) 150 else 600)
+                if (synchronized(paused) { display in paused }) continue
                 try {
                     for ((task, onDisplay, pkgs) in Tasks.roots())
                         if (onDisplay == 0 && pkg in pkgs) {
@@ -333,14 +347,19 @@ private object Tasks {
     private fun field(o: Any, name: String): Any? = try { o.javaClass.getField(name).get(o) } catch (_: Exception) { null }
     private fun pkgOf(c: Any?) = (c as? android.content.ComponentName)?.packageName
 
+    // Looked up once (each lookup copied the binder proxy's ~170 methods, 13 times a second).
+    private val rootInfosM by lazy { atm.javaClass.methods.firstOrNull { it.name == "getAllRootTaskInfos" && it.parameterCount == 0 } }
+    private val stackInfosM by lazy { atm.javaClass.getMethod("getAllStackInfos") }
+    private val moveM by lazy { atm.javaClass.methods.firstOrNull { it.name == "moveRootTaskToDisplay" }
+        ?: atm.javaClass.getMethod("moveStackToDisplay", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType) }
     fun roots(): List<Triple<Int, Int, Set<String>>> {
-        val rootInfos = atm.javaClass.methods.firstOrNull { it.name == "getAllRootTaskInfos" && it.parameterCount == 0 }
+        val rootInfos = rootInfosM
         if (rootInfos != null) return (rootInfos.invoke(atm) as List<*>).filterNotNull().map { info ->
             val names = (field(info, "childTaskNames") as? Array<*>)?.mapNotNull { (it as? String)?.substringBefore('/') }.orEmpty()
             Triple(field(info, "taskId") as Int, field(info, "displayId") as Int,
                 (names + listOfNotNull(pkgOf(field(info, "topActivity")), pkgOf(field(info, "baseActivity")))).toSet())
         }
-        val stacks = atm.javaClass.getMethod("getAllStackInfos").invoke(atm) as List<*>
+        val stacks = stackInfosM.invoke(atm) as List<*>
         return stacks.filterNotNull().map { info ->
             val names = (field(info, "taskNames") as? Array<*>)?.mapNotNull { (it as? String)?.substringBefore('/') }.orEmpty()
             Triple(field(info, "stackId") as Int, field(info, "displayId") as Int, (names + listOfNotNull(pkgOf(field(info, "topActivity")))).toSet())
@@ -356,9 +375,7 @@ private object Tasks {
     }
 
     fun move(id: Int, display: Int) {
-        val m = atm.javaClass.methods.firstOrNull { it.name == "moveRootTaskToDisplay" }
-            ?: atm.javaClass.getMethod("moveStackToDisplay", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-        m.invoke(atm, id, display)
+        moveM.invoke(atm, id, display)
     }
 }
 

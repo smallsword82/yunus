@@ -636,8 +636,9 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { postToPage(JSONObject().put("back", true).toString()) }
 
-    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide(); embed.backFromFull() }
+    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide(); embed.backFromFull(); embed.pauseAll(false) }
     override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
+    override fun onStop() { embed.pauseAll(true); super.onStop() }
 
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
 
@@ -648,6 +649,7 @@ class MainActivity : Activity() {
     private fun carFromHelper(line: String) {
         if (line.startsWith("msg ")) return postToPage(line.substring(4)) // a reply for the page as it is (Wi-Fi, …)
         if (line.startsWith("shown ")) { line.substring(6).trim().toIntOrNull()?.let { d -> runOnUiThread { embed.shown(d) } }; return }
+        if (line.startsWith("refused ")) { line.substring(8).trim().toIntOrNull()?.let { d -> runOnUiThread { embed.refused(d) } }; return }
         val f = line.split(' ')
         if (f.size != 5 || f[0] != "ev" || !halWant(f[1] + " " + f[2])) return
         val v = f[4].toDoubleOrNull() ?: return
@@ -702,6 +704,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // the window keeping its shape); 0: the window's size. cw×ch: the picture's size in the window.
         var vw = 0; var vh = 0; var w = 0; var h = 0; var cw = 0f; var ch = 0f
         var cover: android.view.View? = null // the page's colour over the window while its app starts
+        var starting = false // a launch sent, its "shown" not back yet
     }
     private val slots = HashMap<String, Slot>()
     // The window shows black until its app's first frame (a cold start: seconds): the page's colour
@@ -715,7 +718,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
             slot.cover = f; slot.box.addView(f, android.widget.FrameLayout.LayoutParams(-1, -1)) }
         v.animate().cancel(); v.setBackgroundColor(coverColor); v.alpha = 1f; v.visibility = android.view.View.VISIBLE; v.bringToFront()
         val token = Any(); v.tag = token
-        root.postDelayed({ if (v.tag === token) uncover(slot) }, 10000)
+        root.postDelayed({ if (v.tag === token && !slot.starting) uncover(slot) }, 10000) // a start still under way keeps it
     }
     private fun uncover(slot: Slot) {
         val v = slot.cover ?: return
@@ -723,7 +726,12 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (v.visibility != android.view.View.VISIBLE) return
         v.animate().alpha(0f).setDuration(150).withEndAction { v.visibility = android.view.View.GONE }.start()
     }
-    fun shown(display: Int) { slots.values.firstOrNull { it.displayId == display }?.let { s -> root.postDelayed({ uncover(s) }, 120) } } // its frame reaches the screen just after
+    fun shown(display: Int) { slots.values.firstOrNull { it.displayId == display }?.let { s -> s.starting = false; root.postDelayed({ uncover(s) }, 120) } } // its frame reaches the screen just after
+    // The helper did not start it there (it runs in Yunus's other window): no empty window left up.
+    fun refused(display: Int) { slots.entries.firstOrNull { it.value.displayId == display }?.let { (name, s) ->
+        s.starting = false; s.component = null; s.box.visibility = android.view.View.GONE; showKeys(s, false); onEvent(name + "Refused") } }
+    // Yunus out of sight (another app in front) or a window hidden: its app is left where it goes.
+    fun pauseAll(on: Boolean) { for (s in slots.values) if (s.displayId > 0) shell.send((if (on) "pause " else "resume ") + s.displayId) }
     private val KEY = 60 // px, the floating keys' size
 
     // The third window's back (to Yunus's app list, the app keeps running) and close keys float over
@@ -758,8 +766,9 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // phone showed only its "Ara" key): it gets a display at least 720 px tall, same shape, scaled
         // into the window.
         val minH = 720
+        val sc = if (name == "side" && h in 1 until minH) minOf(minH.toFloat() / h, 4096f / w) else 1f // at most 4096 px wide
         val (dw, dh) = if (launch.packageName == "com.byd.androidauto") 1920 to 1080
-            else if (name == "side" && h in 1 until minH) (w * minH / h) to minH else w to h
+            else if (sc > 1f) (w * sc).toInt() to (h * sc).toInt() else w to h
         val resized = slot.display != null && (slot.w != w || slot.h != h)
         slot.w = w; slot.h = h; slot.vw = if (dw != w || dh != h) dw else 0; slot.vh = if (slot.vw > 0) dh else 0
         val k = if (slot.vw > 0) minOf(w.toFloat() / dw, h.toFloat() / dh) else 1f
@@ -776,8 +785,9 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val newApp = slot.component != launch.flattenToShortString()
         if (newApp || resized) cover(slot)
         // Until the app has laid out and drawn at the new size (the helper watches; up to 4 s for some).
-        if (resized && !newApp) shell.send("redrawn ${slot.displayId} $dw $dh")
+        if (resized && !newApp && !slot.starting) shell.send("redrawn ${slot.displayId} $dw $dh")
         slot.box.visibility = android.view.View.VISIBLE
+        if (slot.displayId > 0) shell.send("resume ${slot.displayId}")
         if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
         val dpi = activity.resources.displayMetrics.densityDpi
         val component = launch.flattenToShortString()
@@ -787,7 +797,9 @@ private class AppEmbed(private val activity: Activity, private val root: android
             if (slot.component == component) return
             slot.component = component
             // Not started after all: forget it, so choosing the app again retries the launch.
-            shell.send("launch ${slot.displayId} $component") { activity.runOnUiThread { if (slot.component == component) slot.component = null } }
+            slot.starting = true
+            // Not delivered (no helper): forgotten, and the empty window hidden so the page's note shows.
+            shell.send("launch ${slot.displayId} $component") { activity.runOnUiThread { if (slot.component == component) { slot.component = null; slot.starting = false; slot.box.visibility = android.view.View.GONE } } }
             // The map app opens on its last view, not following the car. A tap on Google Maps'
             // my-location button (bottom-right, ~45dp from the right, ~122dp up) a few seconds after
             // launch centers it on the car and turns on follow mode, so the car stays centered.
@@ -825,7 +837,11 @@ private class AppEmbed(private val activity: Activity, private val root: android
         box.addView(view)
         root.addView(box)
         val slot = Slot(box, view)
-        view.setOnTouchListener { _, ev -> shell.send(touchLine(slot, ev)); true }
+        // A touch in the cut-off part (a signal column took it) is the page's, not the app's.
+        view.setOnTouchListener { _, ev ->
+            val c = cuts[name] ?: 0f
+            if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN && c > 0.5f && ev.x + slot.view.left >= slot.w - c) return@setOnTouchListener false
+            shell.send(touchLine(slot, ev)); true }
         view.holder.addCallback(object : android.view.SurfaceHolder.Callback {
             // The surface comes and goes with the view on the screen (hidden, Yunus in the
             // background): the app keeps running on its display, drawn again into the new surface.
@@ -897,6 +913,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
     fun setVisible(name: String, visible: Boolean) {
         val slot = slots[name] ?: return
         slot.box.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        if (slot.displayId > 0) shell.send((if (visible) "resume " else "pause ") + slot.displayId)
         showKeys(slot, visible)
     }
 
