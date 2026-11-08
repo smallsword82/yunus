@@ -395,7 +395,15 @@ button { font-family:inherit; color:inherit; }
 #telltales { position:absolute; left:30px; top:78px; z-index:2; max-height:372px; display:flex; flex-flow:column wrap; align-content:flex-start; gap:8px 10px; transition:top .4s; }
 #stage.driving #telltales { top:300px; }
 #status .batt { margin-left:auto; }
-#netStat { display:flex; align-items:center; margin-left:auto; }
+#netStat { display:flex; align-items:center; margin-left:auto; flex:none; }
+/* A long app name in the tab is cut short (…): it pushed the status icons off the screen. Only the
+   tabs give way; the clock, temperature, keys and icons keep their size. */
+#topBar > * { flex:none; }
+#topBar > #sideTabs { flex:0 1 auto; min-width:0; }
+#sideTabs button { min-width:0; }
+#sideTabs #tabApp { flex:0 1 auto; }
+#sideTabs #tabMap { flex:none; }
+#sideTabs .tabTxt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 #netStat > * + * { margin-left:14px; }
 #netStat .hide { display:none; }
 #netStat i { font-size:29px; }
@@ -2764,7 +2772,7 @@ function applyStack() {
   sideTab = 'map';
   if ((STACK() || TABS()) && carW === THIRDS()) setCarW(CAR_W, true); // the side-by-side thirds no longer apply
   setSideW(open && !TABS() ? sideSnaps()[1] : 0, true);
-  setSideTab(open && TABS() ? 'app' : 'map');
+  setSideTab(open && TABS() ? 'app' : 'map', true);
   normalizeLayout();
   renderLayoutSeg();
   syncEmbedSoon();
@@ -2781,7 +2789,7 @@ function setLayout(k) {
 }
 // Tabbed right area: which one shows, the map or the third window (its app list or app).
 let sideTab = 'map';
-function setSideTab(t) {
+function setSideTab(t, soon) {
   sideTab = t;
   stage.classList.toggle('appTab', TABS() && t === 'app');
   renderSideTabs();
@@ -2789,13 +2797,14 @@ function setSideTab(t) {
   requestAnimationFrame(() => {
     try {
       if (TABS() && t === 'app') { YunusNative.embedVisible('map', false); if (sidePkg) embedSide(); }
+      else if (soon) syncEmbedSoon(); // a new layout: once it has settled (fitted at once, Maps came back at a passing size, black beside it)
       else syncEmbedNow(); // the map back (the app's tab hides itself in embedSide)
     } catch {}
   });
 }
 function renderSideTabs() {
   $('sideTabs').style.display = ''; // always there: a tab switches to the tabbed layout
-  $('tabApp').innerHTML = `<i class="ti ti-apps"></i>${$('sidePanel').classList.contains('appOpen') ? $('sideTitle').textContent : 'Uygulamalar'}`;
+  $('tabApp').innerHTML = `<i class="ti ti-apps"></i><span class="tabTxt">${$('sidePanel').classList.contains('appOpen') ? $('sideTitle').textContent : 'Uygulamalar'}</span>`;
   $('tabMap').classList.toggle('on', TABS() && sideTab === 'map');
   $('tabApp').classList.toggle('on', TABS() && sideTab === 'app');
 }
