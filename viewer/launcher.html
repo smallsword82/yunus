@@ -3306,8 +3306,9 @@ function updateBlindSpot() {
       const [x, y, w, h] = screenRect($('sigSpot'));
       YunusNative.sideCam(x, y, w, h, JSON.stringify(PORTRAIT ? Object.assign({}, SIDE_CAM[bsSide], SIDE_CAM_PORTRAIT[bsSide]) : SIDE_CAM[bsSide]));
       // The column opens with the camera's first frame (sideCamReady), not before: a column waiting
-      // for the camera was black. Without a frame in 1.5 s it opens anyway.
-      if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = setTimeout(sigCamReady, 1500); }
+      // for the camera was black. It waits for the frame (the camera can take a few seconds to start;
+      // opened after 1.5 s anyway, the column stood black meanwhile); 8 s at most.
+      if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = setTimeout(sigCamReady, 8000); }
     } else if (S.set.sigEdge) {
       $('sigPane').classList.toggle('right', bsSide === 'right');
       $('sigArrow').className = `ti ti-arrow-big-${bsSide}`;
