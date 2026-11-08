@@ -3287,6 +3287,9 @@ function setSigCol(side) {
   try { if (sidePkg) YunusNative.embedShift('side', side === 'right' ? -Math.round(SIG_COL * stageScale) : 0, 0, SIG_MS); } catch {}
 }
 function updateBlindSpot() {
+  // The dock over other apps is a page of its own with the car's data too: the cameras are the main
+  // page's alone (the dock's calls closed and reopened the same camera, which gave no picture).
+  if (DOCK_ONLY) return;
   const cam = $('bsCam');
   if (blindSpotWanted()) {
     clearTimeout(bsHideTimer); bsHideTimer = null;
@@ -3336,6 +3339,7 @@ const rearCtx = $('rearCanvas').getContext('2d');
 $('rearClose').onclick = (e) => { e.stopPropagation(); S.set.rearMirror = false; saveSettings(); };
 let rearT = 0, rearAt = 0;
 function updateRearCam(now) {
+  if (DOCK_ONLY) return; // the main page's, see updateBlindSpot
   const el = $('rearCam'), on = S.set.rearMirror && S.gear === 'D' && !!carObj;
   // On the car the mirror is the live camera in a window of its own (it floats: dragged anywhere,
   // kept there); it is put up once, at the strip's place, and taken down with the strip.
