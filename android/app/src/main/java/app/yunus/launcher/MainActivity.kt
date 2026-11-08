@@ -263,6 +263,8 @@ class MainActivity : Activity() {
                 fun embedFull(slot: String) = runOnUiThread { embed.fullApp(slot) }
                 @JavascriptInterface
                 fun embedBack(slot: String) = runOnUiThread { embed.back(slot) }
+                @JavascriptInterface
+                fun embedMaxKey(on: Boolean) = runOnUiThread { embed.maxKey(on) }
 
                 // Music card: the page asks for now playing once it is ready ({media:{…}} follows
                 // on every change); play/pause/toggle/next/prev; pick a session; open its app;
@@ -819,6 +821,24 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val slot = slots[name] ?: return
         val c = slot.component ?: return
         if (slot.displayId > 0) shell.send("launch ${slot.displayId} $c") // moved back as it is, or started again
+    }
+
+    // Full screen: the page can't draw over the app, so its way back is a small key of its own over
+    // the app's top-left corner.
+    private var exitKey: android.view.View? = null
+    fun maxKey(on: Boolean) {
+        val k = exitKey ?: android.widget.TextView(activity).apply {
+            text = "⤡"; textSize = 20f; gravity = android.view.Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0x73000000) }
+            setOnClickListener { onEvent("sideMaxOff") }
+            exitKey = this
+        }
+        if (on) {
+            (k.parent as? android.view.ViewGroup)?.removeView(k)
+            root.addView(k, android.widget.FrameLayout.LayoutParams(KEY, KEY).apply { leftMargin = 16; topMargin = 16 }) // last: above the app
+            k.translationZ = 20f
+        } else (k.parent as? android.view.ViewGroup)?.removeView(k)
     }
 
     fun back(name: String) { val s = slots[name] ?: return; if (s.displayId > 0 && s.component != null) shell.send("back ${s.displayId}") }

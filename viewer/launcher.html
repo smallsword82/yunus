@@ -206,6 +206,9 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait #card { max-height:100%; }
 #stage.portrait #volPop { bottom:236px; }
 /* The third window full screen (its ⛶ key). */
+/* Full screen: the app alone, no key row (its way back is a key of the app's own, see embedMaxKey). */
+#stage.sideMax .sideHead { display:none !important; }
+#stage.sideMax #sideApp { position:absolute !important; top:0 !important; left:0 !important; width:100% !important; height:100% !important; max-height:none !important; flex:none !important; }
 #stage.sideMax #sidePanel { grid-column:1 / -1 !important; grid-row:1 / -1 !important; position:fixed !important; left:0 !important; top:0 !important; right:0 !important; bottom:0 !important; width:auto !important; height:auto !important; max-width:none !important; transform:none !important; z-index:40 !important; border:0 !important; margin:0 !important; display:flex !important; }
 #appTray { position:absolute; left:50%; bottom:128px; width:1100px; max-width:calc(100% - 40px); max-height:780px; background:var(--pn); color:var(--tx);
   border-radius:28px; box-shadow:0 16px 40px rgba(0,0,0,.4); z-index:30; display:flex; flex-direction:column;
@@ -4555,6 +4558,7 @@ $('sideBack').onclick = () => (stage.classList.contains('sideMax') ? setSideMax(
 // The key again, or the back key, puts it back in its place.
 function setSideMax(on) {
   stage.classList.toggle('sideMax', on);
+  try { YunusNative.embedMaxKey(on); } catch {}
   requestAnimationFrame(() => requestAnimationFrame(embedSide));
 }
 $('sideFull').onclick = () => { if (sidePkg) setSideMax(!stage.classList.contains('sideMax')); };
@@ -5690,6 +5694,7 @@ window.yunusCar = (m) => {
   // The back key: the app in the third window gets it (its own back, as before); nothing open there,
   // it does nothing (it used to bring the app behind Yunus forward).
   if (m.back) { if (sidePkg && YunusNative.embedBack) YunusNative.embedBack('side'); return; }
+  if (m.sideMaxOff) { setSideMax(false); return; }
   if (m.sideBack) { closeSideApp(); return; } // the floating keys over the third window's app
   if (m.sideClose) { $('sideClose').onclick(); return; }
   if (m.sideCamReady) { sigCamReady(); return; } // the signal camera's first frame: open its column
