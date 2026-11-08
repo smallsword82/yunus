@@ -61,6 +61,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         // reach the screen a little after they are drawn; shown at the first, it was black a moment).
         @Volatile var waiting = 0
         var blackSkips = 0 // the camera's own black first frames, not counted (at most 30)
+        @Volatile var frames = 0 // frames drawn in it since it opened (black ones too): what the no-frame check counts
         var out: SurfaceTexture? = null
         var w = 0; var h = 0
         var label: android.widget.TextView? = null // the mirror's front/rear switch
@@ -89,7 +90,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
             val ox = a[0] - lp.x - r[0]; val oy = a[1] - lp.y - r[1]
             if (ox != originX || oy != originY) {
                 originX = ox; originY = oy
-                try { wm.updateViewLayout(win.box, overlayParams(win, lp.width, lp.height, win.visible)) } catch (_: Throwable) { }
+                try { wm.updateViewLayout(win.box, overlayParams(win, lp.width, lp.height, win.visible && win.box.alpha > 0f)) } catch (_: Throwable) { }
             }
         }
     }
@@ -123,13 +124,15 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         if (moved) win.visible = false
         if (win.overlay) {
             win.x = px; win.y = py
-            try { wm.updateViewLayout(win.box, overlayParams(win, w, h, true)) } catch (t: Throwable) { android.util.Log.w("Yunus", "sidecam: $t") }
+            // Touchable only while it shows: see-through, waiting for its first frame, it took taps meant
+            // for what is under it (ready() makes it touchable).
+            try { wm.updateViewLayout(win.box, overlayParams(win, w, h, win.visible && win.box.alpha > 0f)) } catch (t: Throwable) { android.util.Log.w("Yunus", "sidecam: $t") }
             measureOrigin(win)
         } else win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
         // the camera takes a moment); it shows with that frame.
         val fresh = !win.visible
-        if (fresh) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2; win.blackSkips = 0 }
+        if (fresh) { win.box.animate().cancel(); win.leaving = false; win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2; win.blackSkips = 0; win.frames = 0 }
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
@@ -148,7 +151,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         // The signal window slides back out to its edge with the page's column; the mirror just goes.
         if (name == "side" && win.box.alpha > 0f) { win.leaving = true; win.box.animate().translationX(edgeOffset(win)).setDuration(SLIDE_MS)
             .setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).withEndAction { win.leaving = false; if (!win.visible) win.box.visibility = View.GONE }.start() }
-        else win.box.visibility = View.GONE
+        else { win.leaving = false; win.box.visibility = View.GONE }
         if (win.overlay) { // hidden: touches go through it to what is below
             val lp = win.box.layoutParams as? android.view.WindowManager.LayoutParams
             if (lp != null) try { wm.updateViewLayout(win.box, overlayParams(win, lp.width, lp.height, false)) } catch (_: Throwable) { }
@@ -177,9 +180,12 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     private var restarts = 0
     private val noFrames: Runnable = object : Runnable {
         override fun run() {
-            if (windows.values.none { it.visible && it.waiting > 0 }) { restarts = 0; return }
+            // Frames arriving at all, black or not, is what counts: a camera still giving its black
+            // first frames is starting, not stuck (counted on 'waiting' it was restarted, and black).
+            if (windows.values.none { it.visible && it.waiting > 0 && it.frames == 0 }) { restarts = 0; return }
             if (restarts++ >= 3) return
             android.util.Log.w("Yunus", "car camera: no frames, opened again")
+            windows.values.forEach { it.blackSkips = 0 }
             stop(); gl?.release(); gl = null
             renderer()
             root.postDelayed(this, NO_FRAME_MS)
@@ -267,6 +273,8 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     /** A window's picture is on screen: the signal window slides in from its edge as the page opens its column. */
     private fun ready(win: Win) {
         win.box.alpha = 1f
+        if (win.overlay) (win.box.layoutParams as? android.view.WindowManager.LayoutParams)?.let {
+            try { wm.updateViewLayout(win.box, overlayParams(win, it.width, it.height, true)) } catch (_: Throwable) { } }
         if (win.name == "side") {
             win.box.translationX = edgeOffset(win)
             win.box.animate().translationX(0f).setDuration(SLIDE_MS).setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).start()
@@ -390,6 +398,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
                 GLES20.glEnableVertexAttribArray(pos)
                 GLES20.glVertexAttribPointer(pos, 2, GLES20.GL_FLOAT, false, 0, QUAD)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                win.frames++
                 // A camera just opened gives pure black frames for a moment: the window stayed black
                 // as it slid in. Those don't count towards showing it (three pixels read, cheap).
                 val black = win.waiting > 0 && win.blackSkips < 30 && isBlack(win)
