@@ -1754,6 +1754,7 @@ function onCarLoaded(gltf) {
   // Move the charge cable to the model's real charge socket (its geometry centre in world space).
   const chargeSocket = car.getObjectByName('ChargeSocket') || car.getObjectByName('ChargeFlap');
   if (chargeSocket) { new THREE.Box3().setFromObject(chargeSocket).getCenter(HOT.hCharge); buildChargeGear(); }
+  chargeGear.visible = !!S.charging;
   if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, applyStack, openSideApp, get map() { return map; }, setSideW, onFix, get myPos() { return myPos; }, get mapFollow() { return mapFollow; } };
   placePlates(car);
   controls.target.copy(target);
@@ -1764,7 +1765,7 @@ function onCarLoaded(gltf) {
   wake(2000);
   if (S.gear === 'P') snapSaveAt = performance.now() + 1500; // settled default view for next start
   // Give the car a couple of frames on screen before the map starts its own heavy work.
-  setTimeout(startMapArea, 300);
+  if (!mapAreaStarted) setTimeout(startMapArea, 300);
 }
 // ---------- tailgate ----------
 // The model's tailgate is not a separate part, so at load time the triangles in the
@@ -3026,7 +3027,9 @@ function showCharging() {
 function setCharge(v, fromCar) {
   if (S.live && !fromCar) return carCmd(v ? 'chargePortOpen' : 'chargePortClose');
   S.charging = v;
-  chargeGear.visible = v;
+  // Not before the car is in: the start's saved car picture shows a station of its own, and this one
+  // drawn under it (without the car) looked like a second station beside it.
+  chargeGear.visible = v && !!carObj;
   $('battBox').classList.toggle('charging', v); // the status bar's battery shows its charging look
   $('chargeInfo').classList.toggle('show', v);
   updateChargeInfo();
@@ -3568,6 +3571,9 @@ function buildMap() {
 // On the car the embedded Maps (or mapEmbedFailed, if Maps isn't installed) fills the map area, so
 // don't flash Yunus's own MapLibre map first when the car's 3D model load pushes the embed past 8 s.
 setTimeout(() => { if (!mapEmbedded && !(window.YunusNative && YunusNative.embedApp)) startMap(); }, 8000);
+// On the car, Maps is started as soon as the page is laid out, not after the 3D car's load (~4.5 s):
+// the start's saved car picture is already on screen, and Maps starts in its own process.
+if (window.YunusNative && YunusNative.embedApp) requestAnimationFrame(() => requestAnimationFrame(() => { if (!mapAreaStarted) startMapArea(); }));
 // On the car the map area is the real Google Maps app, run inside Yunus on a private virtual
 // display (see AppEmbed/ShellHelper in the app); Yunus's own map is the fallback and the desktop
 // preview's map. A Yunus card over the area hides Maps while it is open.

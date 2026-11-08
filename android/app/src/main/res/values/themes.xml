@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Yunus" parent="android:Theme.Material.NoActionBar.Fullscreen">
-        <item name="android:windowBackground">@android:color/black</item>
+        <!-- the page's own dark background, not black, while the page loads -->
+        <item name="android:windowBackground">#ff0b0c0e</item>
     </style>
 </resources>
