@@ -259,6 +259,8 @@ class MainActivity : Activity() {
                 // Closes the app running in a slot (the third window's close button).
                 @JavascriptInterface
                 fun embedClose(slot: String) = runOnUiThread { embed.closeApp(slot) }
+                @JavascriptInterface
+                fun embedFull(slot: String) = runOnUiThread { embed.fullApp(slot) }
 
                 // Music card: the page asks for now playing once it is ready ({media:{…}} follows
                 // on every change); play/pause/toggle/next/prev; pick a session; open its app;
@@ -618,7 +620,7 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     // The swipe-up-for-home strip is over the other apps only (Yunus has its own dock).
     // Another app in front: Yunus's dock stays on the screen over it (hidden while it is full screen).
-    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide() }
+    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide(); embed.backFromFull() }
     override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
 
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
@@ -796,7 +798,24 @@ private class AppEmbed(private val activity: Activity, private val root: android
 
     /** Closes the app in slot [name]: its tasks on the display go, the view hides, and the next
      *  show() launches it afresh. */
+    // The app taken full screen from its slot: back in Yunus, it goes into the slot again.
+    private var full: String? = null
+    fun fullApp(name: String) {
+        val slot = slots[name] ?: return
+        if (slot.displayId <= 0 || slot.component == null) return
+        full = name
+        shell.send("full ${slot.displayId} ${slot.component}")
+    }
+    fun backFromFull() {
+        val name = full ?: return
+        full = null
+        val slot = slots[name] ?: return
+        val c = slot.component ?: return
+        if (slot.displayId > 0) shell.send("launch ${slot.displayId} $c") // moved back as it is, or started again
+    }
+
     fun closeApp(name: String) {
+        if (full == name) full = null
         val slot = slots[name] ?: return
         if (slot.displayId > 0) shell.send("close ${slot.displayId}")
         slot.component = null

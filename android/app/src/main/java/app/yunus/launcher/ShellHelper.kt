@@ -94,6 +94,7 @@ object ShellHelper {
                     "t" -> injector.touch(display, fields.drop(2))
                     "launch" -> launch(display, fields.getOrNull(2) ?: continue)
                     "close" -> close(display)
+                    "full" -> full(display, fields.getOrNull(2) ?: continue)
                 }
             } catch (t: Throwable) { System.err.println("$line: $t") } // goes to the helper's log file
         } } finally { CarWatch.unsubscribe(out) }
@@ -132,6 +133,18 @@ object ShellHelper {
     private fun close(display: Int) {
         synchronized(watching) { watching.remove(display) }
         for ((task, onDisplay, _) in Tasks.roots()) if (onDisplay == display) try { Tasks.remove(task) } catch (t: Throwable) { System.err.println("close $display task $task: $t") }
+    }
+
+    // The window's full-screen key: the app's task goes onto the main screen, in front, as it is.
+    // Not watched any more (the watch would move it back); Yunus's launch puts it back later.
+    private fun full(display: Int, component: String) {
+        if (!COMPONENT.matches(component)) return
+        synchronized(watching) { watching.remove(display) }
+        for ((task, onDisplay, _) in Tasks.roots()) if (onDisplay == display) try { Tasks.move(task, 0) } catch (t: Throwable) { System.err.println("full $display task $task: $t") }
+        // Moved, it sits behind Yunus: started again it comes to the front as it is (same task),
+        // once the move has settled (started at once, it stayed behind).
+        SystemClock.sleep(400)
+        ProcessBuilder("am", "start", "-n", component).inheritIO().start().waitFor()
     }
 
     // Some apps start over in a new task right after launch (Chrome's restart, splash screens,
