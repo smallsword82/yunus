@@ -264,7 +264,7 @@ class MainActivity : Activity() {
                 fun rootBg(css: String) = runOnUiThread {
                     val c = try { if (css.startsWith("#")) android.graphics.Color.parseColor(if (css.length == 4) "#" + css.drop(1).map { "$it$it" }.joinToString("") else css)
                         else Regex("[0-9.]+").findAll(css).map { it.value.toFloat().toInt() }.toList().let { android.graphics.Color.rgb(it[0], it[1], it[2]) } } catch (_: Throwable) { null }
-                    if (c != null) (web.parent as? android.view.View)?.setBackgroundColor(c)
+                    if (c != null) { (web.parent as? android.view.View)?.setBackgroundColor(c); embed.coverColor = c }
                 }
                 @JavascriptInterface
                 fun embedFull(slot: String) = runOnUiThread { embed.fullApp(slot) }
@@ -647,6 +647,7 @@ class MainActivity : Activity() {
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {
         if (line.startsWith("msg ")) return postToPage(line.substring(4)) // a reply for the page as it is (Wi-Fi, …)
+        if (line.startsWith("shown ")) { line.substring(6).trim().toIntOrNull()?.let { d -> runOnUiThread { embed.shown(d) } }; return }
         val f = line.split(' ')
         if (f.size != 5 || f[0] != "ev" || !halWant(f[1] + " " + f[2])) return
         val v = f[4].toDoubleOrNull() ?: return
@@ -700,8 +701,25 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // The display's own size when it differs from the window (Android Auto: 1920×1080, fitted into
         // the window keeping its shape); 0: the window's size. cw×ch: the picture's size in the window.
         var vw = 0; var vh = 0; var w = 0; var h = 0; var cw = 0f; var ch = 0f
+        var cover: android.view.View? = null // the page's colour over the window while its app starts
     }
     private val slots = HashMap<String, Slot>()
+    // The window shows black until its app's first frame (a cold start: seconds): the page's colour
+    // covers it until the helper says the app is shown ("shown <display>"), at most 10 s.
+    var coverColor = 0xff0b0c0e.toInt()
+    private fun cover(slot: Slot) {
+        val v = slot.cover ?: android.view.View(activity).also { slot.cover = it; slot.box.addView(it, android.widget.FrameLayout.LayoutParams(-1, -1)) }
+        v.animate().cancel(); v.setBackgroundColor(coverColor); v.alpha = 1f; v.visibility = android.view.View.VISIBLE; v.bringToFront()
+        val token = Any(); v.tag = token
+        root.postDelayed({ if (v.tag === token) uncover(slot) }, 10000)
+    }
+    private fun uncover(slot: Slot) {
+        val v = slot.cover ?: return
+        v.tag = null
+        if (v.visibility != android.view.View.VISIBLE) return
+        v.animate().alpha(0f).setDuration(150).withEndAction { v.visibility = android.view.View.GONE }.start()
+    }
+    fun shown(display: Int) { slots.values.firstOrNull { it.displayId == display }?.let { s -> root.postDelayed({ uncover(s) }, 120) } } // its frame reaches the screen just after
     private val KEY = 60 // px, the floating keys' size
 
     // The third window's back (to Yunus's app list, the app keeps running) and close keys float over
@@ -751,6 +769,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
         fun launchIfNew() {
             if (slot.component == component) return
             slot.component = component
+            cover(slot)
             // Not started after all: forget it, so choosing the app again retries the launch.
             shell.send("launch ${slot.displayId} $component") { activity.runOnUiThread { if (slot.component == component) slot.component = null } }
             // The map app opens on its last view, not following the car. A tap on Google Maps'

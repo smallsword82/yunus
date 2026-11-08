@@ -186,7 +186,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 /* Portrait (the Dolphin's screen turned upright, 1080×1920): the windows stack, car on top, then
    the map, the third window and the dock. The same sizes (--carW, --sideW) become heights and the
    handles lie across; the dock takes two rows (climate, then apps and volume). */
-#stage.portrait { width:1080px; height:1920px; grid-template-columns:minmax(0, 1fr); /* not wider than the screen (the dock's rows made it 1138) */ grid-template-rows:56px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 196px;
+#stage.portrait { width:1080px; height:1920px; grid-template-columns:minmax(0, 1fr); /* not wider than the screen (the dock's rows made it 1138) */ grid-template-rows:56px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 180px;
   transition:grid-template-rows .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait.dragging { transition:none; }
 /* The status bar (time, temperature, Wi-Fi, cellular) runs across the top of the screen upright;
@@ -214,7 +214,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait.dragging #divider, #stage.portrait.dragging #sideHandle { transition:none; }
 #stage.portrait #divider div, #stage.portrait #sideHandle div { width:110px; height:8px; }
 #stage.portrait #card { max-height:100%; }
-#stage.portrait #volPop { bottom:208px; }
+#stage.portrait #volPop { bottom:192px; }
 /* The third window full screen (its ⛶ key). */
 /* Full screen: the app alone, no key row (its way back is a key of the app's own, see embedMaxKey). */
 #stage.sideMax .sideHead { display:none !important; }
@@ -225,7 +225,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
   opacity:0; visibility:hidden; pointer-events:none; transform:translate(-50%, 24px); will-change:transform, opacity;
   transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1), visibility 0s .25s; }
 #appTray.show { opacity:1; visibility:visible; pointer-events:auto; transform:translate(-50%, 0); transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1), visibility 0s; }
-#stage.portrait #appTray { bottom:212px; width:1000px; max-height:1100px; }
+#stage.portrait #appTray { bottom:196px; width:1000px; max-height:1100px; }
 /* An app held down in the tray: its menu beside it, as the car's own launcher. */
 #trayMenu { position:absolute; z-index:3; min-width:300px; padding:8px; border-radius:20px; background:var(--pn); color:var(--tx);
   box-shadow:0 12px 40px rgba(0,0,0,.28), 0 0 0 1px var(--cd); display:none; }
@@ -243,6 +243,13 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait .dkApp div { width:64px; height:64px; font-size:34px; }
 #stage.portrait #dock > * + * { margin-left:8px; }
 #stage.portrait .tempCtl .dk { width:42px; }
+/* The climate row is lower than the apps' (its icons are 40 px): no empty band above it. */
+#stage.portrait #dock > .clim, #stage.portrait #dock > .tempCtl, #stage.portrait #dock > .tempCtl .dk { height:56px; }
+/* One centre line with the temperature and fan: the icons' drawings sit low in their boxes (measured on
+   the car: 10-14 px under the "28°", the seats 5 px). */
+#stage.portrait #dock > .clim { display:flex; align-items:center; justify-content:center; padding:0; }
+#stage.portrait #dock > .clim:not(.seatDk) > .ico { transform:translateY(-11px); }
+#stage.portrait #dock > .seatDk > .ico, #stage.portrait #dock > #recirc > svg { transform:translateY(-5px); }
 #stage.portrait .tempCtl b { font-size:34px; min-width:92px; }
 #stage.portrait .dk .dolphin { width:66px; }
 #mapWrap, #carPanel { min-width:0; }
@@ -792,7 +799,7 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
 html.dockOnly, html.dockOnly body { background:transparent; }
 html.dockOnly #stage { height:112px; display:block; background:transparent; }
 html.dockOnly #dock { height:112px; }
-html.dockOnly #stage.portrait, html.dockOnly #stage.portrait #dock { height:196px; } /* two rows upright, as on the home screen */
+html.dockOnly #stage.portrait, html.dockOnly #stage.portrait #dock { height:180px; } /* two rows upright, as on the home screen */
 html.dockOnly #stage > :not(#dock) { display:none !important; }
 #dock { touch-action:none; /* a swipe up from its edge is ours (recents), not a page pan */ grid-column:1 / -1; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
@@ -1486,10 +1493,10 @@ let PORTRAIT = false;
 const CAR_VIEW = new URLSearchParams(location.search).has('car');
 function fit() {
   const { w, h } = viewSize();
-  // The dock over another app has a window of its own, a strip: 1920×112 lying, 1080×196 upright
+  // The dock over another app has a window of its own, a strip: 1920×112 lying, 1080×180 upright
   // (the page is always 1920 wide, so it tells by the strip's shape).
   const portrait = DOCK_ONLY ? h / w > 0.12 : h > w * 1.1 && !CAR_VIEW;
-  const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? (portrait ? 196 : 112) : portrait ? 1920 : 1080;
+  const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? (portrait ? 180 : 112) : portrait ? 1920 : 1080;
   const k = stageScale = Math.min(w / SW, h / SH);
   stage.style.transform = `translate(${(w - SW * k) / 2}px, ${(h - SH * k) / 2}px) scale(${k})`;
   if (portrait !== PORTRAIT) {
@@ -2725,9 +2732,9 @@ let lastFrame = performance.now(), cardsAt = 0;
 // Resting sizes for the car column: 0 = map full screen, 720 = normal, LEN() = car full screen.
 // With the side window open as well, the three columns share the screen in equal thirds.
 // The sizes run along the screen's long side: widths in landscape, heights in portrait (where the
-// dock's two rows take 196 px of the 1920 (two 74 px rows, 14 px above and below)).
+// dock's two rows take 180 px of the 1920 (climate 56 px, apps 74 px, ~22 px above and below)).
 const CAR_W = 720;
-const LEN = () => (PORTRAIT ? 1920 - 196 - 56 : 1920); // upright: less the dock's two rows and the status bar (56 px; 48 ran 8 px past the screen)
+const LEN = () => (PORTRAIT ? 1920 - 180 - 56 : 1920); // upright: less the dock's two rows and the status bar (56 px; 48 ran 8 px past the screen)
 const THIRDS = () => (PORTRAIT ? Math.round(LEN() / 3) : 640);
 const axisPos = (e) => (PORTRAIT ? e.clientY : e.clientX);
 // Landscape with the third window under the map (setting): its size is then a height, and the car
@@ -2935,7 +2942,12 @@ renderer.setAnimationLoop(() => {
   // easing open or shut, blinking lamps, the road while driving), at most 30 times a second.
   // Parked and untouched, the last frame just stays on screen.
   frames++;
-  let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || S.signal || S.hazard || chargeGear.visible || now < awakeUntil;
+  // Blinking lamps change ~2.6 times a second: drawn at each change (and briefly after, for the halos'
+  // fade), not 30 times a second; the charge glow and pulses at 15 a second. Both ran the whole time
+  // a signal was on or the car was charging, and the page dropped to 7-15 frames a second.
+  const blinking = !!(S.signal || S.hazard), phase = Math.floor(now / 380);
+  if (phase !== lastBlink.phase || blinking !== lastBlink.on) { if (blinking || lastBlink.on) blinkUntil = now + 200; lastBlink.phase = phase; lastBlink.on = blinking; }
+  let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || now < blinkUntil || now < awakeUntil || (chargeGear.visible && now - lastDraw >= 66);
   if (draw && (S.set.perf || S.gear === 'D') && now - lastDraw < 32) draw = false; // driving: 30/s is smooth enough for the lines
   // The app tray up or sliding (parked): the car behind it holds still, so the tray's own movement
   // has the whole frame (drawing the car under it made the tray stutter as it opened and closed).
@@ -2957,7 +2969,8 @@ renderer.setAnimationLoop(() => {
     frames = draws = 0; fpsAt = now;
   }
 });
-let frames = 0, draws = 0, fpsAt = performance.now(), lastDraw = 0, awakeUntil = 0;
+let frames = 0, draws = 0, fpsAt = performance.now(), lastDraw = 0, awakeUntil = 0, blinkUntil = 0;
+const lastBlink = { phase: -1, on: false };
 const wake = (ms = 3000) => { awakeUntil = Math.max(awakeUntil, performance.now() + ms); };
 // Anything touched or changed may set a part moving, so keep drawing for a few seconds after it.
 addEventListener('pointerdown', () => wake(), true);

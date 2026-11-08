@@ -92,7 +92,11 @@ object ShellHelper {
                 if (!ownedByYunus(display)) { System.err.println("refused, not Yunus's display: $line"); continue }
                 when (fields[0]) {
                     "t" -> injector.touch(display, fields.drop(2))
-                    "launch" -> launch(display, fields.getOrNull(2) ?: continue)
+                    // Its own thread (a cold start is waited for), then "shown <display>" back: Yunus
+                    // keeps the page's colour over the window until the app's first frame is there.
+                    "launch" -> { val c = fields.getOrNull(2) ?: continue
+                        Thread { try { launch(display, c) } catch (t: Throwable) { System.err.println("launch: $t") }
+                            try { synchronized(out) { out.write(("shown $display" + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } }.start() }
                     "close" -> close(display)
                     "full" -> full(display, fields.getOrNull(2) ?: continue)
                     // The back key for the app in that window (its own back: out of a full-screen channel…).
@@ -118,7 +122,8 @@ object ShellHelper {
         val moved = running != null && try { Tasks.move(running.first, display); true } catch (t: Throwable) { System.err.println("move $pkg: ${t.cause ?: t}"); false }
         if (!moved) {
             if (running != null) ProcessBuilder("am", "force-stop", pkg).inheritIO().start().waitFor()
-            ProcessBuilder("am", "start", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
+            // -W: back once the app's first frame is drawn (then the window's cover goes).
+            ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
         }
         keepOnDisplay(display, pkg)
     }
