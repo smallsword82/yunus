@@ -859,6 +859,9 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
 #recirc.lit .air.in { display:block; }
 #recirc:not(.lit) .air { opacity:.78; }
 
+/* The seat and steering wheel heating and the demister keys stay still when on (asked on the car): just their colour. */
+.seatDk .ico, #wheelHeat .ico, #defFront .ico, #defRear .ico { animation:none !important; background:currentColor !important; }
+.seatDk .wv, #wheelHeat .wv, #defFront .wv, #defRear .wv { animation:none !important; }
 @media (prefers-reduced-motion: reduce) { .clim .ico { animation:none !important; } }
 #airFlow .on { color:#3e6ae1; }
 #airFlow path[class]:not(.on) { opacity:.4; } /* the unused directions stay faint, as on Tesla */

@@ -39,6 +39,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         const val BUF_W = 1920
         const val BUF_H = 1080
         private const val IDLE_CLOSE_MS = 30_000L
+        private const val NO_FRAME_MS = 1_500L
         const val SLIDE_MS = 150L // the signal window's slide, as long as the page's column (setSigCol)
     }
 
@@ -129,6 +130,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
+        root.removeCallbacks(noFrames); root.postDelayed(noFrames, NO_FRAME_MS)
     }
 
     /** Hides window [name]; the camera is let go 30 s after the last window went (unless kept warm). */
@@ -162,6 +164,20 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     fun warm(on: Boolean) {
         warm = on
         if (on) { root.removeCallbacks(idle); renderer() } else idleLater()
+    }
+
+    // A window up without a frame: the camera kept open (warm, while driving) gave no more frames
+    // after BYD's 360 view took the camera and let it go (reversing out of a space). Opened afresh.
+    private var restarts = 0
+    private val noFrames: Runnable = object : Runnable {
+        override fun run() {
+            if (windows.values.none { it.visible && it.waiting > 0 }) { restarts = 0; return }
+            if (restarts++ >= 3) return
+            android.util.Log.w("Yunus", "car camera: no frames, opened again")
+            stop(); gl?.release(); gl = null
+            renderer()
+            root.postDelayed(this, NO_FRAME_MS)
+        }
     }
 
     private fun idleLater() {
