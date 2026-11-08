@@ -708,7 +708,11 @@ private class AppEmbed(private val activity: Activity, private val root: android
     // covers it until the helper says the app is shown ("shown <display>"), at most 10 s.
     var coverColor = 0xff0b0c0e.toInt()
     private fun cover(slot: Slot) {
-        val v = slot.cover ?: android.view.View(activity).also { slot.cover = it; slot.box.addView(it, android.widget.FrameLayout.LayoutParams(-1, -1)) }
+        // The page's colour with a small spinner: the app is on its way (YouTube's own start is ~4 s).
+        val v = slot.cover ?: android.widget.FrameLayout(activity).also { f ->
+            f.addView(android.widget.ProgressBar(activity).apply { isIndeterminate = true; alpha = 0.6f },
+                android.widget.FrameLayout.LayoutParams(56, 56, android.view.Gravity.CENTER))
+            slot.cover = f; slot.box.addView(f, android.widget.FrameLayout.LayoutParams(-1, -1)) }
         v.animate().cancel(); v.setBackgroundColor(coverColor); v.alpha = 1f; v.visibility = android.view.View.VISIBLE; v.bringToFront()
         val token = Any(); v.tag = token
         root.postDelayed({ if (v.tag === token) uncover(slot) }, 10000)
@@ -771,7 +775,8 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // its old picture stretched, black under it, as the layout changed).
         val newApp = slot.component != launch.flattenToShortString()
         if (newApp || resized) cover(slot)
-        if (resized && !newApp) slot.cover?.let { c -> val t = c.tag; root.postDelayed({ if (c.tag === t) uncover(slot) }, 750) } // Maps redrew at the new size in ~0.6 s
+        // Until the app has laid out and drawn at the new size (the helper watches; up to 4 s for some).
+        if (resized && !newApp) shell.send("redrawn ${slot.displayId} $dw $dh")
         slot.box.visibility = android.view.View.VISIBLE
         if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
         val dpi = activity.resources.displayMetrics.densityDpi

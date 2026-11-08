@@ -97,6 +97,11 @@ object ShellHelper {
                     "launch" -> { val c = fields.getOrNull(2) ?: continue
                         Thread { try { launch(display, c) } catch (t: Throwable) { System.err.println("launch: $t") }
                             try { synchronized(out) { out.write(("shown $display" + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } }.start() }
+                    // "redrawn <display> <w> <h>": the window was resized; "shown <display>" once its app
+                    // has laid out and drawn at that size (a resized app took up to 4 s, black till then).
+                    "redrawn" -> { val w = fields.getOrNull(2)?.toIntOrNull() ?: continue; val h = fields.getOrNull(3)?.toIntOrNull() ?: continue
+                        Thread { waitDrawn(display, w, h)
+                            try { synchronized(out) { out.write(("shown $display" + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } }.start() }
                     "close" -> close(display)
                     "full" -> full(display, fields.getOrNull(2) ?: continue)
                     // The back key for the app in that window (its own back: out of a full-screen channel…).
@@ -114,7 +119,8 @@ object ShellHelper {
     private val upright = HashSet<Int>()
     private fun launch(display: Int, component: String) {
         if (!COMPONENT.matches(component)) return
-        if (upright.add(display)) lockRotation(display)
+        // Alongside the start, not before it: four window commands, ~0.4 s a launch was kept waiting.
+        if (upright.add(display)) Thread { lockRotation(display) }.start()
         val pkg = component.substringBefore('/')
         val running = try { Tasks.roots().firstOrNull { (_, d, names) -> d != display && pkg in names } } catch (_: Throwable) { null }
         // Never taken from Yunus's other window (the map area would be left empty).
@@ -126,6 +132,20 @@ object ShellHelper {
             ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
         }
         keepOnDisplay(display, pkg)
+    }
+
+    // Polls the window manager until an app window on the display has laid out at w×h and drawn
+    // (dumpsys: "Requested w=… h=…" and "mDrawState=HAS_DRAWN"), at most 8 s.
+    private fun waitDrawn(display: Int, w: Int, h: Int) {
+        val end = SystemClock.uptimeMillis() + 8000
+        while (SystemClock.uptimeMillis() < end) {
+            SystemClock.sleep(200)
+            val dump = try { ProcessBuilder("dumpsys", "window", "windows").start().inputStream.bufferedReader().readText() } catch (_: Throwable) { return }
+            for (block in dump.split("  Window #")) {
+                if (!block.contains("mDisplayId=$display ")) continue
+                if (block.contains("Requested w=$w h=$h") && block.contains("mDrawState=HAS_DRAWN")) return
+            }
+        }
     }
 
     private fun nudge(display: Int) {
