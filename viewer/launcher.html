@@ -5899,6 +5899,8 @@ function setTheme(t) {
   groundMat.opacity = t === 'light' ? 0.55 : 0.9; // the shadow a touch lighter on the light page
   roadMat.color.set(t === 'light' ? 0xb9bdc4 : 0x1e2024);
   darkMapLayers();
+  // Behind the page, where a sliding app's picture has not arrived yet: the page's own colour, not black.
+  try { if (!DOCK_ONLY && YunusNative.rootBg) requestAnimationFrame(() => YunusNative.rootBg(getComputedStyle(stage).getPropertyValue('--bg').trim())); } catch {}
 }
 // Theme mode: Oto (auto) follows the device — the car's night mode in the app (YunusNative.isNight,
 // then {deviceDark} on every change), the system setting elsewhere; or a fixed Koyu / Açık.

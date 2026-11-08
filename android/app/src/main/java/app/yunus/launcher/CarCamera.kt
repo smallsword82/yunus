@@ -56,6 +56,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         val view = TextureView(activity)
         @Volatile var params = FloatArray(16)
         @Volatile var visible = false
+        @Volatile var leaving = false // sliding out: still drawn (it went black as it slid)
         // Frames still to draw before it shows: it is kept see-through till then (the first frames
         // reach the screen a little after they are drawn; shown at the first, it was black a moment).
         @Volatile var waiting = 0
@@ -144,8 +145,8 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         win.waiting = 0
         win.box.animate().cancel()
         // The signal window slides back out to its edge with the page's column; the mirror just goes.
-        if (name == "side" && win.box.alpha > 0f) win.box.animate().translationX(edgeOffset(win)).setDuration(SLIDE_MS)
-            .setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).withEndAction { if (!win.visible) win.box.visibility = View.GONE }.start()
+        if (name == "side" && win.box.alpha > 0f) { win.leaving = true; win.box.animate().translationX(edgeOffset(win)).setDuration(SLIDE_MS)
+            .setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).withEndAction { win.leaving = false; if (!win.visible) win.box.visibility = View.GONE }.start() }
         else win.box.visibility = View.GONE
         if (win.overlay) { // hidden: touches go through it to what is below
             val lp = win.box.layoutParams as? android.view.WindowManager.LayoutParams
@@ -377,7 +378,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
             st.updateTexImage() // always take the frame, so the camera never waits on us
             st.getTransformMatrix(texMatrix)
             for ((win, surface) in surfaces) {
-                if (!win.visible || win.w == 0) continue
+                if ((!win.visible && !win.leaving) || win.w == 0) continue
                 EGL14.eglMakeCurrent(display, surface, surface, context)
                 GLES20.glViewport(0, 0, win.w, win.h)
                 GLES20.glUseProgram(program)

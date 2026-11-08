@@ -259,6 +259,13 @@ class MainActivity : Activity() {
                 // Closes the app running in a slot (the third window's close button).
                 @JavascriptInterface
                 fun embedClose(slot: String) = runOnUiThread { embed.closeApp(slot) }
+                // The page's colour behind it (seen where a sliding embedded app hasn't arrived yet).
+                @JavascriptInterface
+                fun rootBg(css: String) = runOnUiThread {
+                    val c = try { if (css.startsWith("#")) android.graphics.Color.parseColor(if (css.length == 4) "#" + css.drop(1).map { "$it$it" }.joinToString("") else css)
+                        else Regex("[0-9.]+").findAll(css).map { it.value.toFloat().toInt() }.toList().let { android.graphics.Color.rgb(it[0], it[1], it[2]) } } catch (_: Throwable) { null }
+                    if (c != null) (web.parent as? android.view.View)?.setBackgroundColor(c)
+                }
                 @JavascriptInterface
                 fun embedFull(slot: String) = runOnUiThread { embed.fullApp(slot) }
                 @JavascriptInterface
