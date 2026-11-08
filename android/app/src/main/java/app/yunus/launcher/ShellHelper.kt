@@ -170,11 +170,11 @@ object ShellHelper {
         val id = System.nanoTime()
         synchronized(watching) { watching[display] = id }
         Thread {
-            // Android Auto starts its screen again on the main display whenever the phone connects,
-            // which can be any time: it is kept on the display for as long as it is the slot's app
-            // (until another launch on this display); everything else for 20 s after its start.
-            val end = if (pkg == "com.byd.androidauto") Long.MAX_VALUE else SystemClock.uptimeMillis() + 20000
-            while (SystemClock.uptimeMillis() < end && synchronized(watching) { watching[display] == id }) {
+            // Kept on the display for as long as it is the slot's app (until another launch, close or
+            // full screen on this display): Android Auto starts its screen again on the main display
+            // whenever the phone connects, and an app's own later screens (HakoPlayer's live TV, an
+            // activity not allowed on a virtual display) land on the main screen any time.
+            while (synchronized(watching) { watching[display] == id }) {
                 SystemClock.sleep(700)
                 try {
                     for ((task, onDisplay, pkgs) in Tasks.roots())
