@@ -175,7 +175,8 @@ object ShellHelper {
             // whenever the phone connects, and an app's own later screens (HakoPlayer's live TV, an
             // activity not allowed on a virtual display) land on the main screen any time.
             while (synchronized(watching) { watching[display] == id }) {
-                SystemClock.sleep(700)
+                // Often (one binder call, no process): an escape shows full screen until it is moved back.
+                SystemClock.sleep(150)
                 try {
                     for ((task, onDisplay, pkgs) in Tasks.roots())
                         if (onDisplay == 0 && pkg in pkgs) {
@@ -185,7 +186,7 @@ object ShellHelper {
                             // first left Yunus "on top" but hidden after Android 14's to-back animation
                             // (a black screen), and a start then changed nothing.
                             ProcessBuilder("am", "start", "-W", "-n", "$OWNER/.MainActivity").inheritIO().start().waitFor()
-                            SystemClock.sleep(150)
+                            SystemClock.sleep(50)
                             Tasks.move(task, display)
                             System.err.println("moved $pkg task $task back to display $display")
                             // A video surface (SurfaceView) can stay behind on the main screen after the
