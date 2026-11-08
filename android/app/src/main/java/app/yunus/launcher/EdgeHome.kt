@@ -23,7 +23,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     private var dockShown = false
     // The page's dock row (the page is laid out 1:1 with the screen): two rows upright.
     private var dockH = 112
-    private fun dockHNow() = if (ctx.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) 224 else 112
+    private fun dockHNow() = if (ctx.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) 196 else 112
     private var active = false // another app in front
     private var fullScreen = false // that app hides the system bars (a video full screen)
     private var peek = false // brought up by a swipe while full screen

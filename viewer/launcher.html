@@ -169,7 +169,16 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #topBar #sideTabs[style*="none"] + #layoutSeg { margin-left:auto; } /* no tabs: the keys sit where they would */
 #layoutSeg button { border:0; background:transparent; width:44px; height:38px; border-radius:19px; font-size:23px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--mu); }
 #layoutSeg button.on { background:var(--cd); color:var(--tx); box-shadow:0 1px 4px rgba(0,0,0,.18); }
-#stage.portrait #layoutSeg { display:none; } /* upright the windows always stack */
+/* Upright: under each other or tabbed (side by side has no room); the name goes, the photo stays, so the
+   tabs and keys fit the bar's 1080 px. */
+#stage.portrait #layoutSeg [data-layout=cols] { display:none; }
+#stage.portrait #layoutSeg { margin-right:14px; }
+#stage.portrait #sideTabs { margin-right:10px; }
+#stage.portrait #sideTabs button { padding:6px 14px; }
+#stage.portrait #profName { display:none; }
+/* Tabbed upright: the third window takes the map's row, switched with the tabs. */
+#stage.tabbed.portrait #sidePanel { grid-row:3; grid-column:1; position:relative; z-index:3; display:none; border-top:0; }
+#stage.tabbed.appTab.portrait #sidePanel { display:flex; }
 #sideTabs { display:flex; margin:0 14px 0 auto; background:var(--cd2); border-radius:24px; padding:4px; }
 #sideTabs button { border:0; background:transparent; font-size:21px; font-weight:500; padding:6px 18px; border-radius:20px; display:flex; align-items:center; cursor:pointer; white-space:nowrap; max-width:300px; overflow:hidden; }
 #sideTabs button i { margin-right:8px; }
@@ -177,7 +186,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 /* Portrait (the Dolphin's screen turned upright, 1080×1920): the windows stack, car on top, then
    the map, the third window and the dock. The same sizes (--carW, --sideW) become heights and the
    handles lie across; the dock takes two rows (climate, then apps and volume). */
-#stage.portrait { width:1080px; height:1920px; grid-template-columns:1fr; grid-template-rows:56px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 224px;
+#stage.portrait { width:1080px; height:1920px; grid-template-columns:minmax(0, 1fr); /* not wider than the screen (the dock's rows made it 1138) */ grid-template-rows:56px var(--carW, 720px) minmax(0, 1fr) var(--sideW, 0px) 196px;
   transition:grid-template-rows .35s cubic-bezier(.2,.8,.2,1); }
 #stage.portrait.dragging { transition:none; }
 /* The status bar (time, temperature, Wi-Fi, cellular) runs across the top of the screen upright;
@@ -188,7 +197,8 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait #map { top:0; }
 #stage.portrait #mapWrap > .floating { margin-top:-56px; } /* the map's controls had room for the bar */
 #stage.portrait #sidePanel { grid-row:4; grid-column:1; border-left:0; border-top:1px solid var(--cd); overflow:hidden; } /* closed (0 px) its app icons spilled out behind the climate row */
-#stage.portrait #dock { grid-row:5; grid-column:1; flex-wrap:wrap; align-content:center; padding:6px 20px; }
+#stage.portrait #dock { grid-row:5; grid-column:1; flex-wrap:wrap; align-content:center; padding:6px 20px; min-width:0; }
+#stage.portrait #dock > .clim { flex:1 1 0; min-width:56px; } /* the climate row across the whole width, like the row under it; narrower keys rather than a third row (a wider temperature, "22.5°") */
 #stage.portrait #dock .sepBreak { flex-basis:100%; height:0; margin:4px 0; border:0; }
 /* Upright: climate and seats on the top row (passenger seat included), then the car button, the
    apps and the volume on the bottom row. */
@@ -204,7 +214,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait.dragging #divider, #stage.portrait.dragging #sideHandle { transition:none; }
 #stage.portrait #divider div, #stage.portrait #sideHandle div { width:110px; height:8px; }
 #stage.portrait #card { max-height:100%; }
-#stage.portrait #volPop { bottom:236px; }
+#stage.portrait #volPop { bottom:208px; }
 /* The third window full screen (its ⛶ key). */
 /* Full screen: the app alone, no key row (its way back is a key of the app's own, see embedMaxKey). */
 #stage.sideMax .sideHead { display:none !important; }
@@ -215,7 +225,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
   opacity:0; visibility:hidden; pointer-events:none; transform:translate(-50%, 24px); will-change:transform, opacity;
   transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1), visibility 0s .25s; }
 #appTray.show { opacity:1; visibility:visible; pointer-events:auto; transform:translate(-50%, 0); transition:opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1), visibility 0s; }
-#stage.portrait #appTray { bottom:240px; width:1000px; max-height:1100px; }
+#stage.portrait #appTray { bottom:212px; width:1000px; max-height:1100px; }
 /* An app held down in the tray: its menu beside it, as the car's own launcher. */
 #trayMenu { position:absolute; z-index:3; min-width:300px; padding:8px; border-radius:20px; background:var(--pn); color:var(--tx);
   box-shadow:0 12px 40px rgba(0,0,0,.28), 0 0 0 1px var(--cd); display:none; }
@@ -782,7 +792,7 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
 html.dockOnly, html.dockOnly body { background:transparent; }
 html.dockOnly #stage { height:112px; display:block; background:transparent; }
 html.dockOnly #dock { height:112px; }
-html.dockOnly #stage.portrait, html.dockOnly #stage.portrait #dock { height:224px; } /* two rows upright, as on the home screen */
+html.dockOnly #stage.portrait, html.dockOnly #stage.portrait #dock { height:196px; } /* two rows upright, as on the home screen */
 html.dockOnly #stage > :not(#dock) { display:none !important; }
 #dock { touch-action:none; /* a swipe up from its edge is ours (recents), not a page pan */ grid-column:1 / -1; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
@@ -1476,10 +1486,10 @@ let PORTRAIT = false;
 const CAR_VIEW = new URLSearchParams(location.search).has('car');
 function fit() {
   const { w, h } = viewSize();
-  // The dock over another app has a window of its own, a strip: 1920×112 lying, 1080×224 upright
+  // The dock over another app has a window of its own, a strip: 1920×112 lying, 1080×196 upright
   // (the page is always 1920 wide, so it tells by the strip's shape).
   const portrait = DOCK_ONLY ? h / w > 0.12 : h > w * 1.1 && !CAR_VIEW;
-  const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? (portrait ? 224 : 112) : portrait ? 1920 : 1080;
+  const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? (portrait ? 196 : 112) : portrait ? 1920 : 1080;
   const k = stageScale = Math.min(w / SW, h / SH);
   stage.style.transform = `translate(${(w - SW * k) / 2}px, ${(h - SH * k) / 2}px) scale(${k})`;
   if (portrait !== PORTRAIT) {
@@ -2715,14 +2725,14 @@ let lastFrame = performance.now(), cardsAt = 0;
 // Resting sizes for the car column: 0 = map full screen, 720 = normal, LEN() = car full screen.
 // With the side window open as well, the three columns share the screen in equal thirds.
 // The sizes run along the screen's long side: widths in landscape, heights in portrait (where the
-// dock's two rows take 224 px of the 1920).
+// dock's two rows take 196 px of the 1920 (two 74 px rows, 14 px above and below)).
 const CAR_W = 720;
-const LEN = () => (PORTRAIT ? 1920 - 224 - 56 : 1920); // upright: less the dock's two rows and the status bar (56 px; 48 ran 8 px past the screen)
+const LEN = () => (PORTRAIT ? 1920 - 196 - 56 : 1920); // upright: less the dock's two rows and the status bar (56 px; 48 ran 8 px past the screen)
 const THIRDS = () => (PORTRAIT ? Math.round(LEN() / 3) : 640);
 const axisPos = (e) => (PORTRAIT ? e.clientY : e.clientX);
 // Landscape with the third window under the map (setting): its size is then a height, and the car
 // column no longer shares the width with it.
-const TABS = () => !PORTRAIT && !!S.set.tabSide;
+const TABS = () => !!S.set.tabSide;
 const STACK = () => !PORTRAIT && !!S.set.stackSide && !S.set.tabSide;
 const STACK_H = 1080 - 112; // the map column's height above the dock
 const sideAxis = (e) => (STACK() ? e.clientY : axisPos(e));
@@ -2744,12 +2754,12 @@ function applyStack() {
   renderLayoutSeg();
   syncEmbedSoon();
 }
-const layoutNow = () => (S.set.tabSide ? 'tabs' : S.set.stackSide ? 'stack' : 'cols');
+const layoutNow = () => (S.set.tabSide ? 'tabs' : S.set.stackSide || PORTRAIT ? 'stack' : 'cols'); // upright, side by side is under each other
 function renderLayoutSeg() {
   document.querySelectorAll('#layoutSeg button').forEach((b) => b.classList.toggle('on', b.dataset.layout === layoutNow()));
 }
 function setLayout(k) {
-  if (k === layoutNow()) return;
+  if (k === layoutNow() && !(PORTRAIT && k === 'stack' && !S.set.stackSide)) return;
   S.set.tabSide = k === 'tabs'; S.set.stackSide = k === 'stack';
   saveSettings();
   applyStack();
@@ -2769,7 +2779,7 @@ function setSideTab(t) {
   });
 }
 function renderSideTabs() {
-  $('sideTabs').style.display = PORTRAIT ? 'none' : ''; // always there in landscape: a tab switches to the tabbed layout
+  $('sideTabs').style.display = ''; // always there: a tab switches to the tabbed layout
   $('tabApp').innerHTML = `<i class="ti ti-apps"></i>${$('sidePanel').classList.contains('appOpen') ? $('sideTitle').textContent : 'Uygulamalar'}`;
   $('tabMap').classList.toggle('on', TABS() && sideTab === 'map');
   $('tabApp').classList.toggle('on', TABS() && sideTab === 'app');
@@ -2789,14 +2799,20 @@ function balanceDock() {
   car.style.marginRight = '';
   if (!PORTRAIT) return;
   const right = ($('vUp').getBoundingClientRect().right - $('vDn').getBoundingClientRect().left) / stageScale;
-  car.style.marginRight = Math.max(0, right - car.getBoundingClientRect().width / stageScale) + 'px';
+  // Never more than the row's free room: with more apps the volume keys wrapped to a third row.
+  const cr = car.getBoundingClientRect(), vol = new Set([$('vDn'), $('vIcon'), $('vUp')]);
+  const apps = [...$('dock').children].filter((e) => !vol.has(e) && e !== car && e.offsetParent && Math.abs(e.getBoundingClientRect().top - cr.top) < 20 * stageScale);
+  const first = Math.min(...apps.map((e) => e.getBoundingClientRect().left)), last = Math.max(...apps.map((e) => e.getBoundingClientRect().right));
+  const free = apps.length ? ((first - cr.right) + ($('vDn').getBoundingClientRect().left - last)) / stageScale - 16 : 0;
+  car.style.marginRight = Math.max(0, Math.min(right - cr.width / stageScale, free)) + 'px';
 }
 function relayout() {
   const car = carW >= 1900 || carW >= LEN() ? LEN() : Math.min(carW, LEN());
   setCarW(car, true);
   stage.classList.toggle('stack', STACK());
   stage.classList.toggle('tabbed', TABS());
-  renderSideTabs(); // the tabs show in landscape only: shown or hidden again on every turn
+  renderSideTabs();
+  renderLayoutSeg(); // upright, side by side shows as under each other
   setSideW(STACK() ? sideW : Math.min(sideW, LEN() - car), true);
   normalizeLayout();
   placeHandles();
@@ -4346,7 +4362,7 @@ function placeHandles() {
     return;
   }
   h.right = ''; h.top = '';
-  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - sideW - 36) + (PORTRAIT ? 48 : 0) + 'px'; // upright, below the status bar
+  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - sideW - 36) + (PORTRAIT ? 56 : 0) + 'px'; // upright, below the status bar (56 px, as LEN counts it)
   $('sideHandle').style.left = PORTRAIT ? '' : at;
   $('sideHandle').style.top = PORTRAIT ? at : '';
 }
