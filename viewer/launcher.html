@@ -370,8 +370,10 @@ button { font-family:inherit; color:inherit; }
 .mmCard.hasArt .mmRow .bar { background:linear-gradient(transparent 14px, rgba(255,255,255,.3) 14px, rgba(255,255,255,.3) 17px, transparent 17px); }
 .mmRow .bar div { height:100%; width:0; background:linear-gradient(transparent 13px, var(--tx) 13px, var(--tx) 18px, transparent 18px); }
 .mmCard.hasArt .mmRow .bar div { background:linear-gradient(transparent 13px, #fff 13px, #fff 18px, transparent 18px); }
-.mmCard.hasArt.playing .mmRow .bar div { background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='30'%3E%3Cpath d='M0 15.5 Q6 9.5 12 15.5 T24 15.5' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x 0 0 / 24px 30px; animation:mmWave 1.1s linear infinite; }
-@keyframes mmWave { from { background-position:0 0; } to { background-position:24px 0; } }
+/* The wave slides as a transform (the compositor's): a moving background-position was repainted on every vsync. */
+.mmCard.hasArt.playing .mmRow .bar div { position:relative; z-index:0; overflow:hidden; background:none; }
+.mmCard.hasArt.playing .mmRow .bar div::before { content:''; position:absolute; top:0; bottom:0; left:-24px; right:0; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='30'%3E%3Cpath d='M0 15.5 Q6 9.5 12 15.5 T24 15.5' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x 0 0 / 24px 30px; animation:mmWave 1.1s linear infinite; }
+@keyframes mmWave { to { transform:translateX(24px); } }
 .mm .ctl button { background:none; border:0; cursor:pointer; padding:0; font-size:inherit; }
 .ccTyres { position:relative; height:140px; display:flex; justify-content:center; }
 .ccTyres img { height:136px; }
@@ -1440,9 +1442,10 @@ function updateTelltales() {
   // a different red fault appears.
   const red = TELLTALES.find((t) => ttColor(t) === 'red' && !NO_BANNER.includes(t.id) && ttFault(t));
   if (!red) dismissedAlert = null;
-  $('warnBanner').classList.toggle('show', !!red && red.id !== dismissedAlert);
-  if (red) placeWarnBanner();
-  if (red) $('warnBanner').innerHTML = `${ttHtml(red)}<div><b>${red.name}</b><br><span style="font-size:17px;color:var(--mu)">${red.desc}</span></div>`;
+  const showRed = !!red && red.id !== dismissedAlert;
+  $('warnBanner').classList.toggle('show', showRed);
+  // Rebuilt only when it changes: a new element every 250 ms restarted the flash before its dim half.
+  if (showRed) { placeWarnBanner(); setHtml($('warnBanner'), `${ttHtml(red)}<div><b>${red.name}</b><br><span style="font-size:17px;color:var(--mu)">${red.desc}</span></div>`); }
 }
 setInterval(updateTelltales, 250);
 // The embedded map and third-window apps are drawn above the page, so the banner sits over the
@@ -1732,6 +1735,9 @@ function warmCar(car) {
     groups.get(k).push(o);
   });
   const list = [...groups.values()];
+  // Halos and road pools are the scene's, not the car's, and hidden until lit: compiled here too.
+  if (halos.low[0]) list.push([halos.low[0]]);
+  if (beams) list.push([beams.low]);
   return new Promise((done) => {
     let i = 0;
     const step = () => {
@@ -2034,12 +2040,13 @@ function updateLamps(now) {
   const light = (o, hex, k) => {
     o.material.emissive.setHex(hex); o.material.emissiveIntensity = k;
     const ov = o.userData.overlay;
-    if (ov) { ov.material.color.setHex(hex); ov.material.opacity = Math.min(1, k / 2.6); }
+    if (ov) { ov.material.color.setHex(hex); ov.material.opacity = Math.min(1, k / 2.6); ov.visible = k > 0; } // unlit: not drawn
   };
   const glow = (list, hex, k) => list.forEach((o) => light(o, hex, k));
   const fade = (list, target) => list.forEach((h) => {
     h.userData.level += (target - h.userData.level) * 0.25;
     h.material.opacity = h.userData.level * facingCamera(h);
+    h.visible = h.material.opacity > 0.004;
   });
   glow(lamps.drlBar, 0xf4f7ff, S.drl === false && !L.park ? 0 : L.low ? 2.4 : 3.4); // daytime LEDs (the car says when they are off)
   glow(lamps.low, 0xfff6e8, L.low ? 3 : 0);
@@ -2060,12 +2067,13 @@ function updateLamps(now) {
     lamps.drl[side].forEach((o) => light(o, signalling ? 0xff7a00 : 0xf4f7ff, signalling ? (lit ? 3.5 : 0) : (L.low ? 1.8 : 2.6)));
     lamps.rearSignal[side].forEach((o) => light(o, 0xff7a00, lit ? 3 : 0));
     // Signals switch hard, like the real lamps, instead of fading.
-    halos.signal[side].forEach((h) => { h.material.opacity = lit ? facingCamera(h) : 0; });
+    halos.signal[side].forEach((h) => { h.material.opacity = lit ? facingCamera(h) : 0; h.visible = h.material.opacity > 0.004; });
   }
   if (beams) {
     const k = S.theme === 'dark' ? 1 : 0.45;
     beams.low.material.opacity += ((L.low ? 0.55 * k : 0) - beams.low.material.opacity) * 0.1;
     beams.high.material.opacity += ((L.high ? 0.5 * k : 0) - beams.high.material.opacity) * 0.1;
+    beams.low.visible = beams.low.material.opacity > 0.004; beams.high.visible = beams.high.material.opacity > 0.004;
   }
   updateBeamIndicators(L);
 }
@@ -2283,10 +2291,12 @@ function stepChargeGlow(now) {
     m.material.opacity = 0.95 * Math.min(1, t * 6, (1 - t) * 6); // fade in at the ground, out at the flap
   });
 }
+var HOT_EL, DOT_EL; // looked up once (a document-wide querySelectorAll on every draw)
 function placeHotspots() {
   const w = box.clientWidth, h = box.clientHeight;
+  if (!HOT_EL) HOT_EL = Object.fromEntries(Object.keys(HOT).map((id) => [id, $(id)]));
   for (const [id, p] of Object.entries(HOT)) {
-    const v = p.clone().project(cam), el = $(id);
+    const v = p.clone().project(cam), el = HOT_EL[id];
     const toCam = cam.position.clone().sub(p).normalize();
     const facing = id === 'hTrunk' ? toCam.z < 0.1 : id === 'hShade' ? toCam.y > 0.25 && !!SHADE.node : toCam.x < -0.3;
     el.style.left = ((v.x + 1) / 2 * w) + 'px';
@@ -2294,7 +2304,7 @@ function placeHotspots() {
     el.style.opacity = (S.gear === 'P' && facing && carReady) ? 1 : 0;
     el.style.pointerEvents = el.style.opacity === '1' ? 'auto' : 'none';
   }
-  placeGlassDots();
+  placeGlassDots(w, h); // the size read once: a second read after the writes forced another layout
 }
 
 function resize3d() {
@@ -2960,7 +2970,12 @@ renderer.setAnimationLoop(() => {
   if (DOCK_ONLY) return;
   // Performance mode, parked and nothing moving: the page's per-frame work ten times a second.
   const tickAt = performance.now();
-  if (S.set.perf && DEVICE && !camAnim && !glassDrag && S.gear !== 'D' && S.gear !== 'R' && !S.signal && !S.hazard && !chargeGear.visible && tickAt >= awakeUntil && tickAt - lastFrame < 100) return;
+  // Signalling or charging, parked: only the ticks that draw run the page's per-frame work (all
+  // of it ran on every vsync, for one draw in two to four).
+  const blinkKey = (S.signal || S.hazard) ? Math.floor(tickAt / 380) : -1;
+  const trayHold = trayOpen || tickAt < trayMovingUntil; // nothing is drawn under the tray anyway
+  const due = !trayHold && (blinkKey !== lastBlinkDrawn || (chargeGear.visible && S.chargeState !== 2 && tickAt - lastDraw >= 66));
+  if (S.set.perf && DEVICE && !camAnim && !glassDrag && S.gear !== 'D' && S.gear !== 'R' && !due && tickAt >= awakeUntil && tickAt - lastFrame < 100) return;
   if (camAnim) {
     camAnim.t = Math.min(1, camAnim.t + 0.025);
     const k = 1 - Math.pow(1 - camAnim.t, 3);
@@ -2985,8 +3000,8 @@ renderer.setAnimationLoop(() => {
   // The trunk lining only exists while the tailgate is up, so it can never show through the body.
   moving.trunk.forEach((o) => { o.visible = gateAngle > 0.02; });
   animateParts();
-  updateLamps(performance.now());
-  stepChargeGlow(performance.now());
+  updateLamps(now);
+  stepChargeGlow(now);
   // The car column and the map change width (divider and side window drags), so follow them every frame.
   // Resizing the canvas clears it, so a resized frame is always drawn (never skipped by the
   // performance mode's 30/s cap): otherwise the car blinks out while the divider is dragged.
@@ -3004,12 +3019,11 @@ renderer.setAnimationLoop(() => {
   // easing open or shut, blinking lamps, the road while driving), at most 30 times a second.
   // Parked and untouched, the last frame just stays on screen.
   frames++;
-  // Blinking lamps change ~2.6 times a second: drawn at each change (and briefly after, for the halos'
-  // fade), not 30 times a second; the charge glow and pulses at 15 a second. Both ran the whole time
-  // a signal was on or the car was charging, and the page dropped to 7-15 frames a second.
-  const blinking = !!(S.signal || S.hazard), phase = Math.floor(now / 380);
-  if (phase !== lastBlink.phase || blinking !== lastBlink.on) { if (blinking || lastBlink.on) blinkUntil = now + 200; lastBlink.phase = phase; lastBlink.on = blinking; }
-  let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || now < blinkUntil || now < awakeUntil || (chargeGear.visible && now - lastDraw >= 66);
+  // Blinking lamps change ~2.6 times a second: each change (and the signal going off) is drawn once,
+  // retried on the next tick if the cap or the tray held it back; the charge glow and pulses at 15
+  // a second (not once the battery is full: nothing moves then). Both ran the whole time a signal
+  // was on or the car was charging, and the page dropped to 7-15 frames a second.
+  let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || blinkKey !== lastBlinkDrawn || now < awakeUntil || (chargeGear.visible && S.chargeState !== 2 && now - lastDraw >= 66);
   if (draw && (S.set.perf || S.gear === 'D') && now - lastDraw < 32) draw = false; // driving: 30/s is smooth enough for the lines
   // The app tray up or sliding (parked): the car behind it holds still, so the tray's own movement
   // has the whole frame (drawing the car under it made the tray stutter as it opened and closed).
@@ -3019,15 +3033,14 @@ renderer.setAnimationLoop(() => {
     controls.update();
     placeHotspots();
     renderer.render(scene, cam);
-    lastDraw = now; draws++;
+    lastDraw = now; draws++; lastBlinkDrawn = blinkKey;
   }
   if (now - fpsAt >= 1000) {
     $('fpsMeter').textContent = `${Math.round(frames * 1000 / (now - fpsAt))} fps · 3D ${Math.round(draws * 1000 / (now - fpsAt))}/sn${S.set.perf ? ' · performans' : ''}`;
     frames = draws = 0; fpsAt = now;
   }
 });
-let frames = 0, draws = 0, fpsAt = performance.now(), lastDraw = 0, awakeUntil = 0, blinkUntil = 0;
-const lastBlink = { phase: -1, on: false };
+let frames = 0, draws = 0, fpsAt = performance.now(), lastDraw = 0, awakeUntil = 0, lastBlinkDrawn = -1;
 const wake = (ms = 3000) => { awakeUntil = Math.max(awakeUntil, performance.now() + ms); };
 // Anything touched or changed may set a part moving, so keep drawing for a few seconds after it.
 addEventListener('pointerdown', () => wake(), true);
@@ -3189,9 +3202,9 @@ function beginGlassDrag(g) {
 // Grab dots: one on the top edge of each side window and one on the sunshade's edge, shown on
 // the side (or roof) facing the camera. Holding a dot drags that glass like the glass itself.
 const dotBox = new THREE.Box3();
-function placeGlassDots() {
-  const w = box.clientWidth, h = box.clientHeight;
-  document.querySelectorAll('[data-dot]').forEach((el) => {
+function placeGlassDots(w, h) {
+  if (!DOT_EL) DOT_EL = [...document.querySelectorAll('[data-dot]')];
+  DOT_EL.forEach((el) => {
     const k = el.dataset.dot;
     let p = null, facing = false;
     // On the car, while a dot is being dragged it follows the finger (the drag target), on its
@@ -3413,7 +3426,7 @@ function updateBlindSpot() {
       $('sigPane').classList.add('show');
       if (!PORTRAIT) setSigCol(bsSide); // landscape: a column; upright it slides over the edge
     }
-    if (!bsRaf) bsRaf = requestAnimationFrame(drawBlindSpot);
+    if (!bsRaf) { bsBoxAt = 0; bsLast = ''; bsRaf = requestAnimationFrame(drawBlindSpot); } // fresh box and picture
   } else if (cam.classList.contains('show') && !bsHideTimer) {
     // Tesla keeps the view up briefly after the stalk is released.
     const delay = S.gear === 'D' && !sigDismissed ? 1000 : 0; // closed with a tap: at once
@@ -3518,6 +3531,7 @@ function bsAdjustBlock() {
 // Put the camera window next to the car on the signalled side, level with it: left signal to
 // the left of the car, right signal to the right, sized to the room there (at most 300 px).
 const bsBox = new THREE.Box3(), bsCorner = new THREE.Vector3();
+let bsBoxAt = 0;
 function placeBsCam() {
   const el = $('bsCam');
   if (!carObj || !el.classList.contains('show')) return;
@@ -3527,7 +3541,8 @@ function placeBsCam() {
     Object.assign(el.style, { width: pw + 'px', height: pw * 400 / 672 + 'px', left: '24px', top: '90px' });
     return;
   }
-  bsBox.setFromObject(carObj);
+  // The car's box (every node of the car) twice a second, not on every frame: only a door moves it.
+  if (performance.now() - bsBoxAt > 500) { bsBox.setFromObject(carObj); bsBoxAt = performance.now(); }
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (let i = 0; i < 8; i++) {
     bsCorner.set(i & 1 ? bsBox.max.x : bsBox.min.x, i & 2 ? bsBox.max.y : bsBox.min.y, i & 4 ? bsBox.max.z : bsBox.min.z).project(cam);
@@ -3583,12 +3598,18 @@ function paintSideView(c, W, H, flip) {
   c.beginPath(); c.moveTo(gx, H); c.lineTo(flip ? W * 0.45 : W * 0.55, H * 0.55); c.stroke();
 }
 let sideCamAt = 0;
-function drawBlindSpot() {
+let bsAt = 0, bsLast = '';
+function drawBlindSpot(now) {
   // The car's own camera is drawn natively in the edge window; nothing to paint here then.
   if (LIVE_CAM && S.set.sigEdge && !bsPreview) { bsRaf = null; return; }
+  // 30 a second is plenty for a drawing (it ran on every vsync).
+  if (now - bsAt < 33) { bsRaf = $('bsCam').classList.contains('show') ? requestAnimationFrame(drawBlindSpot) : null; return; }
+  bsAt = now;
   const flip = bsSide === 'right';
   bsT += (DEVICE ? 0 : 0.004) + S.speed * 0.00025; // a drawing, not a camera: on the device it moves only with speed
-  paintSideView(bsCtx, 672, 400, flip);
+  // Parked on the device it stands still: the same picture is not painted again.
+  const key = bsT + ',' + flip + ',' + S.theme;
+  if (!DEVICE || S.set.sigEdge || key !== bsLast) { paintSideView(bsCtx, 672, 400, flip); bsLast = key; }
   // The trial's pane at its own size (a column in landscape, the slide-in pane upright).
   if (S.set.sigEdge) {
     const cv = $('sigCanvas'), w = cv.clientWidth, h = cv.clientHeight;
