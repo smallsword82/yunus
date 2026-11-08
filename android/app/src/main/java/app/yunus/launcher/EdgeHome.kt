@@ -171,5 +171,5 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         PixelFormat.TRANSLUCENT,
     ).apply { gravity = Gravity.BOTTOM; y = lift }
 
-    private companion object { const val PEEK_MS = 5000L }
+    private companion object { const val PEEK_MS = 3000L }
 }
