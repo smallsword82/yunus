@@ -750,7 +750,13 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // Android Auto lays its 16:9 picture out for a car screen: in a window-sized display it came out
         // wider than the window (its app bar cut off) with bars above and below. It gets a display of
         // the car screen's size instead, shown in the window whole, keeping its shape.
-        val (dw, dh) = if (launch.packageName == "com.byd.androidauto") 1920 to 1080 else w to h
+        // A short third window (under the map, ~430 px) broke apps laid out for the car's screen (BYD's
+        // phone showed only its "Ara" key): it gets a display at least 720 px tall, same shape, scaled
+        // into the window.
+        val minH = 720
+        val (dw, dh) = if (launch.packageName == "com.byd.androidauto") 1920 to 1080
+            else if (name == "side" && h in 1 until minH) (w * minH / h) to minH else w to h
+        val resized = slot.display != null && (slot.w != w || slot.h != h)
         slot.w = w; slot.h = h; slot.vw = if (dw != w || dh != h) dw else 0; slot.vh = if (slot.vw > 0) dh else 0
         val k = if (slot.vw > 0) minOf(w.toFloat() / dw, h.toFloat() / dh) else 1f
         slot.cw = dw * k; slot.ch = dh * k
@@ -758,8 +764,14 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // scales the buffer to the view).
         slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(slot.cw.toInt(), slot.ch.toInt()).apply {
             leftMargin = ((w - slot.cw) / 2).toInt(); topMargin = ((h - slot.ch) / 2).toInt() }
-        slot.view.translationX = 0f; slot.box.clipBounds = null // placed for real: no shift (see shift)
+        slot.view.translationX = 0f; slot.box.translationX = 0f; slot.box.clipBounds = null // placed for real: no shift (see shift)
         cuts.remove(name)
+        // Covered from the moment it shows: a new app (until its first frame) - the window was black
+        // until its display existed - or a resized one while it redraws at the new size (Maps showed
+        // its old picture stretched, black under it, as the layout changed).
+        val newApp = slot.component != launch.flattenToShortString()
+        if (newApp || resized) cover(slot)
+        if (resized && !newApp) slot.cover?.let { c -> val t = c.tag; root.postDelayed({ if (c.tag === t) uncover(slot) }, 350) }
         slot.box.visibility = android.view.View.VISIBLE
         if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
         val dpi = activity.resources.displayMetrics.densityDpi
@@ -769,7 +781,6 @@ private class AppEmbed(private val activity: Activity, private val root: android
         fun launchIfNew() {
             if (slot.component == component) return
             slot.component = component
-            cover(slot)
             // Not started after all: forget it, so choosing the app again retries the launch.
             shell.send("launch ${slot.displayId} $component") { activity.runOnUiThread { if (slot.component == component) slot.component = null } }
             // The map app opens on its last view, not following the car. A tap on Google Maps'
@@ -895,15 +906,17 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val slot = slots[name] ?: return
         val v = slot.view
         shifting.remove(name)?.cancel()
-        // The picture slides inside its box, and the box's right side is cut off (its clip, and so the
-        // hole the picture is seen through, is that much narrower).
+        // The box slides with its picture, and its right side is cut off (its clip, and so the hole the
+        // picture is seen through, is that much narrower). The picture alone slid out of its box and
+        // was clipped by it: shifted left for a right signal column, only a 120 px strip of the third
+        // window was left.
         fun place(x: Float, c: Float) {
-            v.translationX = x
+            v.translationX = 0f
+            slot.box.translationX = x
             cuts[name] = c
-            // The box doesn't move, the picture does: its clip is where the moved picture is, less the cut.
-            slot.box.clipBounds = if (c > 0.5f || x != 0f) android.graphics.Rect(x.toInt().coerceIn(0, slot.w), 0, (x + slot.w - c).toInt().coerceIn(0, slot.w), slot.h) else null
+            slot.box.clipBounds = if (c > 0.5f) android.graphics.Rect(0, 0, (slot.w - c).toInt().coerceIn(0, slot.w), slot.h) else null
         }
-        val x0 = v.translationX; val c0 = cuts[name] ?: 0f
+        val x0 = slot.box.translationX; val c0 = cuts[name] ?: 0f
         if (ms <= 0) return place(dx.toFloat(), cut.toFloat())
         shifting[name] = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
             duration = ms

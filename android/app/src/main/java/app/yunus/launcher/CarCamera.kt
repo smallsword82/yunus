@@ -60,6 +60,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         // Frames still to draw before it shows: it is kept see-through till then (the first frames
         // reach the screen a little after they are drawn; shown at the first, it was black a moment).
         @Volatile var waiting = 0
+        var blackSkips = 0 // the camera's own black first frames, not counted (at most 30)
         var out: SurfaceTexture? = null
         var w = 0; var h = 0
         var label: android.widget.TextView? = null // the mirror's front/rear switch
@@ -128,7 +129,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
         // the camera takes a moment); it shows with that frame.
         val fresh = !win.visible
-        if (fresh) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2 }
+        if (fresh) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2; win.blackSkips = 0 }
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
@@ -389,11 +390,27 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
                 GLES20.glEnableVertexAttribArray(pos)
                 GLES20.glVertexAttribPointer(pos, 2, GLES20.GL_FLOAT, false, 0, QUAD)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                // A camera just opened gives pure black frames for a moment: the window stayed black
+                // as it slid in. Those don't count towards showing it (three pixels read, cheap).
+                val black = win.waiting > 0 && win.blackSkips < 30 && isBlack(win)
+                if (black) win.blackSkips++
                 EGL14.eglSwapBuffers(display, surface)
+                if (black) continue
                 // Its third frame: shown at once, and the page told (sideCamReady), which opens the
                 // signal column just then, so the column is never black while the camera starts.
                 if (win.waiting > 0 && --win.waiting == 0) root.post { if (win.visible) ready(win) }
             }
+        }
+
+        private val px = java.nio.ByteBuffer.allocateDirect(4).order(java.nio.ByteOrder.nativeOrder())
+        private fun isBlack(win: Win): Boolean {
+            var sum = 0
+            for ((fx, fy) in listOf(0.5f to 0.5f, 0.3f to 0.7f, 0.7f to 0.3f)) {
+                px.clear()
+                GLES20.glReadPixels((win.w * fx).toInt(), (win.h * fy).toInt(), 1, 1, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, px)
+                sum += (px.get(0).toInt() and 255) + (px.get(1).toInt() and 255) + (px.get(2).toInt() and 255)
+            }
+            return sum < 12
         }
 
         private fun teardown() {

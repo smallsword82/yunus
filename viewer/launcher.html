@@ -724,7 +724,10 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
 
 /* cards (Tesla: apps open over the map, never replace it) */
 #card { position:absolute; left:20px; right:20px; bottom:0; height:600px; background:var(--pn); border-radius:24px 24px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,.45); transform:translateY(105%); transition:transform .35s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1), border-radius .3s; z-index:5; display:flex; flex-direction:column; }
-#card.open { transform:none; }
+#card.open { transform:none; visibility:visible; transition:transform .35s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1), border-radius .3s, visibility 0s; }
+/* Closed it is hidden once it has slid out: pushed below the map column, it lay over the third window
+   under the map (stacked layout) and over the dock upright. */
+#card:not(.open) { visibility:hidden; transition:transform .35s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1), border-radius .3s, visibility 0s linear .35s; }
 #card.tall { height:880px; }
 #card.full { height:968px; border-radius:0; }
 #card.sizing { transition:none; }
