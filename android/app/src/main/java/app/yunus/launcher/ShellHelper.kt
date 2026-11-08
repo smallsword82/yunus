@@ -493,13 +493,33 @@ private object CarWatch {
         val rot = c.getField("rotation").getInt(i)
         if (rot == barsRotation) return
         if (listOf("overscanLeft", "overscanTop", "overscanRight", "overscanBottom").any { c.getField(it).getInt(i) < 0 })
-            Runtime.getRuntime().exec(arrayOf("sh", "-c", barsCommand())).waitFor()
+            setBars()
         barsRotation = rot
     } catch (t: Throwable) { System.err.println("bars: $t") } }
 
+    // Straight to the window manager (this process may: it is the shell): a "wm overscan" process
+    // took a few hundred ms to start, and the screen showed the wrong size meanwhile.
+    private fun setBars() {
+        val v = Regex("-?[0-9]+").findAll(barsCommand()).map { it.value.toInt() }.toList()
+        try {
+            val wm = Class.forName("android.view.WindowManagerGlobal").getMethod("getWindowManagerService").invoke(null)
+            wm.javaClass.getMethod("setOverscan", Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE)
+                .invoke(wm, 0, v[0], v[1], v[2], v[3])
+        } catch (t: Throwable) {
+            System.err.println("bars direct: ${t.cause ?: t}")
+            Runtime.getRuntime().exec(arrayOf("sh", "-c", barsCommand())).waitFor()
+        }
+    }
+
+    // The screen's turn watched closely (on its own thread, not the 1 s poll): the bars are set
+    // again for the new rotation within a frame or two, so the screen doesn't show the in-between.
+    private val turnWatch = Thread {
+        while (true) { keepBars(); try { Thread.sleep(50) } catch (_: InterruptedException) { break } }
+    }.apply { isDaemon = true; name = "yunus-turn" }
+
     private fun poll() {
         copyDabSlide()
-        keepBars()
+        if (!turnWatch.isAlive) try { turnWatch.start() } catch (_: Throwable) { }
         val slowTurn = pollTurn++ % 5 == 0
         for (p in polls) if (!p.dead && p.get.key !in FAST && (slowTurn || p.get.key !in SLOW)) try {
             val raw = p.read()
