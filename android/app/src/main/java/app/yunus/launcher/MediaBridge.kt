@@ -121,12 +121,15 @@ fun mediaApps(ctx: Context, seen: Set<String> = emptySet()): JSONArray {
  * The dock's volume control on the system media volume: the page sets it, and any change made
  * elsewhere (steering-wheel keys, the car's own bar) comes back as {volume:{cur,max}}.
  */
-class VolumeBridge(private val ctx: Context, private val emit: (String) -> Unit) {
+class VolumeBridge(private val ctx: Context, private val emit: (String) -> Unit, private val external: () -> Unit = {}) {
+    private var ownAt = 0L // Yunus's own last change (its slider and keys): not a key's
     private val audio = ctx.getSystemService(android.media.AudioManager::class.java)
     private val stream = android.media.AudioManager.STREAM_MUSIC
     private val changed = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: Context, i: android.content.Intent) {
-            if (i.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) == stream) send()
+            if (i.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) != stream) return
+            if (android.os.SystemClock.uptimeMillis() - ownAt > 400) external()
+            send()
         }
     }
     // Not exported: the system's own broadcast still arrives (Android 14 requires the flag).
@@ -138,7 +141,7 @@ class VolumeBridge(private val ctx: Context, private val emit: (String) -> Unit)
     fun send() = emit(JSONObject().put("volume", JSONObject()
         .put("cur", audio.getStreamVolume(stream)).put("max", audio.getStreamMaxVolume(stream))).toString())
 
-    fun set(level: Int) = audio.setStreamVolume(stream, level.coerceIn(0, audio.getStreamMaxVolume(stream)), 0)
+    fun set(level: Int) { ownAt = android.os.SystemClock.uptimeMillis(); audio.setStreamVolume(stream, level.coerceIn(0, audio.getStreamMaxVolume(stream)), 0) }
 
     fun close() { try { ctx.unregisterReceiver(changed) } catch (_: Exception) { } }
 }

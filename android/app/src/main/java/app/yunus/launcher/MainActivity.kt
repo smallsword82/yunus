@@ -366,7 +366,13 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun volumePopup(x: Int, y: Int, w: Int, h: Int, k: Double, level: Int, max: Int, bg: String, fg: String, track: String) = runOnUiThread {
                     val color = { s: String -> try { android.graphics.Color.parseColor(s.trim()) } catch (_: Exception) { android.graphics.Color.GRAY } }
-                    volPop.show(x, y, w, h, k.toFloat(), level, max, color(bg), color(fg), color(track))
+                    volPopWhere()
+                    // In the background the page can measure its bar as nothing (not laid out): the
+                    // last place it gave, or above the dock's volume keys.
+                    if (w > 0 && h > 0) volLast = intArrayOf(x, y, w, h)
+                    val m = resources.displayMetrics
+                    val (px, py, pw, ph) = volLast ?: intArrayOf(m.widthPixels - 560, m.heightPixels - 112 - 84 - 16, 520, 84)
+                    volPop.show(px, py, pw, ph, if (k > 0) k.toFloat() else 1f, level, max, color(bg), color(fg), color(track))
                 }
 
                 @JavascriptInterface
@@ -419,7 +425,11 @@ class MainActivity : Activity() {
         voiceLift()
         embed = AppEmbed(this, root, shell) { ev -> postToPage(JSONObject().put(ev, true).toString()) } // sideBack, sideClose
         carCam = CarCamera(this, root) { ev -> postToPage(JSONObject().put(ev, true).toString()) } // sideCamDismissed, rearClosed
-        volPop = VolumeOverlay(this) { volume.set(it) }.also { root.addView(it) }
+        volPop = VolumeOverlay(this, { volume.set(it) }) {
+            // The car's settings (SOUND_SETTINGS led to BYD's "not supported" page; the sound
+            // section's own id isn't known yet).
+            try { startActivity(android.content.Intent().setClassName("com.byd.carsettings", "com.byd.carsettings.MainActivity").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) { }
+        }.also { root.addView(it) }
         media = MediaBridge(this, ::postToPage)
         // A closed music app started from the card: its screen opens on a small display nobody sees
         // (see MediaBridge.wake), then closes once it plays.
@@ -440,7 +450,13 @@ class MainActivity : Activity() {
                 }
             }
         }
-        volume = VolumeBridge(this, ::postToPage)
+        volume = VolumeBridge(this, ::postToPage) {
+            // The steering wheel's or the console's key: BYD's own volume dialog is closed (its
+            // system UI listens for this) and Yunus's bar shows instead (the page asks for it).
+            // Again a moment later: the dialog can come up after the change is heard.
+            val close = Runnable { sendBroadcast(android.content.Intent("byd.intent.action.STATUSBAR_VOLIME_DIALOG_CLOSE")) }
+            close.run(); root.postDelayed(close, 120); root.postDelayed(close, 350)
+        }
         status = StatusBridge(this, ::postToPage).also { it.start() }
         // The bell's count from the notification listener (only the number, never the content).
         MediaListener.onCount = { n -> postToPage(JSONObject().put("notifCount", n).toString()) }
@@ -618,8 +634,54 @@ class MainActivity : Activity() {
     // Back from the notification-access setting, the music card may now read the media sessions.
     // The swipe-up-for-home strip is over the other apps only (Yunus has its own dock).
     // Another app in front: Yunus's dock stays on the screen over it (hidden while it is full screen).
-    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide() }
-    override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
+    override fun onResume() { super.onResume(); inFront = true; web.onResume(); media.refresh(); edge.hide() }
+    override fun onPause() { inFront = false; web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
+
+    // The volume bar: in Yunus's own layout while Yunus is in front, in a window of its own over
+    // the app in front otherwise (a steering-wheel key pressed in another app).
+    private var inFront = false
+    private var volWin = false
+    private var volOrigin: IntArray? = null // where such a window's 0,0 is in Yunus's coordinates
+    private var volLast: IntArray? = null // the bar's last place from the page
+    private fun volPopWhere() {
+        val wm = getSystemService(android.view.WindowManager::class.java)
+        if (inFront && volWin) {
+            try { wm.removeView(volPop) } catch (_: Throwable) { }
+            volWin = false; volPop.place = null; volPop.shownHook = null
+            (rootView() ?: return).addView(volPop)
+        } else if (!inFront && !volWin && android.provider.Settings.canDrawOverlays(this)) {
+            (volPop.parent as? android.view.ViewGroup)?.removeView(volPop)
+            val lp = android.view.WindowManager.LayoutParams(1, 1, android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    or android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, android.graphics.PixelFormat.TRANSLUCENT)
+                .apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START }
+            try { wm.addView(volPop, lp); volWin = true } catch (t: Throwable) { android.util.Log.w("Yunus", "volume window: $t"); rootView()?.addView(volPop); return }
+            // Hidden, its window lets touches through to the app below.
+            volPop.shownHook = { on ->
+                (volPop.layoutParams as? android.view.WindowManager.LayoutParams)?.let { p ->
+                    val nt = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    val f = if (on) p.flags and nt.inv() else p.flags or nt
+                    if (f != p.flags) { p.flags = f; try { wm.updateViewLayout(volPop, p) } catch (_: Throwable) { } }
+                }
+            }
+            volPop.place = { x, y, w, h ->
+                val o = volOrigin
+                val p = volPop.layoutParams as android.view.WindowManager.LayoutParams
+                p.width = w; p.height = h; p.x = x - (o?.get(0) ?: 0); p.y = y - (o?.get(1) ?: 0)
+                try { wm.updateViewLayout(volPop, p) } catch (_: Throwable) { }
+                // Measured once: the window's place against Yunus's (overlays count from the
+                // screen's hidden top while BYD's bars are off it).
+                if (o == null) volPop.post {
+                    val a = IntArray(2); volPop.getLocationOnScreen(a)
+                    val r = IntArray(2); web.getLocationOnScreen(r)
+                    volOrigin = intArrayOf(a[0] - p.x - r[0], a[1] - p.y - r[1])
+                    p.x = x - volOrigin!![0]; p.y = y - volOrigin!![1]
+                    try { wm.updateViewLayout(volPop, p) } catch (_: Throwable) { }
+                }
+            }
+        }
+    }
+    private fun rootView(): android.widget.FrameLayout? = web.parent as? android.widget.FrameLayout
 
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
 
