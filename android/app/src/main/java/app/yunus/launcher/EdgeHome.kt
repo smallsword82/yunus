@@ -21,7 +21,9 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     private val wm = ctx.getSystemService(WindowManager::class.java)
     private var dock: WebView? = null
     private var dockShown = false
-    private val dockH = 112 // the page's dock row; the page is laid out 1:1 with the screen
+    // The page's dock row (the page is laid out 1:1 with the screen): two rows upright.
+    private var dockH = 112
+    private fun dockHNow() = if (ctx.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) 224 else 112
     private var active = false // another app in front
     private var fullScreen = false // that app hides the system bars (a video full screen)
     private var peek = false // brought up by a swipe while full screen
@@ -40,7 +42,13 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     @Suppress("DEPRECATION")
     private fun measure() {
         val s = strip ?: return
-        if (!s.isAttachedToWindow || s.height == 0) return
+        if (!s.isAttachedToWindow) return
+        val h = dockHNow()
+        if (h != dockH) { // the screen turned
+            dockH = h
+            if (dockAdded) dock?.let { try { wm.updateViewLayout(it, overlayParams(dockH, if (dockShown) shownFlags else hiddenFlags)) } catch (_: Throwable) { } }
+        }
+        if (s.height == 0) return
         val loc = IntArray(2); s.getLocationOnScreen(loc)
         val anchor = loc[1] + s.height + ((s.layoutParams as? WindowManager.LayoutParams)?.y ?: 0) // where the bottom of a window is put
         val bottom = visibleBottom()
@@ -82,8 +90,8 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         update()
     }
 
-    /** The dock overlay's page, while it is up (it gets the car's data like the main page). */
-    fun dockWeb(): WebView? = if (dockShown) dock else null
+    /** The dock overlay's page, shown or hidden (it gets the car's data like the main page). */
+    fun dockWeb(): WebView? = if (dockAdded) dock else null
 
     private fun update() {
         if (active && peek) showDock() else hideDock()
@@ -167,7 +175,8 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     private fun overlayParams(height: Int, flags: Int) = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT, height,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        // ALT_FOCUSABLE_IM: under the keyboard, not over it (the strip lay over its bottom row).
+        flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
         PixelFormat.TRANSLUCENT,
     ).apply { gravity = Gravity.BOTTOM; y = lift }
 

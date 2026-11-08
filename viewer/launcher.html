@@ -765,6 +765,7 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
 html.dockOnly, html.dockOnly body { background:transparent; }
 html.dockOnly #stage { height:112px; display:block; background:transparent; }
 html.dockOnly #dock { height:112px; }
+html.dockOnly #stage.portrait, html.dockOnly #stage.portrait #dock { height:224px; } /* two rows upright, as on the home screen */
 html.dockOnly #stage > :not(#dock) { display:none !important; }
 #dock { touch-action:none; /* a swipe up from its edge is ours (recents), not a page pan */ grid-column:1 / -1; display:flex; align-items:center; padding:0 28px; gap:12px; background:var(--bg); border-top:1px solid var(--cd); position:relative; z-index:6; }
 .dk { background:none; border:0; width:84px; height:84px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:44px; cursor:pointer; }
@@ -1454,8 +1455,10 @@ let PORTRAIT = false;
 const CAR_VIEW = new URLSearchParams(location.search).has('car');
 function fit() {
   const { w, h } = viewSize();
-  const portrait = h > w * 1.1 && !CAR_VIEW;
-  const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? 112 : portrait ? 1920 : 1080;
+  // The dock over another app has a window of its own, a strip: 1920×112 lying, 1080×224 upright
+  // (the page is always 1920 wide, so it tells by the strip's shape).
+  const portrait = DOCK_ONLY ? h / w > 0.12 : h > w * 1.1 && !CAR_VIEW;
+  const SW = portrait ? 1080 : 1920, SH = DOCK_ONLY ? (portrait ? 224 : 112) : portrait ? 1920 : 1080;
   const k = stageScale = Math.min(w / SW, h / SH);
   stage.style.transform = `translate(${(w - SW * k) / 2}px, ${(h - SH * k) / 2}px) scale(${k})`;
   if (portrait !== PORTRAIT) {

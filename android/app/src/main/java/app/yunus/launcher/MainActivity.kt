@@ -373,6 +373,10 @@ class MainActivity : Activity() {
             webViewClient = object : WebViewClientCompat() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     assetLoader.shouldInterceptRequest(request.url)
+                // Loaded: everything the car said so far, so its keys (seat heating on, …) show as they are.
+                override fun onPageFinished(view: WebView, url: String) {
+                    for (m in dockCache.values.toList()) view.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse(${JSONObject.quote(m)}))", null)
+                }
             }
         }
         val root = android.widget.FrameLayout(this).apply { addView(web) }
@@ -405,6 +409,10 @@ class MainActivity : Activity() {
             dock.webViewClient = object : WebViewClientCompat() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     assetLoader.shouldInterceptRequest(request.url)
+                // Loaded: everything the car said so far, so its keys (seat heating on, …) show as they are.
+                override fun onPageFinished(view: WebView, url: String) {
+                    for (m in dockCache.values.toList()) view.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse(${JSONObject.quote(m)}))", null)
+                }
             }
         }
         volume = VolumeBridge(this, ::postToPage)
@@ -604,11 +612,23 @@ class MainActivity : Activity() {
         postToPage(JSONObject().put("carHal", o).toString())
     }
 
+    // The car's last word on each thing (a HAL value by device and type, else by the message's
+    // keys), for the dock page when it loads.
+    private val dockCache = LinkedHashMap<String, String>()
+    private fun cacheKey(message: String): String = try {
+        val o = JSONObject(message)
+        o.optJSONObject("carHal")?.let { "hal " + it.optString("dev") + " " + it.optString("type") }
+            ?: o.keys().asSequence().joinToString(",")
+    } catch (_: Throwable) { message }
+
     private fun postToPage(message: String) {
         runOnUiThread {
             if (::web.isInitialized && !isFinishing) {
                 val quoted = JSONObject.quote(message)
                 web.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
+                // The dock over other apps gets the same, hidden or not, so it is up to date when it comes up.
+                dockCache.remove(cacheKey(message)); dockCache[cacheKey(message)] = message
+                if (dockCache.size > 600) dockCache.remove(dockCache.keys.first())
                 if (::edge.isInitialized) edge.dockWeb()?.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
             }
         }
