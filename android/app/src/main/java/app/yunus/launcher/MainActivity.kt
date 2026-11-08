@@ -771,7 +771,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // its old picture stretched, black under it, as the layout changed).
         val newApp = slot.component != launch.flattenToShortString()
         if (newApp || resized) cover(slot)
-        if (resized && !newApp) slot.cover?.let { c -> val t = c.tag; root.postDelayed({ if (c.tag === t) uncover(slot) }, 350) }
+        if (resized && !newApp) slot.cover?.let { c -> val t = c.tag; root.postDelayed({ if (c.tag === t) uncover(slot) }, 750) } // Maps redrew at the new size in ~0.6 s
         slot.box.visibility = android.view.View.VISIBLE
         if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
         val dpi = activity.resources.displayMetrics.densityDpi
