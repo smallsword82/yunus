@@ -95,6 +95,8 @@ object ShellHelper {
                     "launch" -> launch(display, fields.getOrNull(2) ?: continue)
                     "close" -> close(display)
                     "full" -> full(display, fields.getOrNull(2) ?: continue)
+                    // The back key for the app in that window (its own back: out of a full-screen channel…).
+                    "back" -> ProcessBuilder("input", "-d", display.toString(), "keyevent", "4").inheritIO().start().waitFor()
                 }
             } catch (t: Throwable) { System.err.println("$line: $t") } // goes to the helper's log file
         } } finally { CarWatch.unsubscribe(out) }

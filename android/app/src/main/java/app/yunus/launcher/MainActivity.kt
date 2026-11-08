@@ -261,6 +261,8 @@ class MainActivity : Activity() {
                 fun embedClose(slot: String) = runOnUiThread { embed.closeApp(slot) }
                 @JavascriptInterface
                 fun embedFull(slot: String) = runOnUiThread { embed.fullApp(slot) }
+                @JavascriptInterface
+                fun embedBack(slot: String) = runOnUiThread { embed.back(slot) }
 
                 // Music card: the page asks for now playing once it is ready ({media:{…}} follows
                 // on every change); play/pause/toggle/next/prev; pick a session; open its app;
@@ -818,6 +820,8 @@ private class AppEmbed(private val activity: Activity, private val root: android
         val c = slot.component ?: return
         if (slot.displayId > 0) shell.send("launch ${slot.displayId} $c") // moved back as it is, or started again
     }
+
+    fun back(name: String) { val s = slots[name] ?: return; if (s.displayId > 0 && s.component != null) shell.send("back ${s.displayId}") }
 
     fun closeApp(name: String) {
         if (full == name) full = null

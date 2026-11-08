@@ -5687,7 +5687,9 @@ window.yunusCar = (m) => {
     if (mirrorShown) { const [bx, by] = screenRect(box); YunusNative.rearCam(Math.round(bx + box.clientWidth / 2 - 270), Math.round(by + 90), 540, 200, JSON.stringify(MIRROR_CAM[mirrorView])); }
     return;
   }
-  if (m.back) { if (stage.classList.contains('sideMax')) setSideMax(false); return; } // the back key
+  // The back key: the app in the third window gets it (its own back, as before); nothing open there,
+  // it does nothing (it used to bring the app behind Yunus forward).
+  if (m.back) { if (sidePkg && YunusNative.embedBack) YunusNative.embedBack('side'); return; }
   if (m.sideBack) { closeSideApp(); return; } // the floating keys over the third window's app
   if (m.sideClose) { $('sideClose').onclick(); return; }
   if (m.sideCamReady) { sigCamReady(); return; } // the signal camera's first frame: open its column
