@@ -3308,7 +3308,7 @@ function updateBlindSpot() {
       // The column opens with the camera's first frame (sideCamReady), not before: a column waiting
       // for the camera was black. It waits for the frame (the camera can take a few seconds to start;
       // opened after 1.5 s anyway, the column stood black meanwhile); 8 s at most.
-      if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = setTimeout(sigCamReady, 8000); }
+      if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = null; } // no picture, no column (never black)
     } else if (S.set.sigEdge) {
       $('sigPane').classList.toggle('right', bsSide === 'right');
       $('sigArrow').className = `ti ti-arrow-big-${bsSide}`;

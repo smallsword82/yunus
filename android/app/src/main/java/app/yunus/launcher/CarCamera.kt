@@ -126,11 +126,15 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         } else win.box.layoutParams = FrameLayout.LayoutParams(w, h).apply { leftMargin = px; topMargin = py }
         // Until the camera's first frame is drawn in it the window is see-through, not black (opening
         // the camera takes a moment); it shows with that frame.
-        if (!win.visible) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2 }
+        val fresh = !win.visible
+        if (fresh) { win.box.animate().cancel(); win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2 }
         win.box.visibility = View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
-        root.removeCallbacks(noFrames); root.postDelayed(noFrames, NO_FRAME_MS)
+        // The no-frame check counts from the window's opening: the car repeats the signal every
+        // moment, and restarting the count on each repeat kept it from ever running (a real signal
+        // stayed black while the camera gave no frames).
+        if (fresh) { restarts = 0; root.removeCallbacks(noFrames); root.postDelayed(noFrames, NO_FRAME_MS) }
     }
 
     /** Hides window [name]; the camera is let go 30 s after the last window went (unless kept warm). */
