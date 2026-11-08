@@ -53,7 +53,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         if (over != lift || full != fullScreen) {
             android.util.Log.i("Yunus", "edge: anchor=$anchor bottom=$bottom lift=$over full=$full")
             lift = over
-            if (full != fullScreen) { fullScreen = full; if (!full) peek = false }
+            if (full != fullScreen) fullScreen = full
             if (dockAdded) dock?.let { try { wm.updateViewLayout(it, overlayParams(dockH, if (dockShown) shownFlags else hiddenFlags)) } catch (_: Throwable) { } }
             update()
         }
@@ -69,6 +69,10 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         if (!android.provider.Settings.canDrawOverlays(ctx)) return
         active = true
         addStrip()
+        // Over another app the dock stays only a few seconds after that app came up, then gets
+        // out of the app's way (apps are laid out to the screen's bottom); a swipe up brings it.
+        peek = true
+        strip?.let { it.removeCallbacks(endPeek); it.postDelayed(endPeek, PEEK_MS) }
         update()
         strip?.let { it.removeCallbacks(poll); it.post(poll) }
     }
@@ -82,12 +86,12 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     fun dockWeb(): WebView? = if (dockShown) dock else null
 
     private fun update() {
-        if (active && (!fullScreen || peek)) showDock() else hideDock()
+        if (active && peek) showDock() else hideDock()
         strip?.let { s ->
-            val touch = active && fullScreen && !peek
+            val touch = active && !peek
             // Full screen, some apps leave the screen's last pixels unpainted and Yunus's own dock
             // showed through there: the strip covers that edge in black.
-            s.setBackgroundColor(if (touch) Color.BLACK else Color.TRANSPARENT)
+            s.setBackgroundColor(if (touch && fullScreen) Color.BLACK else Color.TRANSPARENT)
             try { wm.updateViewLayout(s, overlayParams(stripH, if (touch) WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE else hiddenFlags)) } catch (_: Throwable) { }
         }
     }
@@ -104,14 +108,14 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
                 MotionEvent.ACTION_MOVE -> if (!fired && y0 - ev.rawY > stripH * 1.5f) {
                     fired = true
                     peek = true; update()
-                    v.removeCallbacks(endPeek); v.postDelayed(endPeek, 5000)
+                    v.removeCallbacks(endPeek); v.postDelayed(endPeek, PEEK_MS)
                 }
             }
             true
         }
         v.setOnSystemUiVisibilityChangeListener { vis ->
             val full = vis and fullFlags != 0
-            if (full != fullScreen) { fullScreen = full; if (!full) peek = false; update() }
+            if (full != fullScreen) { fullScreen = full; update() }
             v.post { measure() }
         }
         try { wm.addView(v, overlayParams(stripH, hiddenFlags)); strip = v } catch (t: Throwable) { android.util.Log.w("Yunus", "edge: $t") }
@@ -133,7 +137,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
             settings.loadWithOverviewMode = true
             setupDock(this)
             loadUrl("https://appassets.androidplatform.net/assets/launcher.html#dock")
-            setOnTouchListener { _, _ -> if (peek) { removeCallbacks(endPeek); postDelayed(endPeek, 5000) }; false } // kept while in use
+            setOnTouchListener { _, _ -> if (peek) { strip?.removeCallbacks(endPeek); strip?.postDelayed(endPeek, PEEK_MS) }; false } // kept while in use
         }.also { dock = it }
         if (!dockAdded) {
             w.visibility = View.INVISIBLE
@@ -166,4 +170,6 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT,
     ).apply { gravity = Gravity.BOTTOM; y = lift }
+
+    private companion object { const val PEEK_MS = 5000L }
 }
