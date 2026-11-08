@@ -563,7 +563,7 @@ button { font-family:inherit; color:inherit; }
 #rearCam canvas { width:100%; height:100%; display:block; transform:scaleX(-1); }
 /* Blind-spot camera: a small window beside the car on the signalled side (placed each frame
    from the car's position on screen, see placeBsCam) */
-#bsCam { position:absolute; top:400px; left:24px; width:300px; height:178px; border-radius:14px; overflow:hidden; z-index:4; background:#000;
+#bsCam { position:absolute; top:400px; left:24px; width:300px; height:178px; border-radius:14px; overflow:hidden; z-index:4; background:var(--bg);
   box-shadow:0 8px 24px rgba(0,0,0,.5); opacity:0; transform:scale(.94); transition:opacity .25s, transform .25s; pointer-events:none; }
 #bsCam.show { opacity:1; transform:none; }
 #bsCam canvas { width:100%; height:100%; display:block; }
@@ -593,7 +593,7 @@ button { font-family:inherit; color:inherit; }
 #sigSpot.right { left:auto; right:0; top:56px; } /* under the status bar, which keeps its full width */
 #stage.portrait #sigSpot { top:140px; bottom:auto; height:370px; width:620px; left:24px; }
 #stage.portrait #sigSpot.right { left:auto; right:24px; }
-#sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:#000;
+#sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:var(--bg); /* not black: seen while the camera window slides */
   box-shadow:0 16px 48px rgba(0,0,0,.55); transform:translateX(-110%); transition:transform .35s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
 #sigPane.right { left:auto; right:0; transform:translateX(110%); }
 #sigPane.show { transform:translateX(24px); }
@@ -2754,6 +2754,9 @@ const carSnaps = (side) => (side > 0 && !STACK() ? [0, THIRDS(), LEN() - side] :
 function applyStack() {
   const open = sideW > 0 || sideTab === 'app' || !!sidePkg;
   if (sidePkg) YunusNative.embedVisible('side', false);
+  // The map too: it kept its old place for the half second before it is fitted to the new one (black
+  // where the new layout's map area had no picture yet); hidden, the page's colour shows there.
+  try { if (mapEmbedded) YunusNative.embedVisible('map', false); } catch {}
   stage.classList.add('noColAnim'); // straight to the new layout, no sliding between unlike grids
   requestAnimationFrame(() => requestAnimationFrame(() => stage.classList.remove('noColAnim')));
   stage.classList.toggle('stack', STACK());
