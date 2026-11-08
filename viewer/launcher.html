@@ -4373,7 +4373,13 @@ function openInSide(pkg) {
   if (TABS()) setSideTab('app');
   else if (!sideW) setSideW(sideSnaps()[1], true);
   fillSideApps();
-  setTimeout(() => openSidePkg(pkg), 450); // once the window has its size
+  // The app's frame at once (not the app list for a moment); the app itself once the window has
+  // its size (a tab is there at once, a closed window slides open).
+  const a = (deviceApps() || []).find((x) => x.pkg === pkg);
+  $('sidePanel').classList.add('appOpen');
+  $('sideTitle').textContent = a ? a.app : pkg;
+  $('sideApp').innerHTML = '';
+  if (TABS()) requestAnimationFrame(() => openSidePkg(pkg)); else setTimeout(() => openSidePkg(pkg), 450);
 }
 function openSidePkg(pkg) {
   const a = (deviceApps() || []).find((x) => x.pkg === pkg);
