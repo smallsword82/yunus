@@ -4342,11 +4342,13 @@ $('tabApp').onclick = () => { if (!TABS()) setLayout('tabs'); fillSideApps(); se
 // icons takes a moment) and runs the chosen one inside the window, like Google Maps in the map
 // area (AppEmbed slot "side"). The preview keeps its stand-ins.
 let sidePkg = null, sideFilled = false;
+// From the apps already read (the tray's list) when there are: reading them took 300 ms on the
+// first switch to the Apps tab.
 function fillSideApps() {
   if (!DEVICE || sideFilled) return;
   sideFilled = true;
-  $('sideApps').innerHTML = (deviceApps() || []).map((a) =>
-    `<button class="app" data-side-pkg="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('');
+  $('sideApps').innerHTML = (appsCache || deviceApps() || []).map((a) =>
+    `<button class="app" data-side-pkg="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="" decoding="async">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('');
 }
 function embedSide() {
   if (DOCK_ONLY) return;
@@ -4610,7 +4612,7 @@ function buildTray(cached) {
     ? real.map((a) => `<button class="app" data-tray="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="" decoding="async">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('')
     : APPS.map(([n, i, c]) => `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('');
 }
-if (window.YunusNative && YunusNative.apps) setTimeout(() => { if (!trayOpen) buildTray(); }, 8000); // ready before the first open
+if (window.YunusNative && YunusNative.apps) setTimeout(() => { if (!trayOpen) buildTray(); fillSideApps(); }, 8000); // ready before the first open
 function openAppTray() {
   trayMovingUntil = performance.now() + 400;
   buildTray(true);

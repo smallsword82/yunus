@@ -101,12 +101,21 @@ object ShellHelper {
 
     // Fixed argument lists (no shell): keep the display upright, stop the app's task elsewhere,
     // then start it on the display.
+    // Opening took seconds: four window commands to keep the display upright on every launch, and the
+    // app force-stopped so it always started cold. Now the display is set upright once, and an app
+    // already running is moved over as it is (warm, at once); only an app not running is started.
+    private val upright = HashSet<Int>()
     private fun launch(display: Int, component: String) {
         if (!COMPONENT.matches(component)) return
-        lockRotation(display)
-        ProcessBuilder("am", "force-stop", component.substringBefore('/')).inheritIO().start().waitFor()
-        ProcessBuilder("am", "start", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
-        keepOnDisplay(display, component.substringBefore('/'))
+        if (upright.add(display)) lockRotation(display)
+        val pkg = component.substringBefore('/')
+        val running = try { Tasks.roots().firstOrNull { (_, d, names) -> d != display && pkg in names } } catch (_: Throwable) { null }
+        val moved = running != null && try { Tasks.move(running.first, display); true } catch (t: Throwable) { System.err.println("move $pkg: ${t.cause ?: t}"); false }
+        if (!moved) {
+            if (running != null) ProcessBuilder("am", "force-stop", pkg).inheritIO().start().waitFor()
+            ProcessBuilder("am", "start", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
+        }
+        keepOnDisplay(display, pkg)
     }
 
     private fun nudge(display: Int) {
