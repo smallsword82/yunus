@@ -104,7 +104,7 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 }
 .light { --bg:#e9ebee; --pn:#f6f7f9; --cd:#ffffff; --cd2:#e4e7eb; --tx:#16181b; --mu:#6b717b; }
 * { box-sizing:border-box; }
-html,body { margin:0; height:100%; background:#000; overflow:hidden; font-family:Inter,system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; background:#0b0c0e; /* as the window behind it, not black */ overflow:hidden; font-family:Inter,system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
 input { user-select:text; -webkit-user-select:text; }
 #stage { position:absolute; width:1920px; height:1080px; left:0; top:0; transform-origin:0 0; visibility:hidden; background:var(--bg); color:var(--tx); overflow:hidden; display:grid;
   /* minmax(0, 1fr): the row must not grow with its content (a closed, zero-width side window
@@ -1723,10 +1723,9 @@ if (!DOCK_ONLY) carLoader.load((DEV && new URLSearchParams(location.search).get(
 // page froze for 4 s at every start. They are compiled (and their textures uploaded) a few per frame
 // instead, with the page running in between.
 function warmCar(car) {
-  const meshes = [], groups = new Map();
+  const groups = new Map();
   car.traverse((o) => {
     if (!o.isMesh) return;
-    meshes.push(o);
     const k = [].concat(o.material).map((m) => m.uuid).join();
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(o);
@@ -1737,16 +1736,15 @@ function warmCar(car) {
     const step = () => {
       const t0 = performance.now();
       while (i < list.length && performance.now() - t0 < 25) {
-        const batch = list[i++], was = meshes.map((m) => m.visible);
-        meshes.forEach((m) => { m.visible = false; });
-        batch.forEach((m) => { m.visible = true; });
-        car.visible = true;
+        // compile(object, camera, scene): only the materials under that mesh, with the scene's lights
+        // (compile(scene) prepares every material in it, visible or not: all at once, the freeze).
+        const batch = list[i++];
         try {
-          for (const m of batch) for (const mat of [].concat(m.material)) for (const k in mat) { const v = mat[k]; if (v && v.isTexture) renderer.initTexture(v); }
-          renderer.compile(scene, cam);
+          for (const m of batch) {
+            for (const mat of [].concat(m.material)) for (const k in mat) { const v = mat[k]; if (v && v.isTexture) renderer.initTexture(v); }
+            renderer.compile(m, cam, scene);
+          }
         } catch (e) { console.warn('warmCar', e); }
-        car.visible = false;
-        meshes.forEach((m, j) => { m.visible = was[j]; });
       }
       if (i < list.length) requestAnimationFrame(step); else done();
     };
@@ -1809,10 +1807,11 @@ function onCarLoaded(gltf) {
   // Move the charge cable to the model's real charge socket (its geometry centre in world space).
   const chargeSocket = car.getObjectByName('ChargeSocket') || car.getObjectByName('ChargeFlap');
   if (chargeSocket) { new THREE.Box3().setFromObject(chargeSocket).getCenter(HOT.hCharge); buildChargeGear(); }
-  chargeGear.visible = false; // with the car, once it is ready (warmCar)
+  showChargeGear(false); // with the car, once it is ready (warmCar)
   if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, applyStack, openSideApp, get map() { return map; }, setSideW, onFix, get myPos() { return myPos; }, get mapFollow() { return mapFollow; } };
   placePlates(car);
   controls.target.copy(target);
+  camAnim = null;
   cam.position.copy(presetPos(PRESETS.default));
   // Already plugged in at load: straight in the charge view, as the start's saved picture shows it
   // (moved there from the default view, the car flew in close and out again for 2 s as it appeared).
@@ -1823,9 +1822,12 @@ function onCarLoaded(gltf) {
   car.visible = false;
   warmCar(car).then(() => {
     car.visible = true; carReady = true;
+    showChargeGear(!!S.charging);
+    // One frame with the car drawn before the view shows (else the reveal showed the car-less scene).
+    try { controls.update(); placeHotspots(); renderer.render(scene, cam); lastDraw = performance.now(); } catch (e) {}
     renderer.domElement.style.visibility = '';
     stage.classList.add('carReady');
-    chargeGear.visible = !!S.charging;
+    showChargeGear(!!S.charging);
     performance.mark('car-ready');
     wake(2000);
   });
@@ -2197,6 +2199,11 @@ const HOT = { hTrunk: new THREE.Vector3(0, 1.25, -2.45), hCharge: new THREE.Vect
   hShade: new THREE.Vector3(0, 1.75, -0.4) };
 // ---------- charging, as in Tesla: a cable in the charge flap, its plug glowing green ----------
 const chargeGear = new THREE.Group(); chargeGear.visible = false; scene.add(chargeGear);
+// The plug's green light is always in the scene (off, intensity 0, with the gear hidden): the number of
+// lights is part of every material's shader, and a light appearing with the charge gear recompiled
+// them all at once (a 2.8 s freeze at a start while charging).
+const chargeLight = new THREE.PointLight(0x35e07a, 0, 1.4); scene.add(chargeLight);
+function showChargeGear(v) { chargeGear.visible = v; if (!v) chargeLight.intensity = 0; }
 // Built once at init with the default port, and again once the car has loaded from the real charge
 // socket's place in the model (so the cable meets the actual port, not a guessed spot).
 function buildChargeGear() {
@@ -2244,8 +2251,7 @@ function buildChargeGear() {
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.014, 10, 32), glowMat);
   ring.rotation.y = Math.PI / 2; ring.position.copy(port).add(new THREE.Vector3(-0.005, 0, 0));
   chargeGear.add(ring);
-  const glow = new THREE.PointLight(0x35e07a, 1.2, 1.4); glow.position.copy(port).add(new THREE.Vector3(-0.25, 0, 0));
-  chargeGear.add(glow);
+  const glow = chargeLight; glow.position.copy(port).add(new THREE.Vector3(-0.25, 0, 0)); // the scene's own (see chargeLight)
   // Energy flowing along the cable into the car: short glowing pulses that travel from the ground
   // end to the flap (the path runs flap → ground, so they move from t=1 towards t=0).
   const pulseMat = new THREE.MeshBasicMaterial({ color: 0x5dff9a, transparent: true, opacity: 0.95 });
@@ -3107,14 +3113,16 @@ function setCharge(v, fromCar) {
   S.charging = v;
   // Not before the car is in: the start's saved car picture shows a station of its own, and this one
   // drawn under it (without the car) looked like a second station beside it.
-  chargeGear.visible = v && carReady;
+  showChargeGear(v && carReady);
   $('battBox').classList.toggle('charging', v); // the status bar's battery shows its charging look
   $('chargeInfo').classList.toggle('show', v);
   updateChargeInfo();
   wake(1500);
   $('hCharge').style.color = v ? 'var(--ok)' : '';
-  if (v) { if (carObj) camTo('charge'); } // before the car is in, its load puts the view there at once
-  else if (S.gear === 'P' && !current) camTo('default'); // back to the usual view after charging
+  // Before the car is shown the view jumps there (animated while hidden, it was revealed mid-flight).
+  const jump = (p, t) => { camAnim = null; cam.position.copy(presetPos(p, t)); controls.target.copy(t); };
+  if (v) { if (carReady) camTo('charge'); else if (carObj && S.gear === 'P') jump(PRESETS.charge, CHARGE_TARGET); }
+  else if (S.gear === 'P' && !current) { if (carReady) camTo('default'); else if (carObj) jump(PRESETS.default, target); } // back to the usual view after charging
   refreshCard();
 }
 // Sunshade opening in percent (0 closed, 100 fully back), like the window percentages.
@@ -3651,7 +3659,8 @@ function buildMap() {
 setTimeout(() => { if (!mapEmbedded && !(window.YunusNative && YunusNative.embedApp)) startMap(); }, 8000);
 // On the car, Maps is started as soon as the page is laid out, not after the 3D car's load (~4.5 s):
 // the start's saved car picture is already on screen, and Maps starts in its own process.
-if (window.YunusNative && YunusNative.embedApp) requestAnimationFrame(() => requestAnimationFrame(() => { if (!mapAreaStarted) startMapArea(); }));
+// Yunus's own map (MapLibre) still starts after the car: built at once it held the 3D car back ~5 s.
+if (window.YunusNative && YunusNative.embedApp) requestAnimationFrame(() => requestAnimationFrame(() => { if (mapAreaStarted) return; if (S.set.navApp === 'yunus') { try { YunusNative.embedVisible('map', false); } catch {} } else startMapArea(); }));
 // On the car the map area is the real Google Maps app, run inside Yunus on a private virtual
 // display (see AppEmbed/ShellHelper in the app); Yunus's own map is the fallback and the desktop
 // preview's map. A Yunus card over the area hides Maps while it is open.
