@@ -2717,7 +2717,7 @@ let lastFrame = performance.now(), cardsAt = 0;
 // The sizes run along the screen's long side: widths in landscape, heights in portrait (where the
 // dock's two rows take 224 px of the 1920).
 const CAR_W = 720;
-const LEN = () => (PORTRAIT ? 1920 - 224 - 48 : 1920); // upright: less the dock's two rows and the status bar
+const LEN = () => (PORTRAIT ? 1920 - 224 - 56 : 1920); // upright: less the dock's two rows and the status bar (56 px; 48 ran 8 px past the screen)
 const THIRDS = () => (PORTRAIT ? Math.round(LEN() / 3) : 640);
 const axisPos = (e) => (PORTRAIT ? e.clientY : e.clientX);
 // Landscape with the third window under the map (setting): its size is then a height, and the car
@@ -2834,8 +2834,10 @@ function syncEmbedNow() {
   const sigOpen = !!(sigW.left || sigW.right);
   if (sidePkg && !sigOpen) embedSide();
   if (!mapEmbedded || sigOpen) return;
-  const r = $('map').getBoundingClientRect();
-  if (r.width < 80 || r.height < 80 || current || appTabOn()) YunusNative.embedVisible('map', false); // map area closed, a card over it, or the app's tab
+  const r = $('map').getBoundingClientRect(), wrap = $('mapWrap').getBoundingClientRect();
+  // The area's own row too: upright with the car taking it all, the row is 0 px but the map kept a
+  // height and Maps covered the dock.
+  if (r.width < 80 || r.height < 80 || wrap.height < 80 || current || appTabOn()) YunusNative.embedVisible('map', false); // map area closed, a card over it, or the app's tab
   else startMapArea();
 }
 $('divider').onpointerdown = (e) => {
