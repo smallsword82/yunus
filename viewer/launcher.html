@@ -732,6 +732,7 @@ html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.map
 
 /* cards (Tesla: apps open over the map, never replace it) */
 #card { position:absolute; left:20px; right:20px; bottom:0; height:600px; background:var(--pn); border-radius:24px 24px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,.45); transform:translateY(105%); transition:transform .35s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1), border-radius .3s; z-index:5; display:flex; flex-direction:column; }
+#stage:not(.carReady) .hot, #stage:not(.carReady) .glassDot { visibility:hidden; } /* the car's keys only with the car */
 #card.open { transform:none; visibility:visible; transition:transform .35s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1), border-radius .3s, visibility 0s; }
 /* Closed it is hidden once it has slid out: pushed below the map column, it lay over the third window
    under the map (stacked layout) and over the dock upright. */
@@ -985,20 +986,6 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
     <div id="fpsMeter"></div>
     <div id="limitSign" class="hide"><span id="limitVal">50</span></div>
     <div id="car3d"></div>
-    <script>
-      // The previous start's first view of the car, put up while the page is still parsing so the
-      // car shows at once; the 3D code fades it out after its first frame (see SNAP_KEY).
-      try {
-        var snap = JSON.parse(localStorage.getItem('carSnap') || 'null'), snapBox = document.getElementById('car3d');
-        if (snap && Math.abs(snap.w / snap.h - snapBox.clientWidth / snapBox.clientHeight) < 0.02) {
-          var snapImg = new Image();
-          snapImg.id = 'carSnap';
-          snapImg.src = snap.url;
-          snapImg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;transition:opacity .25s';
-          snapBox.appendChild(snapImg);
-        }
-      } catch (e) {}
-    </script>
     <div id="rearCam"><canvas id="rearCanvas" width="720" height="180"></canvas><button id="rearClose" aria-label="Dikiz aynasını kapat"><i class="ti ti-x"></i></button></div>
     <div id="bsCam"><canvas id="bsCanvas" width="672" height="400"></canvas><div class="bsLbl"><i class="ti ti-arrow-big-left" id="bsArrow"></i><span id="bsTxt">Sol kamera</span></div></div>
     <button class="hot" id="hTrunk" data-act="trunk"><b>Aç</b><span>Bagaj</span></button>
@@ -1577,13 +1564,9 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * stageScale * (window.visu
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.localClippingEnabled = true; // the sunshade is cut back by a clipping plane
 box.appendChild(renderer.domElement);
-// The previous start's first view of the car (put up by the inline script after #car3d) stays
-// until the 3D car draws its first frame, so the car is on screen at once instead of after the
-// model load and shader compile (~4 s on the head unit). Saved again on every start, so it
-// follows the paint colour.
-const SNAP_KEY = 'carSnap';
-let snapImg = document.getElementById('carSnap'), snapSaveAt = 0;
-if (snapImg) box.appendChild(snapImg); // keep it above the canvas
+renderer.domElement.style.visibility = 'hidden'; // nothing of the 3D view (roof blind, plates) before the car itself is ready
+// No saved picture of the car stands in for it at the start: what shows is the live car or nothing.
+try { localStorage.removeItem('carSnap'); } catch {}
 const scene = new THREE.Scene();
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const cam = new THREE.PerspectiveCamera(30, 720 / 968, 0.05, 300);
@@ -1707,7 +1690,7 @@ function stepTraffic(dt) {
   }
 }
 
-let baseRadius = 14, paintMats = [], upperMeshes = [], carObj = null;
+let baseRadius = 14, paintMats = [], upperMeshes = [], carObj = null, carReady = false; // ready: its shaders compiled (warmCar)
 const target = new THREE.Vector3(0, 0.6, 0);
 let camAnim = null;
 // While driving the camera looks at the road ahead of the car, so the car sits low and small in
@@ -1735,6 +1718,41 @@ const DEVICE = !!window.YunusNative;
 if (DEVICE) S.tyres = { FL: null, FR: null, RL: null, RR: null };
 S.tyreState = {}; // TYRE_PRESSURE_STATE_*: 0 normal, 1 over, 2 under
 if (!DOCK_ONLY) carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
+// The head unit's WebGL compiles shaders one after another on the page's own thread (no
+// KHR_parallel_shader_compile): the car's first draw compiled its 39 materials at once and the whole
+// page froze for 4 s at every start. They are compiled (and their textures uploaded) a few per frame
+// instead, with the page running in between.
+function warmCar(car) {
+  const meshes = [], groups = new Map();
+  car.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes.push(o);
+    const k = [].concat(o.material).map((m) => m.uuid).join();
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(o);
+  });
+  const list = [...groups.values()];
+  return new Promise((done) => {
+    let i = 0;
+    const step = () => {
+      const t0 = performance.now();
+      while (i < list.length && performance.now() - t0 < 25) {
+        const batch = list[i++], was = meshes.map((m) => m.visible);
+        meshes.forEach((m) => { m.visible = false; });
+        batch.forEach((m) => { m.visible = true; });
+        car.visible = true;
+        try {
+          for (const m of batch) for (const mat of [].concat(m.material)) for (const k in mat) { const v = mat[k]; if (v && v.isTexture) renderer.initTexture(v); }
+          renderer.compile(scene, cam);
+        } catch (e) { console.warn('warmCar', e); }
+        car.visible = false;
+        meshes.forEach((m, j) => { m.visible = was[j]; });
+      }
+      if (i < list.length) requestAnimationFrame(step); else done();
+    };
+    requestAnimationFrame(step);
+  });
+}
 function onCarLoaded(gltf) {
   performance.mark('car-loaded');
   const car = gltf.scene; carObj = car;
@@ -1750,6 +1768,15 @@ function onCarLoaded(gltf) {
   // Close enough to read the plate, far enough to keep the drive-view preset reachable.
   controls.minDistance = baseRadius * 0.25;
   controls.maxDistance = baseRadius * 1.3;
+  // Glass without transmission: a transmissive material makes three.js draw the whole scene a second
+  // time every frame (into a texture, without tone mapping, so every material compiled twice at the
+  // start: the page froze 5 s). Plain see-through tinted glass looks the same at this size.
+  car.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material)) if (m.transmission > 0) {
+      m.transmission = 0; m.transparent = true; m.opacity = Math.min(m.opacity, 0.32); m.depthWrite = false; m.needsUpdate = true;
+    }
+  });
   car.traverse((o) => {
     if (!o.isMesh) return;
     // Match paint by material, not mesh name: the split-off parts also carry dark trim and
@@ -1782,7 +1809,7 @@ function onCarLoaded(gltf) {
   // Move the charge cable to the model's real charge socket (its geometry centre in world space).
   const chargeSocket = car.getObjectByName('ChargeSocket') || car.getObjectByName('ChargeFlap');
   if (chargeSocket) { new THREE.Box3().setFromObject(chargeSocket).getCenter(HOT.hCharge); buildChargeGear(); }
-  chargeGear.visible = !!S.charging;
+  chargeGear.visible = false; // with the car, once it is ready (warmCar)
   if (DEV) window.__dbg = { car, cam, camTo, controls, S, setCarW, wake, applyStack, openSideApp, get map() { return map; }, setSideW, onFix, get myPos() { return myPos; }, get mapFollow() { return mapFollow; } };
   placePlates(car);
   controls.target.copy(target);
@@ -1792,8 +1819,16 @@ function onCarLoaded(gltf) {
   if (S.charging && S.gear === 'P') { cam.position.copy(presetPos(PRESETS.charge, CHARGE_TARGET)); controls.target.copy(CHARGE_TARGET); }
   // Performance mode only draws on demand; wake the loop so the freshly loaded car is drawn
   // (and then kept on screen) instead of staying black until the first touch.
-  wake(2000);
-  if (S.gear === 'P') snapSaveAt = performance.now() + 1500; // settled default view for next start
+  // Shown once its shaders are compiled, a few a frame (warmCar), the page running meanwhile.
+  car.visible = false;
+  warmCar(car).then(() => {
+    car.visible = true; carReady = true;
+    renderer.domElement.style.visibility = '';
+    stage.classList.add('carReady');
+    chargeGear.visible = !!S.charging;
+    performance.mark('car-ready');
+    wake(2000);
+  });
   // Give the car a couple of frames on screen before the map starts its own heavy work.
   if (!mapAreaStarted) setTimeout(startMapArea, 300);
 }
@@ -2249,7 +2284,7 @@ function placeHotspots() {
     const facing = id === 'hTrunk' ? toCam.z < 0.1 : id === 'hShade' ? toCam.y > 0.25 && !!SHADE.node : toCam.x < -0.3;
     el.style.left = ((v.x + 1) / 2 * w) + 'px';
     el.style.top = ((1 - v.y) / 2 * h) + 'px';
-    el.style.opacity = (S.gear === 'P' && facing && carObj) ? 1 : 0;
+    el.style.opacity = (S.gear === 'P' && facing && carReady) ? 1 : 0;
     el.style.pointerEvents = el.style.opacity === '1' ? 'auto' : 'none';
   }
   placeGlassDots();
@@ -2975,11 +3010,6 @@ renderer.setAnimationLoop(() => {
     placeHotspots();
     renderer.render(scene, cam);
     lastDraw = now; draws++;
-    if (carObj && snapImg) { const img = snapImg; snapImg = null; img.style.opacity = 0; setTimeout(() => img.remove(), 300); }
-    if (snapSaveAt && now > snapSaveAt && !camAnim) {
-      snapSaveAt = 0; // read straight after render, while the drawing buffer still holds the frame
-      try { localStorage.setItem(SNAP_KEY, JSON.stringify({ w: box.clientWidth, h: box.clientHeight, url: renderer.domElement.toDataURL('image/webp', 0.85) })); } catch {}
-    }
   }
   if (now - fpsAt >= 1000) {
     $('fpsMeter').textContent = `${Math.round(frames * 1000 / (now - fpsAt))} fps · 3D ${Math.round(draws * 1000 / (now - fpsAt))}/sn${S.set.perf ? ' · performans' : ''}`;
@@ -3077,7 +3107,7 @@ function setCharge(v, fromCar) {
   S.charging = v;
   // Not before the car is in: the start's saved car picture shows a station of its own, and this one
   // drawn under it (without the car) looked like a second station beside it.
-  chargeGear.visible = v && !!carObj;
+  chargeGear.visible = v && carReady;
   $('battBox').classList.toggle('charging', v); // the status bar's battery shows its charging look
   $('chargeInfo').classList.toggle('show', v);
   updateChargeInfo();
