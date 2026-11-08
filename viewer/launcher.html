@@ -3183,7 +3183,8 @@ $('sigR').onclick = (e) => { e.stopPropagation(); if (!DEVICE) setSignal('right'
 // the horizon, wide enough to show the car's own side, as a door mirror does. Chosen on the car.
 // ("flat", rot: the plain camera picture turned 90° and stretched, the earlier view.)
 // On the upright screen the window is wide and low: wider, and a little higher, to keep the next lane.
-const SIDE_CAM_PORTRAIT = { pitch: 30, hfov: 95 };
+// Upright: lower and wider, and turned a touch further out (the car's side took too much of it).
+const SIDE_CAM_PORTRAIT = { left: { pitch: 30, hfov: 95, yaw: -5 }, right: { pitch: 30, hfov: 95, yaw: 5 } };
 const SIDE_CAM = {
   left: { mode: 'dewarp', sector: 1, back: -1, yaw: -10, pitch: 50, hfov: 65, ry: 0.6, roll: -40, mirror: true },
   right: { mode: 'dewarp', sector: 2, back: 1, yaw: -5, pitch: 50, hfov: 65, ry: 0.6, roll: 40, mirror: true },
@@ -3259,7 +3260,7 @@ function updateBlindSpot() {
       if (sigW[bsSide === 'left' ? 'right' : 'left']) setSigCol(null);
       $('sigSpot').classList.toggle('right', bsSide === 'right');
       const [x, y, w, h] = screenRect($('sigSpot'));
-      YunusNative.sideCam(x, y, w, h, JSON.stringify(PORTRAIT ? Object.assign({}, SIDE_CAM[bsSide], SIDE_CAM_PORTRAIT) : SIDE_CAM[bsSide]));
+      YunusNative.sideCam(x, y, w, h, JSON.stringify(PORTRAIT ? Object.assign({}, SIDE_CAM[bsSide], SIDE_CAM_PORTRAIT[bsSide]) : SIDE_CAM[bsSide]));
       // The column opens with the camera's first frame (sideCamReady), not before: a column waiting
       // for the camera was black. Without a frame in 1.5 s it opens anyway.
       if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = setTimeout(sigCamReady, 1500); }
