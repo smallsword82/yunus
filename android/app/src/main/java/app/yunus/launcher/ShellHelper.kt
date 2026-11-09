@@ -769,6 +769,52 @@ private object CarWatch {
                     val now = try { sd.javaClass.getMethod("getDoorLock").invoke(sd) } catch (t: Throwable) { "?: ${t.cause ?: t}" }
                     System.err.println("cmd lockViaSetting value=$value -> $r (getDoorLock now=$now)")
                 }
+                "lockOff" -> {
+                    // setting.setLockOff(int) (introspect-dilink3.txt:1457) — a sibling of setDoorLock on
+                    // the Setting device, never probed. Likely behind the same 0x800003E8 signature gate,
+                    // but free to try. value passed through (1 = on by default); semantics unknown.
+                    val sd = settingDev ?: run { System.err.println("cmd lockOff: no setting device"); return@post }
+                    val value = o.optInt("value", if (o.optBoolean("on", true)) 1 else 0)
+                    val r = try { sd.javaClass.getMethod("setLockOff", Integer.TYPE).invoke(sd, value) } catch (t: Throwable) { "refused: ${t.cause ?: t}" }
+                    System.err.println("cmd lockOff value=$value -> $r")
+                }
+                "remoteUnlock" -> {
+                    // setting.setRemoteCtlUnlockingState(int) (introspect-dilink3.txt:1484) — paired with
+                    // getRemoteCtlUnlockingState (1343) and onRemoteCtlUnlockingStateChanged (1623). The
+                    // "remote control unlocking" state setter; never probed. Same gate likely.
+                    val sd = settingDev ?: run { System.err.println("cmd remoteUnlock: no setting device"); return@post }
+                    val value = o.optInt("value", if (o.optBoolean("on", true)) 1 else 0)
+                    val r = try { sd.javaClass.getMethod("setRemoteCtlUnlockingState", Integer.TYPE).invoke(sd, value) } catch (t: Throwable) { "refused: ${t.cause ?: t}" }
+                    val now = try { sd.javaClass.getMethod("getRemoteCtlUnlockingState").invoke(sd) } catch (t: Throwable) { "?: ${t.cause ?: t}" }
+                    System.err.println("cmd remoteUnlock value=$value -> $r (state now=$now)")
+                }
+                "ikey" -> {
+                    // BYD IKEY = the Setting device's Bluetooth keyless-entry subsystem. Hypothesis
+                    // (KILIT_IMZA_TAVANI.md): central lock (setDoorLock) is refused because no trusted
+                    // phone key is registered; the full Kinex app locks via the Setting device with an
+                    // AES-encrypted (kav.bin) method name, IKEY being the strongest candidate.
+                    // Reads the car's own BT MAC + IKEY low-power mode, registers a MAC via
+                    // sendBTMacToIKEY(byte[6]), then — if {retry:true} — re-tries setDoorLock.
+                    // introspect-dilink3.txt: getBTMacAddr 1243, getIKEYBTLowPowerMode 1284, sendBTMacToIKEY 1387.
+                    val sd = settingDev ?: run { System.err.println("cmd ikey: no setting device"); return@post }
+                    val c2 = sd.javaClass
+                    val carMac = try { c2.getMethod("getBTMacAddr").invoke(sd) as? ByteArray } catch (t: Throwable) { System.err.println("ikey getBTMacAddr: ${t.cause ?: t}"); null }
+                    val lowPwr = try { c2.getMethod("getIKEYBTLowPowerMode").invoke(sd) } catch (t: Throwable) { "?: ${t.cause ?: t}" }
+                    // MAC to register: explicit {mac:"aa:bb:cc:dd:ee:ff"} arg, else the car's own.
+                    val macStr = o.optString("mac", "")
+                    val mac: ByteArray? = if (macStr.isNotEmpty())
+                        try { macStr.split(":", "-").map { it.toInt(16).toByte() }.toByteArray() } catch (t: Throwable) { System.err.println("ikey bad mac: $t"); null }
+                    else carMac
+                    val sent = if (mac != null) try { c2.getMethod("sendBTMacToIKEY", ByteArray::class.java).invoke(sd, mac) } catch (t: Throwable) { "refused: ${t.cause ?: t}" } else "no mac"
+                    val fmt = { b: ByteArray? -> b?.joinToString(":") { String.format("%02x", it) } }
+                    System.err.println("cmd ikey carMac=${fmt(carMac)} lowPwr=$lowPwr sendMac=${fmt(mac)} -> $sent")
+                    if (o.optBoolean("retry", false)) {
+                        val v = o.optInt("value", 1)
+                        val r = try { c2.getMethod("setDoorLock", Integer.TYPE).invoke(sd, v) } catch (t: Throwable) { "refused: ${t.cause ?: t}" }
+                        val now = try { c2.getMethod("getDoorLock").invoke(sd) } catch (t: Throwable) { "?: ${t.cause ?: t}" }
+                        System.err.println("cmd ikey retry setDoorLock=$v -> $r (getDoorLock now=$now)")
+                    }
+                }
             }
         } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
     }
