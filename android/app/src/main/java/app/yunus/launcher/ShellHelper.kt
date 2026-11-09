@@ -552,8 +552,11 @@ private object CarWatch {
     // so upright it would push the sides off and leave the bars on. Top and bottom of the screen as it
     // is turned now, in that frame (the status bar 84 px, the navigation bar 90 px).
     @Volatile var voiceUp = false // the status bar back on the screen for the voice assistant
-    private fun displayInfo() = Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null)
-        .let { it.javaClass.getMethod("getDisplayInfo", Integer.TYPE).invoke(it, 0) }
+    // Looked up once: the turn watch asks 20 times a second.
+    private val displayGlobal by lazy { Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null) }
+    private val displayInfoM by lazy { displayGlobal.javaClass.getMethod("getDisplayInfo", Integer.TYPE) }
+    private var rotationF: java.lang.reflect.Field? = null
+    private fun displayInfo() = displayInfoM.invoke(displayGlobal, 0)
     fun barsCommand(): String {
         val top = if (voiceUp) 0 else -84
         val bottom = -90
@@ -569,7 +572,7 @@ private object CarWatch {
     private var barsRotation = -1
     private fun keepBars() { try {
         val i = displayInfo(); val c = i.javaClass
-        val rot = c.getField("rotation").getInt(i)
+        val rot = (rotationF ?: c.getField("rotation").also { rotationF = it }).getInt(i)
         if (rot == barsRotation) return
         if (listOf("overscanLeft", "overscanTop", "overscanRight", "overscanBottom").any { c.getField(it).getInt(i) < 0 })
             setBars()
@@ -980,13 +983,16 @@ private object CarWatch {
         // or a value sent as a double would go out as int 0.
         for ((k, v) in cand.sortedBy { it.second.toDouble() == 0.0 }) {
             if (v.toDouble() in invalid) continue
-            val id = String.format("0x%08X", type)
+            // The id's text once per id (String.format on every event: one value alone comes 20 times a second).
+            val id = ids[type] ?: ("0x" + Integer.toHexString(type).uppercase(java.util.Locale.ROOT).padStart(8, '0')).also { ids[type] = it }
             val line = "ev $dev $id $k $v"
             synchronized(last) { if (last.put("$dev $id", line) == line) return }
             send(line)
             return
         }
     }
+
+    private val ids = java.util.concurrent.ConcurrentHashMap<Int, String>()
 
     private fun send(line: String) {
         for (o in subscribers) try { synchronized(o) { o.write("$line\n".toByteArray()); o.flush() } } catch (_: Throwable) { subscribers.remove(o) }

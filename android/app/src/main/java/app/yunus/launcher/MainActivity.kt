@@ -673,7 +673,8 @@ class MainActivity : Activity() {
                 val quoted = JSONObject.quote(message)
                 web.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
                 // The dock over other apps gets the same, hidden or not, so it is up to date when it comes up.
-                dockCache.remove(cacheKey(message)); dockCache[cacheKey(message)] = message
+                val key = cacheKey(message) // once: it parses the message
+                dockCache.remove(key); dockCache[key] = message
                 if (dockCache.size > 600) dockCache.remove(dockCache.keys.first())
                 if (::edge.isInitialized) edge.dockWeb()?.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
             }
@@ -703,10 +704,19 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // The display's own size when it differs from the window (Android Auto: 1920×1080, fitted into
         // the window keeping its shape); 0: the window's size. cw×ch: the picture's size in the window.
         var vw = 0; var vh = 0; var w = 0; var h = 0; var cw = 0f; var ch = 0f
+        var dw = 0; var dh = 0 // the display's size as last set (see resize)
         var cover: android.view.View? = null // the page's colour over the window while its app starts
         var starting = false // a launch sent, its "shown" not back yet
     }
     private val slots = HashMap<String, Slot>()
+    // A display is never given a size of zero or less: the window manager takes it as it comes and
+    // dies on it ("width and height must be positive" on its own thread), and the whole system
+    // restarts. Seen twice on the car, coming back to Yunus from another app: the display's metrics
+    // read 0×0 there, and the one-pixel resize below set it to 0 × -1.
+    private fun resize(d: android.hardware.display.VirtualDisplay, w: Int, h: Int, dpi: Int) {
+        if (w < 1 || h < 1 || dpi < 1) { android.util.Log.w("Yunus", "display resize ${w}x$h@$dpi skipped"); return }
+        try { d.resize(w, h, dpi) } catch (t: Throwable) { android.util.Log.w("Yunus", "display resize: $t") }
+    }
     // The window shows black until its app's first frame (a cold start: seconds): the page's colour
     // covers it until the helper says the app is shown ("shown <display>"), at most 10 s.
     var coverColor = 0xff0b0c0e.toInt()
@@ -757,6 +767,8 @@ private class AppEmbed(private val activity: Activity, private val root: android
     fun show(name: String, packages: List<String>, x: Int, y: Int, w: Int, h: Int, onReady: (Int) -> Unit) {
         // -1: none of the apps is installed, so the page keeps its own content there.
         val launch = packages.firstNotNullOfOrNull { activity.packageManager.getLaunchIntentForPackage(it)?.component } ?: return onReady(-1)
+        // No area (a layout in between): nothing to show an app in, and no display of that size (see resize).
+        if (w < 1 || h < 1) { android.util.Log.w("Yunus", "embed $name ${w}x$h skipped"); return }
         val slot = slots.getOrPut(name) { newSlot(name) }
         slot.box.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
         // Android Auto lays its 16:9 picture out for a car screen: in a window-sized display it came out
@@ -814,8 +826,9 @@ private class AppEmbed(private val activity: Activity, private val root: android
             }
         }
         slot.view.holder.setFixedSize(dw, dh)
+        slot.dw = dw; slot.dh = dh
         val existing = slot.display
-        if (existing != null) { existing.resize(dw, dh, dpi); launchIfNew(); onReady(slot.displayId); return }
+        if (existing != null) { resize(existing, dw, dh, dpi); launchIfNew(); onReady(slot.displayId); return }
         // The display is made once its surface is there (now, or when the view's surface comes).
         slot.pending = { surface ->
             val dm = activity.getSystemService(android.hardware.display.DisplayManager::class.java)
@@ -852,10 +865,13 @@ private class AppEmbed(private val activity: Activity, private val root: android
                 d.surface = holder.surface
                 // The app draws only when something changes: the new surface stayed black for a few
                 // seconds (back to Yunus from another app). A pixel's resize and back makes it draw now.
+                // The size is the one show() set, not the display's metrics (they read 0×0 here at
+                // times, see resize), and the size of the moment for the way back (a show() in between
+                // was undone by the old one).
                 val dpi = activity.resources.displayMetrics.densityDpi
-                val m = android.util.DisplayMetrics().also { d.display.getRealMetrics(it) }
-                d.resize(m.widthPixels, m.heightPixels - 1, dpi)
-                root.postDelayed({ if (slot.display === d) d.resize(m.widthPixels, m.heightPixels, dpi) }, 60)
+                if (slot.dw < 1 || slot.dh < 2) return
+                resize(d, slot.dw, slot.dh - 1, dpi)
+                root.postDelayed({ if (slot.display === d) resize(d, slot.dw, slot.dh, dpi) }, 60)
             }
             override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {}
             override fun surfaceDestroyed(holder: android.view.SurfaceHolder) { slot.display?.surface = null }
@@ -1362,21 +1378,39 @@ private class CarHal(private val ctx: android.content.Context, private val want:
         try { c.getMethod("getAllStatus").invoke(dev) } catch (_: Throwable) { }
     }
 
+    // The car pushes these all the time (tens a second, on the app's main thread), and most are not
+    // on the page's list: the id's text is made once per id (String.format on each event, three
+    // times, was the largest single cost on the main thread with the screen still), the value's
+    // fields are looked up once, and an event not wanted costs a map lookup.
+    private val ids = java.util.concurrent.ConcurrentHashMap<Int, String>()
+    private fun idOf(type: Int): String = ids[type] ?: ("0x" + Integer.toHexString(type).uppercase(java.util.Locale.ROOT).padStart(8, '0')).also { ids[type] = it }
+    private val FIELDS = arrayOf("int", "float", "double")
+    @Volatile private var valueClass: Class<*>? = null
+    private var valueFields: Array<java.lang.reflect.Field?> = arrayOfNulls(3)
+    private fun fieldsOf(c: Class<*>): Array<java.lang.reflect.Field?> {
+        if (valueClass === c) return valueFields
+        val f = Array(3) { i -> try { c.getField(FIELDS[i] + "Value") } catch (_: Throwable) { null } }
+        valueFields = f; valueClass = c
+        return f
+    }
+
     private fun onEvent(dev: String, type: Int, value: Any?) {
-        if (value == null || !want(dev + " " + String.format("0x%08X", type))) return
-        val o = JSONObject().put("dev", dev).put("type", String.format("0x%08X", type))
+        if (value == null) return
+        val id = idOf(type)
+        if (!want("$dev $id")) return
+        val o = JSONObject().put("dev", dev).put("type", id)
         var meaningful = false
-        for (f in arrayOf("intValue", "floatValue", "doubleValue")) {
+        val fields = fieldsOf(value.javaClass)
+        for (i in 0..2) {
             try {
-                val v = value.javaClass.getField(f).get(value) as? Number ?: continue
+                val v = fields[i]?.get(value) as? Number ?: continue
                 if (v.toDouble() in invalid) continue
-                o.put(f.removeSuffix("Value"), v); meaningful = true
+                o.put(FIELDS[i], v); meaningful = true
             } catch (_: Throwable) { }
         }
         if (!meaningful) return
-        val key = dev + "|" + String.format("0x%08X", type)
         val s = o.toString()
-        if (last.put(key, s) == s) return // only forward on change
+        if (last.put("$dev|$id", s) == s) return // only forward on change
         emit(JSONObject().put("carHal", o).toString())
     }
 

@@ -3,8 +3,93 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1920, user-scalable=no">
-<!-- Start reading the car model while the scripts are still being parsed. -->
-<link rel="preload" href="dolphin_parts.glb" as="fetch" crossorigin>
+<!-- At a start the car showed 7-8 s in. Two things are started here, before anything else, on a
+     worker (the page's own thread is busy starting the page for its first seconds):
+     - the car model is read: on the page's thread its 9 MB took 3-4 s, every piece waiting its
+       turn; on a worker it is there in a quarter of a second;
+     - its pictures (21, 13 megapixels) are decoded there as soon as it is read: decoded when
+       three.js asked for them, they were what the car waited for in the second after;
+     - the shaders of the last start (kept by saveShaders) are compiled on a context of the
+       worker's own. The head unit's WebView keeps no shader cache across starts and compiles a
+       program in ~130 ms: 24 at a start, 3 s, after the model had arrived. A program compiled
+       once in this process costs ~12 ms when three.js asks for the same source again.
+     The modules are asked for here too: the page's script is at the end of the file, and
+     three.js was only asked for when the parser got there. -->
+<link rel="modulepreload" href="vendor/three/build/three.module.js">
+<link rel="modulepreload" href="vendor/three/jsm/loaders/GLTFLoader.js">
+<link rel="modulepreload" href="vendor/three/jsm/utils/BufferGeometryUtils.js">
+<link rel="modulepreload" href="vendor/three/jsm/loaders/DRACOLoader.js">
+<link rel="modulepreload" href="vendor/three/jsm/controls/OrbitControls.js">
+<link rel="modulepreload" href="vendor/three/jsm/environments/RoomEnvironment.js">
+<script>
+(function () {
+  if (location.hash === '#dock' || /[?&]model=/.test(location.search)) return;
+  function work() {
+    var stop = false;
+    // The model's pictures (a .glb: a JSON part, then the bytes): first[i] is the first picture
+    // with the same bytes as picture i (5 of the 26 are stored twice), decoded once.
+    var pictures = function (b) {
+      var dv = new DataView(b), jsonLen = dv.getUint32(12, true), bin = 20 + jsonLen + 8;
+      if (dv.getUint32(0, true) !== 0x46546C67 || dv.getUint32(16, true) !== 0x4E4F534A || dv.getUint32(20 + jsonLen + 4, true) !== 0x004E4942) return null;
+      var json = JSON.parse(new TextDecoder().decode(new Uint8Array(b, 20, jsonLen)));
+      var bytes = (json.images || []).map(function (im) { var v = json.bufferViews[im.bufferView]; return v && !v.buffer ? new Uint8Array(b, bin + (v.byteOffset || 0), v.byteLength) : null; });
+      var same = function (x, y) { if (!x || !y || x.length !== y.length) return false; for (var i = 0; i < x.length; i++) if (x[i] !== y[i]) return false; return true; };
+      var first = bytes.map(function (x, i) { for (var j = 0; j < i; j++) if (same(bytes[j], x)) return j; return i; });
+      return { first: first, blobs: bytes.map(function (x, i) { return x && first[i] === i ? new Blob([x], { type: json.images[i].mimeType }) : null; }) };
+    };
+    onmessage = function (e) {
+      if (e.data === 'stop') { stop = true; return; }
+      fetch(e.data.url).then(function (r) { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(function (b) {
+        var pics = null;
+        try { pics = pictures(b); } catch (err) {}
+        postMessage({ file: b }, [b]); // the pictures' bytes were copied out (Blob) before the file leaves
+        if (!pics) { postMessage({ images: null }); return; }
+        Promise.all(pics.blobs.map(function (blob) { return blob && createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }); }))
+          .then(function (list) { postMessage({ images: list, first: pics.first }, list.filter(Boolean)); }, function () { postMessage({ images: null }); });
+      }, function () { postMessage({ file: null, images: null }); });
+      var saved = null, gl = null;
+      try { saved = JSON.parse(e.data.shaders); } catch (err) {}
+      if (!saved || saved.v !== 1 || !saved.progs || typeof OffscreenCanvas === 'undefined') return;
+      try { gl = new OffscreenCanvas(1, 1).getContext('webgl2'); } catch (err) {}
+      if (!gl) return;
+      var i = 0, waiting = [];
+      var text = function (base, p, k) { return base.slice(0, p[k]) + p[k + 1] + base.slice(base.length - p[k + 2]); };
+      var shader = function (type, src, prog) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); gl.attachShader(prog, s); };
+      var step = function () {
+        while (waiting.length) {
+          if (gl.clientWaitSync(waiting[0].sync, 0, 0) === gl.TIMEOUT_EXPIRED && performance.now() - waiting[0].at < 3000) break;
+          gl.deleteSync(waiting.shift().sync);
+        }
+        // One program at a time waits on the GPU's thread: a call of the page's that needs an answer
+        // from that thread waits behind it. Nothing here asks for one: no status is read.
+        while (!stop && i < saved.progs.length && waiting.length < 1) {
+          var p = saved.progs[i++], prog = gl.createProgram();
+          shader(gl.VERTEX_SHADER, text(saved.base[0], p, 0), prog);
+          shader(gl.FRAGMENT_SHADER, text(saved.base[1], p, 3), prog);
+          gl.linkProgram(prog);
+          waiting.push({ sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), at: performance.now() });
+          gl.flush();
+        }
+        if (waiting.length || (!stop && i < saved.progs.length)) setTimeout(step, 4);
+      };
+      step();
+    };
+  }
+  try {
+    var w = new Worker(URL.createObjectURL(new Blob(['(' + work + ')()'], { type: 'text/javascript' })));
+    var shaders = null;
+    try { shaders = localStorage.getItem('shaderWarm'); } catch (e) {}
+    var gotFile, gotImages;
+    window.yunusEarly = { worker: w, file: new Promise(function (done) { gotFile = done; }), images: new Promise(function (done) { gotImages = done; }) };
+    w.onmessage = function (e) {
+      if ('file' in e.data) gotFile(e.data.file);
+      if ('images' in e.data) gotImages(e.data.images ? e.data : null);
+    };
+    w.onerror = function () { gotFile(null); gotImages(null); };
+    w.postMessage({ url: new URL('dolphin_parts.glb', location.href).href, shaders: shaders });
+  } catch (e) { window.yunusEarly = null; }
+})();
+</script>
 <!-- The car's WebView is Chromium 74 (2019); it lacks CanvasRenderingContext2D.roundRect
      (shipped Chrome 99). Polyfill it before any script runs. Accepts a number or a 1-4
      element radii array [tl, tr, br, bl], matching the spec. -->
@@ -1707,6 +1792,7 @@ const presetPos = (p, center = target) => {
 function camTo(name) {
   const center = name === 'drive' ? DRIVE_TARGET : name === 'charge' ? CHARGE_TARGET : target;
   camAnim = { from: cam.position.clone(), to: presetPos(PRESETS[name], center), fromT: controls.target.clone(), toT: center.clone(), t: 0 };
+  loopKick(); // the flight starts on the next frame, not on the calm loop's next tick
 }
 renderer.domElement.addEventListener('dblclick', () => { if (S.gear === 'P') camTo('default'); });
 
@@ -1721,7 +1807,42 @@ const DEVICE = !!window.YunusNative;
 // Tyre pressures come from the car (Tyre device); until it reports them the card shows "—".
 if (DEVICE) S.tyres = { FL: null, FR: null, RL: null, RR: null };
 S.tyreState = {}; // TYRE_PRESSURE_STATE_*: 0 normal, 1 over, 2 under
-if (!DOCK_ONLY) carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
+// The model's bytes come from the worker started in the head (the first thing the page does);
+// by address where there is none (a file opened from disk, another model for #debug).
+const early = window.yunusEarly || null;
+// Its pictures come from that worker too, decoded: three.js is handed them as if it had read
+// them itself, and a picture stored twice in the model (5 of its 26: 4 megapixels) is one
+// texture. Without the worker's pictures (or 2.5 s without word of them) three.js reads them.
+carLoader.register((parser) => ({ name: 'YUNUS_pictures', beforeRoot() {
+  if (!early || !carBytes) return null;
+  return Promise.race([early.images, new Promise((r) => setTimeout(r, 2500, null))]).then((got) => {
+    try {
+      const json = parser.json;
+      if (!got || !json.images || !json.textures || got.images.length !== json.images.length) return;
+      for (const t of json.textures) {
+        if (t.source !== undefined) t.source = got.first[t.source];
+        for (const k in t.extensions || {}) if (t.extensions[k] && t.extensions[k].source !== undefined) t.extensions[k].source = got.first[t.extensions[k].source];
+      }
+      got.images.forEach((bitmap, i) => {
+        if (!bitmap) return;
+        const t = new THREE.Texture(bitmap);
+        t.needsUpdate = true; t.userData.mimeType = json.images[i].mimeType;
+        parser.sourceCache[i] = Promise.resolve(t);
+      });
+      performance.mark('car-pictures');
+    } catch (e) { console.warn('pictures', e); }
+  });
+} }));
+let carBytes = 0; // the model file's size: what placePlates keeps its spots by
+const carByUrl = () => carLoader.load((DEV && new URLSearchParams(location.search).get('model')) || 'dolphin_parts.glb', onCarLoaded, undefined, () => carLoader.load('dolphin.glb', onCarLoaded));
+if (!DOCK_ONLY) {
+  if (early) early.file.then((buf) => {
+    if (!buf) { carByUrl(); return; }
+    carBytes = buf.byteLength;
+    carLoader.parse(buf, '', onCarLoaded, (e) => { console.warn('car file', e); carBytes = 0; carByUrl(); });
+  });
+  else carByUrl();
+}
 // The head unit's WebGL compiles shaders one after another on the page's own thread (no
 // KHR_parallel_shader_compile): the car's first draw compiled its 39 materials at once and the whole
 // page froze for 4 s at every start. They are compiled (and their textures uploaded) a few per frame
@@ -1738,25 +1859,46 @@ function warmCar(car) {
   // Halos and road pools are the scene's, not the car's, and hidden until lit: compiled here too.
   if (halos.low[0]) list.push([halos.low[0]]);
   if (beams) list.push([beams.low]);
+  // The textures first: the head's worker may still be compiling the last start's programs, and
+  // every one it has done by the time three.js asks for it here is a quick one.
+  const textures = new Set();
+  for (const batch of list) for (const m of batch) for (const mat of [].concat(m.material)) for (const k in mat) { const v = mat[k]; if (v && v.isTexture) textures.add(v); }
+  const jobs = [...textures].map((t) => () => renderer.initTexture(t));
+  jobs.push(() => { if (early) early.worker.postMessage('stop'); });
+  // compile(object, camera, scene): only the materials under that mesh, with the scene's lights
+  // (compile(scene) prepares every material in it, visible or not: all at once, the freeze).
+  for (const batch of list) jobs.push(() => { for (const m of batch) renderer.compile(m, cam, scene); });
   return new Promise((done) => {
     let i = 0;
     const step = () => {
       const t0 = performance.now();
-      while (i < list.length && performance.now() - t0 < 25) {
-        // compile(object, camera, scene): only the materials under that mesh, with the scene's lights
-        // (compile(scene) prepares every material in it, visible or not: all at once, the freeze).
-        const batch = list[i++];
-        try {
-          for (const m of batch) {
-            for (const mat of [].concat(m.material)) for (const k in mat) { const v = mat[k]; if (v && v.isTexture) renderer.initTexture(v); }
-            renderer.compile(m, cam, scene);
-          }
-        } catch (e) { console.warn('warmCar', e); }
+      while (i < jobs.length && performance.now() - t0 < 25) {
+        try { jobs[i++](); } catch (e) { console.warn('warmCar', e); }
       }
-      if (i < list.length) requestAnimationFrame(step); else done();
+      if (i < jobs.length) requestAnimationFrame(step); else done();
     };
     requestAnimationFrame(step);
   });
+}
+// The programs of this start, kept for the next start's early compile (the head's worker). Each
+// source is kept as what differs from the longest one (they differ in a few lines of #define).
+function saveShaders() {
+  try {
+    const gl = renderer.getContext();
+    const list = renderer.info.programs.filter((p) => p.usedTimes > 0 && p.vertexShader && p.fragmentShader).slice(0, 40)
+      .map((p) => [gl.getShaderSource(p.vertexShader), gl.getShaderSource(p.fragmentShader)]).filter((s) => s[0] && s[1]);
+    if (!list.length) return;
+    const base = [0, 1].map((k) => list.reduce((a, s) => (s[k].length > a.length ? s[k] : a), ''));
+    const cut = (s, b) => {
+      const n = Math.min(s.length, b.length); let pre = 0, suf = 0;
+      while (pre < n && s.charCodeAt(pre) === b.charCodeAt(pre)) pre++;
+      while (suf < n - pre && s.charCodeAt(s.length - 1 - suf) === b.charCodeAt(b.length - 1 - suf)) suf++;
+      return [pre, s.slice(pre, s.length - suf), suf];
+    };
+    const text = JSON.stringify({ v: 1, base, progs: list.map((s) => cut(s[0], base[0]).concat(cut(s[1], base[1]))) });
+    if (localStorage.getItem('shaderWarm') !== text) localStorage.setItem('shaderWarm', text);
+    performance.mark('shaders-kept:' + list.length + ':' + text.length);
+  } catch (e) { console.warn('saveShaders', e); }
 }
 function onCarLoaded(gltf) {
   performance.mark('car-loaded');
@@ -1837,6 +1979,7 @@ function onCarLoaded(gltf) {
     showChargeGear(!!S.charging);
     performance.mark('car-ready');
     wake(2000);
+    if (DEVICE) setTimeout(() => { saveShaders(); if (early) early.worker.terminate(); }, 6000);
   });
   // Give the car a couple of frames on screen before the map starts its own heavy work.
   if (!mapAreaStarted) setTimeout(startMapArea, 300);
@@ -2149,21 +2292,33 @@ function drawPlate(text) {
 const plateMat = new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.45, metalness: 0 });
 // Find the bumper surface by casting a ray at plate height, then sit the plate on it.
 function placePlates(car) {
-  car.updateMatrixWorld(true);
-  const ray = new THREE.Raycaster(), geo = new THREE.PlaneGeometry(0.52, 0.11);
+  const geo = new THREE.PlaneGeometry(0.52, 0.11);
   const spots = [{ y: PLATE_Y.front, from: 5, dir: -1 }, { y: PLATE_Y.rear, from: -5, dir: 1 }];
-  for (const s of spots) {
+  // Where the plates sit is found by a ray against the whole car: a quarter of a second of every
+  // start for the two. The spots are kept for this model file (by its size) and these heights.
+  const key = carBytes + ':' + PLATE_Y.front + ':' + PLATE_Y.rear;
+  let kept = null;
+  try { const k = JSON.parse(localStorage.getItem('plateSpots')); if (carBytes && k && k.key === key && k.spots.length === spots.length) kept = k.spots; } catch {}
+  const found = spots.map((s, i) => {
+    if (kept) return kept[i];
+    car.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster();
     ray.set(new THREE.Vector3(0, s.y, s.from), new THREE.Vector3(0, 0, s.dir));
     const hit = ray.intersectObject(car, true)[0];
-    if (!hit) continue;
-    const plate = new THREE.Mesh(geo, plateMat);
+    if (!hit) return null;
     const n = new THREE.Vector3(0, 0, -s.dir);
     if (hit.face) {
       n.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
       n.x = 0; n.normalize();
       if (n.z * -s.dir < 0.5) n.set(0, 0, -s.dir);
     }
-    plate.position.copy(hit.point).addScaledVector(n, 0.012);
+    return hit.point.toArray().concat(n.toArray());
+  });
+  if (!kept && carBytes) try { localStorage.setItem('plateSpots', JSON.stringify({ key, spots: found })); } catch {}
+  for (const at of found) {
+    if (!at) continue;
+    const plate = new THREE.Mesh(geo, plateMat), n = new THREE.Vector3(at[3], at[4], at[5]);
+    plate.position.set(at[0], at[1], at[2]).addScaledVector(n, 0.012);
     plate.lookAt(plate.position.clone().add(n));
     scene.add(plate);
   }
@@ -2965,9 +3120,26 @@ addEventListener('pointerup', endColDrag);
 addEventListener('pointercancel', endColDrag);
 // Double-tap: normal <-> car full screen; from map full screen it returns to normal.
 $('divider').ondblclick = () => setCarW(carW === CAR_W ? LEN() : CAR_W, true);
-renderer.setAnimationLoop(() => {
+// The page's loop. On every vsync only while something moves; parked and still (performance mode)
+// it is run by a timer ten times a second, with no frame asked for in between: a frame asked for on
+// every vsync, only to return at once, kept three threads awake (the app's own, the page's and the
+// compositor: about 15% of a core with nothing on the screen changing).
+var loopRaf = 0, loopTimer = 0; // var: loopKick may be called from code above, before this line has run
+function loopKick() { // on the next vsync, from the timer's wait as well
+  if (loopTimer) { clearTimeout(loopTimer); loopTimer = 0; }
+  if (!loopRaf) loopRaf = requestAnimationFrame(loopRun);
+}
+function loopRun() {
+  loopRaf = 0;
+  let wait = 0;
+  try { wait = loopFrame() || 0; } catch (e) { console.error(e); }
+  if (wait > 0) loopTimer = setTimeout(() => { loopTimer = 0; loopKick(); }, wait);
+  else loopKick();
+}
+// Returns how long nothing needs a frame (ms), or 0 for the next vsync.
+function loopFrame() {
   // The dock overlay has no car or map, and it now stays loaded behind other apps: nothing to run.
-  if (DOCK_ONLY) return;
+  if (DOCK_ONLY) return 1e9;
   // Performance mode, parked and nothing moving: the page's per-frame work ten times a second.
   const tickAt = performance.now();
   // Signalling or charging, parked: only the ticks that draw run the page's per-frame work (all
@@ -2975,7 +3147,8 @@ renderer.setAnimationLoop(() => {
   const blinkKey = (S.signal || S.hazard) ? Math.floor(tickAt / 380) : -1;
   const trayHold = trayOpen || tickAt < trayMovingUntil; // nothing is drawn under the tray anyway
   const due = !trayHold && (blinkKey !== lastBlinkDrawn || (chargeGear.visible && S.chargeState !== 2 && tickAt - lastDraw >= 66));
-  if (S.set.perf && DEVICE && !camAnim && !glassDrag && S.gear !== 'D' && S.gear !== 'R' && !due && tickAt >= awakeUntil && tickAt - lastFrame < 100) return;
+  const calm = S.set.perf && DEVICE && !camAnim && !glassDrag && S.gear !== 'D' && S.gear !== 'R' && tickAt >= awakeUntil;
+  if (calm && !due && tickAt - lastFrame < 100) return loopCalm(tickAt);
   if (camAnim) {
     camAnim.t = Math.min(1, camAnim.t + 0.025);
     const k = 1 - Math.pow(1 - camAnim.t, 3);
@@ -3039,9 +3212,20 @@ renderer.setAnimationLoop(() => {
     $('fpsMeter').textContent = `${Math.round(frames * 1000 / (now - fpsAt))} fps · 3D ${Math.round(draws * 1000 / (now - fpsAt))}/sn${S.set.perf ? ' · performans' : ''}`;
     frames = draws = 0; fpsAt = now;
   }
-});
+  // Still calm after this tick's work (it may have set something moving), the lamps drawn as they are.
+  return calm && !camAnim && !glassDrag && now >= awakeUntil && lastBlinkDrawn === blinkKey ? loopCalm(now) : 0;
+}
+// Parked and still: the next tick in 100 ms, or sooner for what is drawn on a beat (a blinking
+// lamp's next change, the charge glow's next frame).
+function loopCalm(now) {
+  let wait = Math.max(1, 100 - (now - lastFrame));
+  if (S.signal || S.hazard) wait = Math.min(wait, 380 - now % 380 + 1);
+  if (chargeGear.visible && S.chargeState !== 2) wait = Math.min(wait, Math.max(1, 50 - (now - lastDraw))); // woken a frame early: a timer is late by up to one
+  return wait;
+}
 let frames = 0, draws = 0, fpsAt = performance.now(), lastDraw = 0, awakeUntil = 0, lastBlinkDrawn = -1;
-const wake = (ms = 3000) => { awakeUntil = Math.max(awakeUntil, performance.now() + ms); };
+const wake = (ms = 3000) => { awakeUntil = Math.max(awakeUntil, performance.now() + ms); loopKick(); };
+loopKick();
 // Anything touched or changed may set a part moving, so keep drawing for a few seconds after it.
 addEventListener('pointerdown', () => wake(), true);
 addEventListener('click', () => wake(), true);
