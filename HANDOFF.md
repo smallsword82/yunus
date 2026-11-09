@@ -52,6 +52,24 @@ Bulut oturumunda (ADB/SDK yok) yalnız sayfa/doküman işi yapılabilir, derleme
    Gerçek kilit mekanizması yalnız Bluetooth telefon-anahtarı taklidiyle mümkün — bu, BLE paket
    yakalama ve protokol tersine mühendisliği gerektiren ayrı ve çok daha büyük bir iş; istenirse
    sonraki bir oturumda ayrı olarak ele alınabilir.
+7. **>>> İLK ARAÇ BAĞLANTISINDA DENE VE KULLANICIYA HATIRLAT <<< — kör nokta sol/sağ (DOW).**
+   Kullanıcının isteği (9.11.2026): araca bağlanınca bunu dene ve ona hatırlat. Durum: `ADAS_DOW_WARN_LEFT`
+   `0x41800020` ve `ADAS_DOW_WARN_RIGHT` `0x41800022` zaten okunuyor ([ShellHelper.kt:634](android/app/src/main/java/app/yunus/launcher/ShellHelper.kt:634),
+   map [launcher.html:5627-5628](viewer/launcher.html:5627) → `dowL`/`dowR`). Ama 8.11 sürüş kayıtlarında (eski oturum
+   scratchpad `rec*.json`) **sağ 42 kez geldi, sol 0 kez**. Muhtemel sebep: poll `if (v in 0..15)` filtresi —
+   sol bu araçta aralık dışı bir sentinel dönüp eleniyor olabilir. **Test:** `0x41800020`'yi **ham oku** (filtreyi
+   atlayarak gerçek dönen int'i gör), Electro'nun sol/sağ kör nokta tetikleyicisini ground truth alıp sol ve sağ
+   için ayrı ayrı tetikle. Sol kullanılır bir değer veriyorsa `dowL` çalışır; sentinel veriyorsa DOW-sol bu araçta
+   yok, taraf başka kaynaktan gelmeli. NOT: kod yorumu DOW'u "while stopped" (dururken) diyor — Electro'nun
+   sürüşteki tetikleyicisiyle örtüşmeyebilir. Ayrıca kanıtlandı: BSD (`0x41800008`) taraf vermiyor (aracın kendi
+   `BlindSpotMonitor` logu da bsdState=1/2). Ayrıntı: memory `blind-spot-side-electro`.
+   **9.11 canlı sürüş (yardımcı TCP ev-akışı yakalaması, logcat değil):** kullanıcı kör noktada araç olduğunu
+   doğruladı. **Yeni "var/yok" sinyali bulundu: `ADAS 0x0D500018` = 2 (araç var) / 1 (temiz), 6 temiz olay** —
+   ama taraf vermiyor (sol/sağ aynı; `0x12200046`, `0x32D00034` de aynı). **DOW `0x41800020/22` bu yakalamada
+   ateşlemedi** (1'er satır) çünkü akış yardımcının **filtreli poll**'undan (`v in 0..15`) geçiyor; önceki logcat
+   sürüşü sağı ham yakalamıştı. **Sonuç: DOW tarafı için logcat kullan (ham), yardımcı TCP akışı değil** — ya da
+   ShellHelper'a filtresiz DOW okuması ekle. Hipotez: DOW yalnız o yöne **sinyal verince** ateşliyor; sıradaki
+   pasif test = sinyalli sür + DOW'u logcat'ten ham yakala. Radar/Signal/Collision akışta hiç olay yollamadı.
 
 ## 5. oturumda yapılanlar
 - **Tanıtım videosu:** kullanıcı istedi, masaüstü önizlemeden (demo modu, 1920×1080, Playwright/Chromium headless,
