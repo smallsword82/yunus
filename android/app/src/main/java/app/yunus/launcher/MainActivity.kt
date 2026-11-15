@@ -439,7 +439,9 @@ class MainActivity : Activity() {
         media.wake = { pkg ->
             packageManager.getLaunchIntentForPackage(pkg)?.component?.flattenToShortString()?.let { shell.send("launch ${bgDisplayId()} $it") }
         }
-        media.sleep = { bgDisplay?.let { android.util.Log.d("YunusMedia", "close ${it.display.displayId}"); shell.send("close ${it.display.displayId}") } }
+        // "keep": the screen goes, the app stays (a plain close stops the app as well, the third
+        // window's close key: the music started here stopped three seconds into playing).
+        media.sleep = { bgDisplay?.let { android.util.Log.d("YunusMedia", "close ${it.display.displayId}"); shell.send("close ${it.display.displayId} keep") } }
         bt = BtBridge(this, ::postToPage)
         edge = EdgeHome(this, { shell.send("recents") }, { val d = window.decorView; val l = IntArray(2); d.getLocationOnScreen(l); l[1] + d.height }) { dock ->
             // The dock overlay's page: the same app bridge and assets as the main page.
@@ -504,6 +506,11 @@ class MainActivity : Activity() {
                 ttsReady = true
                 ttsPending?.let { (t, v) -> speak(t, v) }
                 ttsPending = null
+            } else {
+                // Not ready (at power-on): tried again at the next prompt. Kept as it was, every
+                // prompt from then on was silent until Yunus started again.
+                val failed = tts; tts = null
+                try { failed?.shutdown() } catch (_: Throwable) { }
             }
         }
     }
@@ -520,6 +527,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Re-start the HAL reader so any devices unlocked by a fresh grant get listeners attached.
+        // (close() takes the old listeners off: they stayed, and every event came twice from then on.)
         if (requestCode == 1) { carHal?.close(); carHal = CarHal(applicationContext, ::halWant, ::postToPage).also { it.start() } }
         sendPermissions()
     }
@@ -661,6 +669,12 @@ class MainActivity : Activity() {
     // The car's last word on each thing (a HAL value by device and type, else by the message's
     // keys), for the dock page when it loads.
     private val dockCache = LinkedHashMap<String, String>()
+    // Things that happened, not how things are: never said again to a page that loads later (the
+    // dock's page at the first switch to another app, the main page at a restart). Said again, the
+    // mirror's ✕ of an hour ago turned the mirror off in the settings, a back key went to the third
+    // window's app, a card opened.
+    private val oneShot = setOf("back", "openCard", "redraw", "rearClosed", "rearSwitch", "sideBack", "sideClose",
+        "sideMaxOff", "sideRefused", "sideCamReady", "sideCamDismissed", "probe")
     private fun cacheKey(message: String): String = try {
         val o = JSONObject(message)
         o.optJSONObject("carHal")?.let { "hal " + it.optString("dev") + " " + it.optString("type") }
@@ -674,8 +688,10 @@ class MainActivity : Activity() {
                 web.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
                 // The dock over other apps gets the same, hidden or not, so it is up to date when it comes up.
                 val key = cacheKey(message) // once: it parses the message
-                dockCache.remove(key); dockCache[key] = message
-                if (dockCache.size > 600) dockCache.remove(dockCache.keys.first())
+                if (key !in oneShot) {
+                    dockCache.remove(key); dockCache[key] = message
+                    if (dockCache.size > 600) dockCache.remove(dockCache.keys.first())
+                }
                 if (::edge.isInitialized) edge.dockWeb()?.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
             }
         }
@@ -707,6 +723,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
         var dw = 0; var dh = 0 // the display's size as last set (see resize)
         var cover: android.view.View? = null // the page's colour over the window while its app starts
         var starting = false // a launch sent, its "shown" not back yet
+        var locate = false // Google Maps just started here: its my-location button is pressed once it is shown
     }
     private val slots = HashMap<String, Slot>()
     // A display is never given a size of zero or less: the window manager takes it as it comes and
@@ -736,7 +753,19 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (v.visibility != android.view.View.VISIBLE) return
         v.animate().alpha(0f).setDuration(150).withEndAction { v.visibility = android.view.View.GONE }.start()
     }
-    fun shown(display: Int) { slots.values.firstOrNull { it.displayId == display }?.let { s -> s.starting = false; root.postDelayed({ uncover(s) }, 120) } } // its frame reaches the screen just after
+    fun shown(display: Int) { slots.values.firstOrNull { it.displayId == display }?.let { s -> s.starting = false; root.postDelayed({ uncover(s) }, 120) // its frame reaches the screen just after
+        if (s.locate) { s.locate = false; root.postDelayed({ locate(s, display) }, 1000) } } }
+    // Google Maps opens on its last view, not following the car: one tap on its my-location button
+    // (bottom-right, ~45 dp from the right, ~122 dp up) centres it on the car and turns on follow
+    // mode. Sent 1 s after its first frame (a fixed 4.5 s after the launch fell before a cold
+    // start's first frame, and the tap was lost); once per start, nothing after it.
+    private fun locate(s: Slot, display: Int) {
+        if (s.displayId != display || s.dw < 1 || s.dh < 1) return
+        val dpi = activity.resources.displayMetrics.densityDpi
+        val bx = s.dw - 45f * dpi / 160f; val by = s.dh - 122f * dpi / 160f
+        shell.send("t $display 0 0 $bx $by") // ACTION_DOWN
+        root.postDelayed({ shell.send("t $display 1 0 $bx $by") }, 60) // ACTION_UP: a tap
+    }
     // The helper did not start it there (it runs in Yunus's other window): no empty window left up.
     fun refused(display: Int) { slots.entries.firstOrNull { it.value.displayId == display }?.let { (name, s) ->
         s.starting = false; s.component = null; s.box.visibility = android.view.View.GONE; showKeys(s, false); onEvent(name + "Refused") } }
@@ -812,18 +841,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
             slot.starting = true
             // Not delivered (no helper): forgotten, and the empty window hidden so the page's note shows.
             shell.send("launch ${slot.displayId} $component") { activity.runOnUiThread { if (slot.component == component) { slot.component = null; slot.starting = false; slot.box.visibility = android.view.View.GONE } } }
-            // The map app opens on its last view, not following the car. A tap on Google Maps'
-            // my-location button (bottom-right, ~45dp from the right, ~122dp up) a few seconds after
-            // launch centers it on the car and turns on follow mode, so the car stays centered.
-            if (name == "map" && launch.packageName.contains("apps.maps")) { // Google Maps only (not Android Auto, Yandex…)
-                val d = slot.displayId
-                val bx = w - 45f * dpi / 160f; val by = h - 122f * dpi / 160f
-                root.postDelayed({
-                    if (slot.component != component || slot.displayId != d) return@postDelayed
-                    shell.send("t $d 0 0 $bx $by") // ACTION_DOWN
-                    root.postDelayed({ shell.send("t $d 1 0 $bx $by") }, 60) // ACTION_UP → a tap
-                }, 4500)
-            }
+            slot.locate = name == "map" && launch.packageName.contains("apps.maps") // Google Maps only (not Android Auto, Yandex…)
         }
         slot.view.holder.setFixedSize(dw, dh)
         slot.dw = dw; slot.dh = dh
@@ -999,6 +1017,7 @@ fun wantHome(ctx: android.content.Context, yunus: Boolean) =
     ctx.getSharedPreferences("yunus", android.content.Context.MODE_PRIVATE).edit().putBoolean("wantHome", yunus).apply()
 
 private class ShellLink(private val ctx: android.content.Context, private val status: (String) -> Unit, private val onLine: (String) -> Unit = {}) {
+    private val CAR_CMD_MS = 3000L // a command to the car older than this is not sent any more
     companion object { private const val PORT = 19340 }
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "yunus-shell").apply { isDaemon = true } }
     // The app's install time is part of it, so after an update the old helper (old code) is
@@ -1020,16 +1039,27 @@ private class ShellLink(private val ctx: android.content.Context, private val st
     }
 
     /** Sends [line]; [failed] runs (on this link's thread) if the helper could not be reached. */
-    fun send(line: String, failed: () -> Unit = {}) = queue {
-        try { write(line) } catch (_: Throwable) {
-            try { socket?.close() } catch (_: Throwable) { }
-            socket = null
-            try { write(line) } catch (t: Throwable) { failed(); status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") }
+    fun send(line: String, failed: () -> Unit = {}) {
+        // A command to the car (a window, the shade, the climate, a seat) is for the moment it was
+        // asked. With the helper away the lines wait here, each for a connection tried for up to
+        // 15 s, twice: a window asked for then moved a minute later, when the helper came back,
+        // with nobody at the screen. One that has waited is dropped (the connection is still made,
+        // for what comes after). Wi-Fi and probe lines are not the car's and keep waiting.
+        val asked = android.os.SystemClock.uptimeMillis()
+        val car = line.startsWith("cmd ") && !line.contains("\"cmd\":\"wifi") && !line.contains("\"cmd\":\"probe")
+        val fresh = { !car || android.os.SystemClock.uptimeMillis() - asked < CAR_CMD_MS }
+        queue {
+            try { write(line, fresh) } catch (_: Throwable) {
+                try { socket?.close() } catch (_: Throwable) { }
+                socket = null
+                try { write(line, fresh) } catch (t: Throwable) { failed(); status("Kabuk yardımcısı yok: ${t.message ?: t.javaClass.simpleName}") }
+            }
         }
     }
 
-    private fun write(line: String) {
+    private fun write(line: String, fresh: () -> Boolean = { true }) {
         val s = socket ?: connect()
+        if (!fresh()) { android.util.Log.w("YunusShell", "too late, not sent: $line"); return }
         s.getOutputStream().apply { write("$line\n".toByteArray()); flush() }
     }
 
@@ -1345,7 +1375,10 @@ private class CarHal(private val ctx: android.content.Context, private val want:
         // Windows and the sunshade live here; it is expected to refuse (signature _GET), tried
         // in case this head unit's build lets the listener through.
         "bodywork.BYDAutoBodyworkDevice")
-    private val held = java.util.concurrent.CopyOnWriteArrayList<Any>()
+    // Each device with the listener put on it, to take it off again at close().
+    private class Reg(val dev: Any, val cls: Class<*>, val ifc: Class<*>, val proxy: Any)
+    private val held = java.util.concurrent.CopyOnWriteArrayList<Reg>()
+    @Volatile private var closed = false
     private val last = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val invalid = setOf(-999999999.0, -1.0E9, -9.99999999E8)
 
@@ -1365,16 +1398,21 @@ private class CarHal(private val ctx: android.content.Context, private val want:
         val regM = reg ?: return
         val ifc = iface ?: return
         val tag = clsName.substringAfterLast('.').removePrefix("BYDAuto").removeSuffix("Device")
-        val proxy = java.lang.reflect.Proxy.newProxyInstance(ifc.classLoader, arrayOf(ifc)) { _, m, args ->
+        val proxy = java.lang.reflect.Proxy.newProxyInstance(ifc.classLoader, arrayOf(ifc)) { self, m, args ->
+            // Itself to equals/hashCode: it answered "not equal" to everything, itself included, so
+            // the car's list of listeners could not find it to take it off.
+            if (m.name == "equals" && args != null && args.size == 1) return@newProxyInstance self === args[0]
+            if (m.name == "hashCode" && args == null) return@newProxyInstance System.identityHashCode(self)
+            if (m.name == "toString" && args == null) return@newProxyInstance "YunusCarHal:$tag"
             try {
-                if (m.name == "onDataEventChanged" && args != null && args.size == 2) {
+                if (!closed && m.name == "onDataEventChanged" && args != null && args.size == 2) {
                     onEvent(tag, (args[0] as? Int) ?: 0, args[1])
                 }
             } catch (_: Throwable) { }
             when (m.returnType) { java.lang.Boolean.TYPE -> false; Integer.TYPE -> 0; else -> null }
         }
         regM.invoke(dev, proxy)
-        held.add(dev)
+        held.add(Reg(dev, c, ifc, proxy))
         try { c.getMethod("getAllStatus").invoke(dev) } catch (_: Throwable) { }
     }
 
@@ -1414,5 +1452,15 @@ private class CarHal(private val ctx: android.content.Context, private val want:
         emit(JSONObject().put("carHal", o).toString())
     }
 
-    fun close() { held.clear(); last.clear() }
+    // The listeners come off the car's devices; one the car would not take off says nothing more
+    // (closed). They used to stay: after a permission answer, which starts a new reader, every
+    // event was made and sent twice.
+    fun close() {
+        closed = true
+        for (r in held) try {
+            r.cls.methods.firstOrNull { it.name == "unregisterListener" && it.parameterTypes.size == 1 && it.parameterTypes[0].isAssignableFrom(r.ifc) }
+                ?.invoke(r.dev, r.proxy)
+        } catch (_: Throwable) { }
+        held.clear(); last.clear()
+    }
 }

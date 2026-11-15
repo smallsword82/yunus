@@ -70,6 +70,10 @@ Bulut oturumunda (ADB/SDK yok) yalnız sayfa/doküman işi yapılabilir, derleme
    sürüşü sağı ham yakalamıştı. **Sonuç: DOW tarafı için logcat kullan (ham), yardımcı TCP akışı değil** — ya da
    ShellHelper'a filtresiz DOW okuması ekle. Hipotez: DOW yalnız o yöne **sinyal verince** ateşliyor; sıradaki
    pasif test = sinyalli sür + DOW'u logcat'ten ham yakala. Radar/Signal/Collision akışta hiç olay yollamadı.
+   **15.11 DÜZELTME (tam kayıt + framework tablosu):** `0x0D500018` kör nokta DEĞİL: `ADAS_CMD_CST_SWITCH`
+   (konforlu duruş, her ~5 km/s → duruşta 2). `0x12200046` = `ADAS_AVH_STATE` (otomatik tutma). Kör nokta = yalnız
+   `0x41800008`=2 (tarafsız). DOW sol/sağ yalnız dururken/P'de ateşliyor. Sürüşte taraf veren sinyal yok; taraf =
+   sinyal yönü (sayfa zaten böyle). Madde kapandı. Ayrıntı: INCELEME-BULGULARI.md 2026-11-15 17:00.
 
 ## 5. oturumda yapılanlar
 - **Tanıtım videosu:** kullanıcı istedi, masaüstü önizlemeden (demo modu, 1920×1080, Playwright/Chromium headless,

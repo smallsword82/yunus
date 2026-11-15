@@ -51,7 +51,9 @@ fun launcherApps(ctx: Context): String {
     val collator = java.text.Collator.getInstance(java.util.Locale("tr"))
     return JSONArray().apply {
         pkgs.map { it to appLabel(ctx, it) }.sortedWith { a, b -> collator.compare(a.second, b.second) }
-            .forEach { (pkg, label) -> put(JSONObject().put("pkg", pkg).put("app", label).put("icon", appIconData(ctx, pkg) ?: JSONObject.NULL)) }
+            .forEach { (pkg, label) -> put(JSONObject().put("pkg", pkg).put("app", label).put("icon", appIconData(ctx, pkg) ?: JSONObject.NULL)
+                // The car's own apps (system partition): the page opens them full screen, not in its third window.
+                .put("sys", try { pm.getApplicationInfo(pkg, 0).flags and (android.content.pm.ApplicationInfo.FLAG_SYSTEM or android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0 } catch (_: Exception) { false })) }
     }.toString()
 }
 
@@ -334,10 +336,17 @@ class MediaBridge(private val ctx: Context, private val emit: (String) -> Unit) 
     var wake: ((String) -> Unit)? = null
     var sleep: (() -> Unit)? = null
     private var waking: String? = null
+    private var wakePlayAt = 0L
     private fun wakePlay(list: List<MediaController>) {
         val pkg = waking ?: return
         val c = list.firstOrNull { it.packageName == pkg } ?: return
         if (c.playbackState?.state == PlaybackState.STATE_PLAYING) { android.util.Log.d("YunusMedia", "$pkg plays; hidden screen closes"); waking = null; main.postDelayed({ sleep?.invoke() }, 3000); return }
+        // Once a second at most: this runs on every state the app reports, and an app that answers
+        // play with a state that is not "playing" (not signed in, no audio focus) was sent play
+        // again for each one, as fast as they came, for the 12 s the wait lasts.
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - wakePlayAt < 1000) return
+        wakePlayAt = now
         c.transportControls.play()
     }
     fun start(pkg: String) {

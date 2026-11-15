@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1920, user-scalable=no">
-<!-- At a start the car showed 7-8 s in. Two things are started here, before anything else, on a
-     worker (the page's own thread is busy starting the page for its first seconds):
+<!-- At a start the car showed 7-8 s in. These are started here, before anything else, on two
+     workers (the page's own thread is busy starting the page for its first seconds; and on one
+     worker the pictures' decoding held the shaders back, the start 3.3 to 5 s from one to the next):
      - the car model is read: on the page's thread its 9 MB took 3-4 s, every piece waiting its
        turn; on a worker it is there in a quarter of a second;
      - its pictures (21, 13 megapixels) are decoded there as soon as it is read: decoded when
@@ -39,7 +40,7 @@
     };
     onmessage = function (e) {
       if (e.data === 'stop') { stop = true; return; }
-      fetch(e.data.url).then(function (r) { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(function (b) {
+      if (e.data.url) fetch(e.data.url).then(function (r) { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(function (b) {
         var pics = null;
         try { pics = pictures(b); } catch (err) {}
         postMessage({ file: b }, [b]); // the pictures' bytes were copied out (Blob) before the file leaves
@@ -48,7 +49,7 @@
           .then(function (list) { postMessage({ images: list, first: pics.first }, list.filter(Boolean)); }, function () { postMessage({ images: null }); });
       }, function () { postMessage({ file: null, images: null }); });
       var saved = null, gl = null;
-      try { saved = JSON.parse(e.data.shaders); } catch (err) {}
+      try { saved = e.data.shaders && JSON.parse(e.data.shaders); } catch (err) {}
       if (!saved || saved.v !== 1 || !saved.progs || typeof OffscreenCanvas === 'undefined') return;
       try { gl = new OffscreenCanvas(1, 1).getContext('webgl2'); } catch (err) {}
       if (!gl) return;
@@ -76,17 +77,18 @@
     };
   }
   try {
-    var w = new Worker(URL.createObjectURL(new Blob(['(' + work + ')()'], { type: 'text/javascript' })));
-    var shaders = null;
+    var code = URL.createObjectURL(new Blob(['(' + work + ')()'], { type: 'text/javascript' }));
+    var w = new Worker(code), shaderWorker = null, shaders = null;
     try { shaders = localStorage.getItem('shaderWarm'); } catch (e) {}
+    try { if (shaders) { shaderWorker = new Worker(code); shaderWorker.postMessage({ shaders: shaders }); } } catch (e) {}
     var gotFile, gotImages;
-    window.yunusEarly = { worker: w, file: new Promise(function (done) { gotFile = done; }), images: new Promise(function (done) { gotImages = done; }) };
+    window.yunusEarly = { worker: w, shaderWorker: shaderWorker, file: new Promise(function (done) { gotFile = done; }), images: new Promise(function (done) { gotImages = done; }) };
     w.onmessage = function (e) {
       if ('file' in e.data) gotFile(e.data.file);
       if ('images' in e.data) gotImages(e.data.images ? e.data : null);
     };
     w.onerror = function () { gotFile(null); gotImages(null); };
-    w.postMessage({ url: new URL('dolphin_parts.glb', location.href).href, shaders: shaders });
+    w.postMessage({ url: new URL('dolphin_parts.glb', location.href).href });
   } catch (e) { window.yunusEarly = null; }
 })();
 </script>
@@ -130,6 +132,12 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
    Chrome 84), so item spacing collapsed and text/icons looked cramped. Re-create each flex
    container's gap with sibling margins. Kept at the top of the sheet on purpose, so the real
    rules below (including any child margin:auto) keep priority at equal specificity. */
+/* Only where flex `gap` is not known. A browser that knows it (the desktop preview) applied both, the
+   gap and these margins: every space twice as wide as on the car, and the bottom bar too long for
+   the screen, its volume keys off the right edge. `inset` (Chrome 87) stands in for the test: flex
+   gap itself cannot be asked for (the property is known to 74 too, for grids). Nothing changes on
+   the car: 74 does not know `inset`, so it takes this block as before. */
+@supports not (inset:0) {
 .sideHead > * + * { margin-left:12px; }
 #gears > * + * { margin-left:18px; }
 .batt > * + * { margin-left:10px; }
@@ -178,6 +186,7 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 .seatDk .lv > * + * { margin-left:3px; }
 #vIcon .top > * + * { margin-left:8px; }
 #volPop > * + * { margin-left:20px; }
+}
 
 /* Tesla's UI face (Universal Sans) is proprietary; Inter is the closest free match: neutral, geometric, light numerals. */
 @font-face { font-family: Inter; src: url(vendor/inter/inter-latin-ext.woff2) format('woff2'); font-weight: 100 900;
@@ -196,9 +205,8 @@ input { user-select:text; -webkit-user-select:text; }
      stacks its app list into one tall column and would push the dock off screen) */
   grid-template-columns:var(--sigL, 0px) var(--carW, 720px) 1fr var(--sideW, 0px) var(--sigR, 0px); grid-template-rows:minmax(0, 1fr) 112px; transition:grid-template-columns .35s cubic-bezier(.2,.8,.2,1); }
 #stage.noColAnim { transition:none; }
-/* The signal camera's column slides in and out in 0.22 s, with Maps and the camera window (moved
-   natively over the same time and curve; see setSigCol). */
-#stage.sigAnim, #stage.stack.sigAnim { transition:grid-template-columns .15s cubic-bezier(.2,.8,.2,1); }
+/* The first and last columns (--sigL/--sigR) are always 0 px: the signal camera's column is gone,
+   the camera floats over the map (#sigSpot); kept so the other columns keep their numbers. */
 /* hidden third column on the right: an app window, pulled out from the right edge */
 #sidePanel { min-width:0; min-height:0; overflow:clip; background:var(--pn); border-left:1px solid var(--cd); display:flex; flex-direction:column; }
 #sideHandle { position:absolute; top:0; bottom:112px; width:36px; z-index:7; cursor:ew-resize; touch-action:none;
@@ -327,6 +335,7 @@ html.nativeKeys #stage.stack #sidePanel.appOpen #sideApp { margin:24px 10px 10px
 #stage.portrait .dk { width:74px; height:74px; }
 #stage.portrait .dkApp div { width:64px; height:64px; font-size:34px; }
 #stage.portrait #dock > * + * { margin-left:8px; }
+@supports (inset:0) { #stage.portrait #dock { gap:8px; } #stage.portrait #dock > * + * { margin-left:0; } } /* the preview: the same 8 px by gap, not 12 + 8 */
 #stage.portrait .tempCtl .dk { width:42px; }
 /* The climate row is lower than the apps' (its icons are 40 px): no empty band above it. */
 #stage.portrait #dock > .clim, #stage.portrait #dock > .tempCtl, #stage.portrait #dock > .tempCtl .dk { height:56px; }
@@ -353,6 +362,12 @@ button { font-family:inherit; color:inherit; }
 #stage:not(.portrait) #carPanel { grid-column:2; grid-row:1; }
 #stage:not(.portrait) #mapWrap { grid-column:3; grid-row:1; }
 #stage:not(.portrait) #sidePanel { grid-column:4; grid-row:1; }
+/* Swapped (setting swapSide, side by side only): car | third window | map. */
+#stage.swapped:not(.portrait):not(.stack):not(.tabbed) { grid-template-columns:var(--sigL, 0px) var(--carW, 720px) var(--sideW, 0px) 1fr var(--sigR, 0px); }
+#stage.swapped:not(.portrait):not(.stack):not(.tabbed) #mapWrap { grid-column:4; }
+#stage.swapped:not(.portrait):not(.stack):not(.tabbed) #sidePanel { grid-column:3; border-left:0; border-right:1px solid var(--cd); }
+#layoutSeg button[data-swap] { margin-left:6px; }
+#layoutSeg button[data-mapoff].on { background:var(--dn); color:#fff; }
 #status { position:absolute; top:8px; left:36px; /* its row's middle on the status bar's (28 px), level with the clock */ right:36px; display:flex; align-items:center; font-size:26px; z-index:2; }
 #gears { display:flex; gap:18px; font-weight:500; cursor:pointer; }
 #gears span { color:var(--mu); }
@@ -397,7 +412,6 @@ button { font-family:inherit; color:inherit; }
 #stage.car-wide .mm b { font-size:28px; }
 #stage.car-wide .mm span { font-size:19px; }
 #stage.car-wide .mm .ctl { font-size:36px; gap:40px; }
-#stage.car-wide #enChart { height:130px !important; }
 #stage.car-wide .ccTyres { height:180px; } #stage.car-wide .ccTyres img { height:176px; }
 #stage.car-wide .trip div { font-size:34px; }
 /* Dragged down, the cards slide away leaving only their grab bar; dragged up they come back. */
@@ -439,6 +453,9 @@ button { font-family:inherit; color:inherit; }
   filter:blur(22px); transform:scale(1.25); } /* the cover's colours only; the cover itself is on the tile */
 .mmCard #mmBg::after { content:""; position:absolute; top:0; left:0; right:0; bottom:0; background:linear-gradient(90deg, rgba(0,0,0,.78), rgba(0,0,0,.45)); }
 .mmCard > :not(#mmBg) { position:relative; }
+/* The blurred, enlarged cover reached 84 px into the next card (the energy chart's labels sat under
+   a dark smear): kept inside its own card. The source menu (#srcPop) is outside the card. */
+.mmCard { overflow:hidden; }
 .mmCard.hasArt #mmBg { opacity:1; }
 .mmCard.hasArt h4, .mmCard.hasArt .mm b, .mmCard.hasArt .mmRow { color:#fff; }
 .mmCard.hasArt .mm span { color:rgba(255,255,255,.78); }
@@ -464,6 +481,7 @@ button { font-family:inherit; color:inherit; }
 .ccTyres img { height:136px; }
 .ccTyres div { position:absolute; font-size:20px; text-align:center; }
 .ccTyres div span { display:block; font-size:14px; color:var(--mu); }
+#stage.car-wide #enChart { height:130px !important; }
 .trip { display:grid; grid-template-columns:1fr 1fr; gap:8px 30px; }
 .trip div { font-size:26px; font-weight:300; }
 /* Two pages, swiped up and down: this drive, since the last charge. */
@@ -614,9 +632,9 @@ button { font-family:inherit; color:inherit; }
 #fpsMeter.show { display:block; }
 /* Performance mode: the map's dark look comes from recoloured layers instead of a full-screen filter */
 #stage.perf #map .maplibregl-canvas { filter:none !important; }
-.hot { position:absolute; transform:translate(-50%,-50%); z-index:3; background:none; border:0; text-align:center; font-size:20px; cursor:pointer; color:var(--tx); text-shadow:0 1px 4px rgba(0,0,0,.6); white-space:nowrap; transition:opacity .3s; }
+.hot { position:absolute; left:0; top:0; transform:translate(-50%,-50%); z-index:3; background:none; border:0; text-align:center; font-size:20px; cursor:pointer; color:var(--tx); text-shadow:0 1px 4px rgba(0,0,0,.6); white-space:nowrap; transition:opacity .3s; }
 /* A small dot on the glass edge; the transparent padding around it keeps a finger-sized grab area. */
-.glassDot { position:absolute; width:44px; height:44px; margin:-22px 0 0 -22px; z-index:3; opacity:0; cursor:grab; touch-action:none; transition:opacity .25s; }
+.glassDot { position:absolute; left:0; top:0; width:44px; height:44px; margin:-22px 0 0 -22px; z-index:3; opacity:0; cursor:grab; touch-action:none; transition:opacity .25s; }
 .glassDot::after { content:''; position:absolute; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%;
   background:#fff; box-shadow:0 0 0 3px rgba(255,255,255,.28), 0 1px 4px rgba(0,0,0,.55); transition:transform .12s; }
 .glassDot:active { cursor:grabbing; } .glassDot:active::after { transform:scale(1.3); }
@@ -682,10 +700,10 @@ button { font-family:inherit; color:inherit; }
 #chargeInfo .ciUnit { font-size:24px; color:var(--ok); font-weight:400; }
 #chargeInfo .ciMeta { display:block; margin-top:4px; font-size:20px; color:var(--mu); white-space:nowrap; min-height:24px; }
 #stage.driving #chargeInfo { display:none; } /* the trial's edge pane shows instead */
-/* Where the car's live side camera goes (CarCamera draws it there): the signal column's place
-   (upright: over the edge). Never seen itself. */
-#sigSpot { position:absolute; top:0; bottom:112px; left:0; width:520px; visibility:hidden; pointer-events:none; }
-#sigSpot.right { left:auto; right:0; top:56px; } /* under the status bar, which keeps its full width */
+/* Where the car's live side camera goes (CarCamera draws it there), floating over the map under the
+   status bar, both sides the same size; upright over the edge. Nothing moves for it. Never seen itself. */
+#sigSpot { position:absolute; top:56px; bottom:112px; left:0; width:520px; visibility:hidden; pointer-events:none; }
+#sigSpot.right { left:auto; right:0; }
 #stage.portrait #sigSpot { top:140px; bottom:auto; height:370px; width:620px; left:24px; }
 #stage.portrait #sigSpot.right { left:auto; right:24px; }
 #sigPane { position:absolute; top:120px; left:0; width:672px; height:400px; border-radius:20px; overflow:hidden; z-index:25; background:var(--bg); /* not black: seen while the camera window slides */
@@ -697,12 +715,9 @@ button { font-family:inherit; color:inherit; }
 #sigPane.right .bsLbl { left:auto; right:8px; }
 #sigPane .bsLbl { font-size:20px; padding:6px 12px; }
 #stage.portrait #sigPane { top:140px; width:620px; height:370px; }
-/* Landscape: the side view is a column of the layout (the car window moves towards the middle). */
-#stage:not(.portrait) #sigPane { position:relative; grid-row:1; grid-column:1; top:auto; left:auto; right:auto; width:auto; height:auto; min-width:0; align-self:stretch;
-  transform:none; border-radius:0; box-shadow:none; z-index:auto; display:flex; align-items:center; }
-#stage:not(.portrait) #sigPane.right { grid-column:5; }
-#stage.stack:not(.portrait) #sigPane { grid-row:1 / 3; } /* beside both the map and the third window */
-#stage:not(.portrait) #sigPane canvas { height:100%; } /* drawn at the column's own size */
+/* Landscape: floating over the edge like the car's own camera window (#sigSpot), both sides alike. */
+#stage:not(.portrait) #sigPane { top:56px; bottom:112px; height:auto; width:520px; }
+#stage:not(.portrait) #sigPane canvas { height:100%; }
 
 /* seats */
 .seats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -728,7 +743,7 @@ button { font-family:inherit; color:inherit; }
 html.mapsIn, html.mapsIn body, #stage.mapsIn, #stage.mapsIn #mapWrap, #stage.mapsIn #map { background:transparent; }
 #carPanel { overflow:clip; }
 #map { position:absolute; top:56px; right:0; bottom:0; left:0; background:#1a1c20; }
-#map[data-wait]::after { content:attr(data-wait); position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#8a8f98; font-size:22px; }
+#map[data-wait]::after { content:attr(data-wait); position:absolute; top:0; right:0; bottom:0; left:0; display:flex; align-items:center; justify-content:center; color:#8a8f98; font-size:22px; } /* not "inset" (Chrome 87): the car's WebView is 74, the note sat in the corner */
 #stage:not(.light):not(.sat-map) #map .maplibregl-canvas { filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
 #mapStyleBtn { right:24px; top:72px; width:64px; height:64px; padding:0; display:flex; align-items:center; justify-content:center; font-size:30px; border:0; cursor:pointer; }
 #mapStyleBtn i { font-size:30px; }
@@ -930,7 +945,7 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
 #dockAdd, #dockDone { display:none; }
 #dock.editing #dockAdd, #dock.editing #dockDone { display:flex; }
 #dockDone { width:auto; padding:0 20px; font:500 20px Inter,sans-serif; background:var(--cd); }
-#dockPick { position:absolute; bottom:124px; left:50%; z-index:20; width:620px; margin-left:-310px; padding:18px; border-radius:22px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
+#dockPick { position:absolute; bottom:124px; left:50%; z-index:20; width:620px; margin-left:-310px; padding:18px; max-height:calc(100% - 200px); overflow-y:auto; border-radius:22px; background:var(--cd); box-shadow:0 12px 40px rgba(0,0,0,.45);
   display:none; grid-template-columns:repeat(5, 1fr); gap:16px 8px; }
 #dockPick.show { display:grid; }
 #dockPick button { background:none; border:0; color:var(--tx); font:400 15px Inter,sans-serif; display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer; }
@@ -961,17 +976,20 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
 .seatDk { touch-action:none; }
 .seatDk svg { margin-top:-8px; }
 .seatDk .lv { position:absolute; bottom:9px; left:50%; transform:translateX(-50%); display:flex; gap:3px; height:4px; }
-.seatDk .lv span { width:11px; height:4px; border-radius:2px; background:rgba(127,127,127,.3); }
+.seatDk .lv span { width:11px; height:4px; border-radius:2px; background:rgba(127,127,127,.42); }
 .seatDk .lv span.on { background:currentColor; }
 .seatDk .ico { margin-top:-6px; }
 /* The car's own bar icons (img/byd, from BYD SystemUI) used as masks, so they take the key's colour. */
+/* Drawn at the bitmaps' own 90 px, pixel for pixel, not fitted into the key's 80 (every line was
+   resampled and came out soft, and an eighth smaller than on the car's own bar). Their drawing is
+   inside the middle 80 px of the 90, so nothing of it is cut off. An idle key is as clear as the
+   rest of the bar (it was at 78%: thin grey lines); a working one has its colour. */
 .clim .ico { display:block; width:80px; height:80px; /* the PNGs carry their own padding */ background:currentColor;
-  -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; }
-.clim:not(.lit):not(.heat):not(.vent) .ico { opacity:.78; }
+  -webkit-mask:var(--ico) center/90px 90px no-repeat; mask:var(--ico) center/90px 90px no-repeat; }
 /* Air direction: three stacked icons (face, feet, screen); the directions in use in blue. */
 #airFlow { position:relative; }
 #airFlow .ico { position:absolute; left:0; top:0; width:80px; height:80px; }
-#airFlow .ico:not(.on):not(.fig) { opacity:.3; }
+#airFlow .ico:not(.on):not(.fig) { opacity:.5; } /* the directions not in use: faint, but there (at .3 they were not) */
 #stage.portrait #airFlow .ico { top:-12px; left:calc(50% - 40px); } /* centred like the other climate icons upright */
 #airFlow .ico.on { color:#3e6ae1; opacity:1; }
 /* The trunk key on the car model is not wanted for now. */
@@ -991,7 +1009,6 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
 #recirc .air { width:66px; height:66px; stroke-width:0; }
 #recirc .air.in, #recirc.lit .air.out { display:none; }
 #recirc.lit .air.in { display:block; }
-#recirc:not(.lit) .air { opacity:.78; }
 
 /* The seat and steering wheel heating and the demister keys stay still when on (asked on the car): just their colour. */
 .seatDk .ico, #wheelHeat .ico, #defFront .ico, #defRear .ico { animation:none !important; background:currentColor !important; }
@@ -1014,7 +1031,7 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
 /* Volume: level bar on the dock key; a slider pops up above it while changing. */
 #vIcon { width:auto; min-width:84px; padding:0 12px; gap:8px; flex-direction:column; justify-content:center; font-size:38px; }
 #vIcon .top { display:flex; align-items:center; gap:8px; }
-#vIcon .bar { width:52px; height:4px; border-radius:2px; background:rgba(255,255,255,.14); overflow:hidden; }
+#vIcon .bar { width:52px; height:4px; border-radius:2px; background:rgba(127,127,127,.42); overflow:hidden; } /* a grey that shows on both themes (white at 14% was nothing on the light bar) */
 #vIcon .bar div { height:100%; background:var(--tx); border-radius:2px; transition:width .15s; }
 #vIcon.muted { color:var(--mu); }
 #volPop { position:absolute; right:40px; bottom:124px; z-index:20; width:520px; height:84px; padding:0 26px; border-radius:22px; background:var(--cd);
@@ -1098,14 +1115,15 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
             <button id="mmPlay" class="mmBig" aria-label="Oynat / duraklat"><i class="ti ti-player-play"></i></button></div>
           <div class="mmRow"><button id="mmPrev" aria-label="Önceki"><i class="ti ti-player-skip-back"></i></button><div class="bar"><div id="mmProg"></div></div><button id="mmNext" aria-label="Sonraki"><i class="ti ti-player-skip-forward"></i></button></div>
         </div>
-        <div class="cc"><h4>Enerji <b id="enNow">0 kW · — Wh/km</b></h4>
+        <div class="cc"><h4>Enerji <b id="enNow">Duruyor</b></h4>
           <canvas id="enChart" width="620" height="130" style="width:100%;height:96px"></canvas>
-          <div style="font-size:16px;color:var(--mu);margin-top:4px" id="enAvg">Son 5 km ortalaması —</div></div>
+          <div style="font-size:16px;color:var(--mu);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="enAvg"></div></div>
         <div class="cc"><h4>Yolculuk <b id="tripName">Mevcut yolculuk</b></h4>
           <div id="tripView"><div id="tripPages">
             <div class="trip" id="tripDrive"></div>
             <div class="trip" id="tripCharge"></div>
-          </div><div id="tripDots"><i class="on"></i><i></i></div></div>
+            <div class="trip" id="tripTotal"></div>
+          </div><div id="tripDots"><i class="on"></i><i></i><i></i></div></div>
           <div id="odoTxt" style="font-size:16px;color:var(--mu);margin-top:6px"></div></div>
         <div class="cc"><h4>Lastik basıncı <b id="tyreState">Normal</b></h4><div class="ccTyres" id="ccTyres"></div></div>
       </div>
@@ -1126,7 +1144,7 @@ html.dockOnly #stage > :not(#dock) { display:none !important; }
       <!-- Tabbed right area (setting tabSide): the map or the app, one at a time. -->
       <div id="sideTabs" style="display:none"><button id="tabMap" class="on"><i class="ti ti-map"></i>Harita</button><button id="tabApp"><i class="ti ti-apps"></i>Uygulamalar</button></div>
       <!-- How the map and the third window share the right side: side by side, one under the other, or tabs. -->
-      <div id="layoutSeg"><button data-layout="cols" aria-label="Yan yana"><i class="ti ti-layout-columns"></i></button><button data-layout="stack" aria-label="Alt alta"><i class="ti ti-layout-rows"></i></button><button data-layout="tabs" aria-label="Sekmeli"><i class="ti ti-layout-navbar"></i></button></div>
+      <div id="layoutSeg"><button data-layout="cols" aria-label="Yan yana"><i class="ti ti-layout-columns"></i></button><button data-layout="stack" aria-label="Alt alta"><i class="ti ti-layout-rows"></i></button><button data-layout="tabs" aria-label="Sekmeli"><i class="ti ti-layout-navbar"></i></button><button data-swap aria-label="Harita ile üçüncü pencerenin yerini değiştir"><i class="ti ti-arrows-exchange"></i></button><button data-mapoff aria-label="Haritayı kapat / aç"><i class="ti ti-map-off"></i></button></div>
       <!-- An icon shows only when there is that link (the car's own status bar is hidden while
            Yunus runs full screen). -->
       <div id="netStat"><i id="locInd" class="ti ti-location-filled hide"></i><i id="btInd" class="ti ti-bluetooth hide"></i><i id="wifiInd" class="ti ti-wifi-off off"></i><span id="mobInd" class="hide"><i class="ti ti-antenna-bars-5"></i></span><span id="bellInd"><i class="ti ti-bell"></i><b id="bellCount"></b></span></div>
@@ -1350,12 +1368,14 @@ const SETTING_DEFAULTS = {
   mapArea: 'map', navApp: '', bt: true, wifi: true, hotspot: false,
   projector: 'yunus', projAlways: true, projAuto: false,
   speedUnit: 'kmh', pressUnit: 'bar', adbRepair: true, verboseLog: false,
-  rearMirror: true, sigEdge: false, stackSide: false, tabSide: false,
+  rearMirror: true, sigEdge: false, stackSide: false, tabSide: false, swapSide: false, appOpen: {}, // appOpen: per package 'full' | 'side' (see opensFull)
   driverName: '', petMsg: 'Merak etmeyin! Klima açık, içerisi rahat. Sahibim birazdan dönecek.', lang: 'tr', autoTime: true, perf: true, fps: false, isHome: false,
 };
 S.set = { ...SETTING_DEFAULTS };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('settings') || '{}')); } catch {}
-function saveSettings() { try { localStorage.setItem('settings', JSON.stringify(S.set)); } catch {} }
+// Not from the dock overlay's page: it is loaded once and kept, so its copy of the settings is as
+// old as that, and a save from it (the mirror's ✕ reaches both pages) put the old ones back.
+function saveSettings() { if (DOCK_ONLY) return; try { localStorage.setItem('settings', JSON.stringify(S.set)); } catch {} }
 // Units (Settings > System). Tyre pressures are kept in bar, speed in km/h; the speed-limit sign
 // stays in km/h because that is what the road signs say.
 const pressUnit = () => ({ bar: 'bar', psi: 'PSI', kpa: 'kPa' })[S.set.pressUnit] || 'bar';
@@ -1501,7 +1521,7 @@ const isWarning = (t) => ['amber', 'red'].includes(ttColor(t));
 // Everyday red lights (cable plugged in, park brake, an unbuckled belt) stay in the status bar
 // without the fault pop-up.
 const NO_BANNER = ['plug', 'epb', 'belt'];
-let dismissedAlert = null;
+const dismissedAlerts = new Set(); let shownAlert = null;
 function updateTelltales() {
   // Red ones first, two columns of nine at most; beyond that the last ones fold into a "+N"
   // chip (red if a red one is folded) that opens the warnings list.
@@ -1523,16 +1543,22 @@ function updateTelltales() {
     box.innerHTML = assist + shown.map(ttHtml).join('') + (hidden.length
       ? `<span class="more ${hidden.some((t) => ttColor(t) === 'red') ? 'red' : ''}" title="${hidden.map((t) => t.name).join(', ')}">+${hidden.length}</span>` : '');
   }
-  // A red fault also pops up a notification with the manual's advice; a tap hides it until
-  // a different red fault appears.
-  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !NO_BANNER.includes(t.id) && ttFault(t));
-  if (!red) dismissedAlert = null;
-  const showRed = !!red && red.id !== dismissedAlert;
+  // A red fault also pops up a notification with the manual's advice; a tap hides that one, while
+  // it stays lit. Each red fault is told: only the first in the list was looked at, so with the
+  // general warning lit (it comes with most of the others, and is first) the notice said only
+  // "Ana uyarı", and once tapped away no other red fault brought one up. The general one is now
+  // told last, and one that went out is told again when it comes back.
+  const reds = TELLTALES.filter((t) => ttColor(t) === 'red' && !NO_BANNER.includes(t.id) && ttFault(t));
+  dismissedAlerts.forEach((id) => { if (!reds.some((t) => t.id === id)) dismissedAlerts.delete(id); });
+  const untold = reds.filter((t) => !dismissedAlerts.has(t.id));
+  const red = untold.find((t) => t.id !== 'main') || untold[0];
+  shownAlert = red ? red.id : null;
+  const showRed = !!red;
   $('warnBanner').classList.toggle('show', showRed);
   // Rebuilt only when it changes: a new element every 250 ms restarted the flash before its dim half.
   if (showRed) { placeWarnBanner(); setHtml($('warnBanner'), `${ttHtml(red)}<div><b>${red.name}</b><br><span style="font-size:17px;color:var(--mu)">${red.desc}</span></div>`); }
 }
-setInterval(updateTelltales, 250);
+if (!DOCK_ONLY) setInterval(updateTelltales, 250); // the dock overlay shows none
 // The embedded map and third-window apps are drawn above the page, so the banner sits over the
 // car column (right of its warning lights) when that is wide enough; else in the middle as before.
 function placeWarnBanner() {
@@ -1550,8 +1576,7 @@ $('telltales').onclick = (e) => {
   if (current !== 'controls') openCard('controls'); else refreshCard();
 };
 $('warnBanner').onclick = () => {
-  const red = TELLTALES.find((t) => ttColor(t) === 'red' && !NO_BANNER.includes(t.id) && ttFault(t)); // as in updateTelltales
-  dismissedAlert = red ? red.id : null;
+  if (shownAlert) dismissedAlerts.add(shownAlert); // the one on the notice; the next red fault, if any, shows
   updateTelltales();
 };
 function renderTelltaleList() {
@@ -1657,7 +1682,9 @@ renderer.domElement.style.visibility = 'hidden'; // nothing of the 3D view (roof
 // No saved picture of the car stands in for it at the start: what shows is the live car or nothing.
 try { localStorage.removeItem('carSnap'); } catch {}
 const scene = new THREE.Scene();
-scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+// (Not on the dock overlay's page: it draws no car, and this compiles programs and draws six views
+// of a room as that page loads, at the first switch to another app.)
+scene.environment = DOCK_ONLY ? null : new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const cam = new THREE.PerspectiveCamera(30, 720 / 968, 0.05, 300);
 const controls = new OrbitControls(cam, renderer.domElement);
 // Drag to orbit, pinch (or mouse wheel) to zoom; double-tap returns to the default view.
@@ -1705,10 +1732,13 @@ function bendRoad() {
     const s = d.userData.z0 + dashes.position.z, a = k * s, x0 = d.userData.x0;
     // The radius of this line; a line past the circle's centre has no place on the turn.
     const r = Math.abs(k) > 1e-5 ? 1 / k - x0 : 0;
-    d.visible = Math.abs(a) < ROAD_ARC_MAX && (Math.abs(k) <= 1e-5 || r * k > 0);
+    const z = Math.abs(k) > 1e-5 ? r * Math.sin(a) : s; // how far ahead of the car (behind: minus)
+    // Past the ends of the stretch the lines show on (ROAD_FADE) a dash is faded to nothing: not
+    // drawn at all there (each was a draw call, some fifty a frame for a dozen visible dashes).
+    d.visible = Math.abs(a) < ROAD_ARC_MAX && (Math.abs(k) <= 1e-5 || r * k > 0) && z > ROAD_FADE.far - 1 && z < ROAD_FADE.horizon + 1;
     if (!d.visible) continue;
     d.position.x = Math.abs(k) > 1e-5 ? 1 / k - r * Math.cos(a) : x0;
-    d.position.z = (Math.abs(k) > 1e-5 ? r * Math.sin(a) : s) - dashes.position.z;
+    d.position.z = z - dashes.position.z;
     d.rotation.y = a;
   }
 }
@@ -1864,7 +1894,7 @@ function warmCar(car) {
   const textures = new Set();
   for (const batch of list) for (const m of batch) for (const mat of [].concat(m.material)) for (const k in mat) { const v = mat[k]; if (v && v.isTexture) textures.add(v); }
   const jobs = [...textures].map((t) => () => renderer.initTexture(t));
-  jobs.push(() => { if (early) early.worker.postMessage('stop'); });
+  jobs.push(() => { if (early && early.shaderWorker) early.shaderWorker.postMessage('stop'); });
   // compile(object, camera, scene): only the materials under that mesh, with the scene's lights
   // (compile(scene) prepares every material in it, visible or not: all at once, the freeze).
   for (const batch of list) jobs.push(() => { for (const m of batch) renderer.compile(m, cam, scene); });
@@ -1879,6 +1909,21 @@ function warmCar(car) {
     };
     requestAnimationFrame(step);
   });
+}
+// The lane lines and the charging gear are hidden until the first D and the first plug-in, and
+// their programs were compiled then, in the frame the camera sets off (one for the lines, two for
+// the gear, ~130 ms each on the head unit). Compiled here instead, a little after the start, one
+// mesh a frame; saveShaders then keeps them for the next start's worker too.
+function warmLater() {
+  const jobs = [dashes.children[0]];
+  chargeGear.traverse((o) => { if (o.isMesh) jobs.push(o); });
+  const step = () => {
+    const o = jobs.shift();
+    if (!o) return;
+    try { renderer.compile(o, cam, scene); } catch (e) { console.warn('warmLater', e); }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 // The programs of this start, kept for the next start's early compile (the head's worker). Each
 // source is kept as what differs from the longest one (they differ in a few lines of #define).
@@ -1900,9 +1945,41 @@ function saveShaders() {
     performance.mark('shaders-kept:' + list.length + ':' + text.length);
   } catch (e) { console.warn('saveShaders', e); }
 }
+// A plain white picture, for the materials the model gave no colour picture (see onCarLoaded).
+const WHITE = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+WHITE.colorSpace = THREE.SRGBColorSpace; WHITE.needsUpdate = true;
 function onCarLoaded(gltf) {
   performance.mark('car-loaded');
   const car = gltf.scene; carObj = car;
+  // One shader program per set of features, ~130 ms each to compile at a start, and the car had
+  // 14. Three things that change nothing on screen leave 7: every material is a physical one (a
+  // standard one is a physical one at its defaults), every one has a colour picture (plain white
+  // where the model gave none), and the second set of texture coordinates, which no picture uses,
+  // is dropped.
+  try {
+    const physical = new Map();
+    let uv1Used = false;
+    car.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = [].concat(o.material).map((m) => {
+        if (!m.isMeshStandardMaterial) return m;
+        if (!physical.has(m)) {
+          let to = m;
+          if (!m.isMeshPhysicalMaterial) {
+            to = new THREE.MeshPhysicalMaterial();
+            THREE.MeshStandardMaterial.prototype.copy.call(to, m);
+            to.defines = { STANDARD: '', PHYSICAL: '' };
+          }
+          if (!to.map) to.map = WHITE;
+          physical.set(m, to);
+        }
+        return physical.get(m);
+      });
+      for (const m of mats) for (const k in m) { const v = m[k]; if (v && v.isTexture && v.channel === 1) uv1Used = true; }
+      o.material = Array.isArray(o.material) ? mats : mats[0];
+    });
+    if (!uv1Used) car.traverse((o) => { if (o.isMesh && o.geometry.attributes.uv1) o.geometry.deleteAttribute('uv1'); });
+  } catch (e) { console.warn('one program', e); }
   let b = new THREE.Box3().setFromObject(car), size = b.getSize(new THREE.Vector3());
   car.scale.setScalar(4.29 / Math.max(size.x, size.z));
   b = new THREE.Box3().setFromObject(car);
@@ -1965,6 +2042,10 @@ function onCarLoaded(gltf) {
   // Already plugged in at load: straight in the charge view, as the start's saved picture shows it
   // (moved there from the default view, the car flew in close and out again for 2 s as it appeared).
   if (S.charging && S.gear === 'P') { cam.position.copy(presetPos(PRESETS.charge, CHARGE_TARGET)); controls.target.copy(CHARGE_TARGET); }
+  // The gear came before the model (the page started again on the road): the drive view and its
+  // limits again, straight there. The lines above had put the parked view back, turning locked,
+  // until the next change of gear.
+  if (S.gear === 'D' || S.gear === 'R') { setGear(S.gear); camAnim = null; cam.position.copy(presetPos(PRESETS.drive, DRIVE_TARGET)); controls.target.copy(DRIVE_TARGET); }
   // Performance mode only draws on demand; wake the loop so the freshly loaded car is drawn
   // (and then kept on screen) instead of staying black until the first touch.
   // Shown once its shaders are compiled, a few a frame (warmCar), the page running meanwhile.
@@ -1979,7 +2060,8 @@ function onCarLoaded(gltf) {
     showChargeGear(!!S.charging);
     performance.mark('car-ready');
     wake(2000);
-    if (DEVICE) setTimeout(() => { saveShaders(); if (early) early.worker.terminate(); }, 6000);
+    setTimeout(warmLater, 2500);
+    if (DEVICE) setTimeout(() => { saveShaders(); if (early) { early.worker.terminate(); if (early.shaderWorker) early.shaderWorker.terminate(); } }, 6000);
   });
   // Give the car a couple of frames on screen before the map starts its own heavy work.
   if (!mapAreaStarted) setTimeout(startMapArea, 300);
@@ -1992,6 +2074,14 @@ const GATE = { depth: 0.5, minY: 0.62, halfWidth: 0.62, openAngle: 1.15 };
 const SKIP_GATE = /^(interior|sticker|UC|uc_tex|tyre|Rim|disk|calipar|Black_alloy|bodypaint_rim|rubber|mudflap|bumper)/;
 const gatePivot = new THREE.Group();
 let gateAngle = 0, gateTarget = gatePivot;
+// Set by whatever is still on its way in this tick (a door or the tailgate easing, a lamp fading,
+// the view shifting): the loop keeps drawing while it is set. (var: read by functions that may run
+// before this line has.)
+var sceneMoving = false;
+// A picture that was due while the app tray held the drawing back: drawn once the tray is away.
+// (What changed under the tray - a cable unplugged, a door shut - showed as it had been until the
+// next touch, once the drawing after a touch was cut from 3 s to a moment.)
+var heldDraw = false;
 
 // ---------- doors, side windows, charge flap (nodes from dolphin_parts.glb) ----------
 // Doors hinge on their front edge; left doors swing towards +x, right doors towards -x.
@@ -2004,6 +2094,9 @@ const STEER_RATIO = 14, STEER_MAX = 36, STEER_SIGN = 1;
 const roadWheelAngle = () => THREE.MathUtils.clamp((moving.anim.steer || 0) / STEER_RATIO, -STEER_MAX, STEER_MAX) * STEER_SIGN;
 function animateParts() {
   const a = moving.anim, ease = 0.08;
+  for (const k of CORNERS) if (Math.abs((S.doors[k] ? DOOR_OPEN : 0) - (a.doors[k] || 0)) > 0.002 || Math.abs(S.windows[k] / 100 - (a.windows[k] || 0)) > 0.002) sceneMoving = true;
+  if (Math.abs((S.charging ? FLAP_OPEN : 0) - a.flap) > 0.002 || Math.abs((S.steerAngle || 0) - (a.steer || 0)) > 0.5 ||
+    (SHADE.node && Math.abs(S.sunshade / 100 - (a.shade || 0)) > 0.002)) sceneMoving = true;
   for (const k of CORNERS) {
     a.doors[k] = (a.doors[k] || 0) + ((S.doors[k] ? DOOR_OPEN : 0) - (a.doors[k] || 0)) * ease;
     if (moving.doors[k]) moving.doors[k].rotation.y = (k[1] === 'L' ? -1 : 1) * a.doors[k];
@@ -2177,8 +2270,12 @@ function lightState() {
   const park = low || (S.sideLamp != null ? S.sideLamp : S.lights === 'park');
   return { low, high: !!S.highBeam, park }; // high beam or a flash, also with the low beams off
 }
+let lampKey = -1;
 function updateLamps(now) {
   const L = lightState();
+  // A lamp switched (by the car, the knob, night falling): drawn, whoever switched it.
+  const key = (L.low ? 1 : 0) | (L.high ? 2 : 0) | (L.park ? 4 : 0) | (S.brake ? 8 : 0) | (S.drl === false ? 16 : 0) | (S.gear === 'R' ? 32 : 0) | (S.theme === 'dark' ? 64 : 0);
+  if (key !== lampKey) { lampKey = key; sceneMoving = true; }
   const blink = Math.floor(now / 380) % 2 === 0;
   const light = (o, hex, k) => {
     o.material.emissive.setHex(hex); o.material.emissiveIntensity = k;
@@ -2187,6 +2284,7 @@ function updateLamps(now) {
   };
   const glow = (list, hex, k) => list.forEach((o) => light(o, hex, k));
   const fade = (list, target) => list.forEach((h) => {
+    if (Math.abs(target - h.userData.level) > 0.004) sceneMoving = true;
     h.userData.level += (target - h.userData.level) * 0.25;
     h.material.opacity = h.userData.level * facingCamera(h);
     h.visible = h.material.opacity > 0.004;
@@ -2214,6 +2312,7 @@ function updateLamps(now) {
   }
   if (beams) {
     const k = S.theme === 'dark' ? 1 : 0.45;
+    if (Math.abs((L.low ? 0.55 * k : 0) - beams.low.material.opacity) > 0.004 || Math.abs((L.high ? 0.5 * k : 0) - beams.high.material.opacity) > 0.004) sceneMoving = true;
     beams.low.material.opacity += ((L.low ? 0.55 * k : 0) - beams.low.material.opacity) * 0.1;
     beams.high.material.opacity += ((L.high ? 0.5 * k : 0) - beams.high.material.opacity) * 0.1;
     beams.low.visible = beams.low.material.opacity > 0.004; beams.high.visible = beams.high.material.opacity > 0.004;
@@ -2274,7 +2373,13 @@ plateCanvas.width = 1040; plateCanvas.height = 220;
 const plateTex = new THREE.CanvasTexture(plateCanvas);
 plateTex.colorSpace = THREE.SRGBColorSpace;
 plateTex.anisotropy = 4;
+// The plate as a picture for the settings card, made once per plate: the card's every redraw made
+// it again (a 1040x220 PNG encoded each time the card was opened, and twice a second while it was
+// open with the car sending values: most of what opening that card cost).
+var plateUrl = '';
+function plateImage() { return plateUrl || (plateUrl = plateCanvas.toDataURL()); }
 function drawPlate(text) {
+  plateUrl = '';
   const c = plateCanvas.getContext('2d'), W = 1040, H = 220;
   c.clearRect(0, 0, W, H);
   c.fillStyle = '#111'; c.beginPath(); c.roundRect(0, 0, W, H, 18); c.fill();
@@ -2447,17 +2552,24 @@ function stepChargeGlow(now) {
   });
 }
 var HOT_EL, DOT_EL; // looked up once (a document-wide querySelectorAll on every draw)
+var hotV, hotC; // one pair of vectors for all of them (two new ones for each, on every draw)
+// The car's keys follow the car on every draw of a turn. By a transform, the compositor's own, and
+// only when it changes: left and top were a layout of the layer over the 3D view each time.
+function placeAt(el, x, y, centred) {
+  const t = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)' + (centred ? ' translate(-50%,-50%)' : '');
+  if (el._t !== t) { el._t = t; el.style.transform = t; }
+}
 function placeHotspots() {
   const w = box.clientWidth, h = box.clientHeight;
   if (!HOT_EL) HOT_EL = Object.fromEntries(Object.keys(HOT).map((id) => [id, $(id)]));
-  for (const [id, p] of Object.entries(HOT)) {
-    const v = p.clone().project(cam), el = HOT_EL[id];
-    const toCam = cam.position.clone().sub(p).normalize();
+  if (!hotV) { hotV = new THREE.Vector3(); hotC = new THREE.Vector3(); }
+  for (const id in HOT) {
+    const p = HOT[id], el = HOT_EL[id];
+    const v = hotV.copy(p).project(cam), toCam = hotC.copy(cam.position).sub(p).normalize();
     const facing = id === 'hTrunk' ? toCam.z < 0.1 : id === 'hShade' ? toCam.y > 0.25 && !!SHADE.node : toCam.x < -0.3;
-    el.style.left = ((v.x + 1) / 2 * w) + 'px';
-    el.style.top = ((1 - v.y) / 2 * h) + 'px';
-    el.style.opacity = (S.gear === 'P' && facing && carReady) ? 1 : 0;
-    el.style.pointerEvents = el.style.opacity === '1' ? 'auto' : 'none';
+    placeAt(el, (v.x + 1) / 2 * w, (1 - v.y) / 2 * h, true);
+    const show = S.gear === 'P' && facing && carReady;
+    if (el._show !== show) { el._show = show; el.style.opacity = show ? 1 : 0; el.style.pointerEvents = show ? 'auto' : 'none'; }
   }
   placeGlassDots(w, h); // the size read once: a second read after the writes forced another layout
 }
@@ -2490,6 +2602,7 @@ function stepViewShift() {
   const want = cardsH / 2;
   if (Math.abs(want - viewShift) < 0.5) return;
   viewShift += (want - viewShift) * 0.12;
+  sceneMoving = true;
   applyViewShift();
 }
 resize3d();
@@ -2577,11 +2690,15 @@ document.addEventListener('pointerdown', (e) => {
   if (!key || !window.YunusNative || !YunusNative.recents) return;
   const held = setTimeout(() => {
     YunusNative.recents();
-    addEventListener('click', (c) => { c.stopPropagation(); c.preventDefault(); }, { capture: true, once: true });
+    // The click this hold ends in is not a tap on the key. If none comes (recents took the touch
+    // away), the next touch is a new one: the swallower stayed and ate the first tap after.
+    const eat = (c) => { c.stopPropagation(); c.preventDefault(); };
+    addEventListener('click', eat, { capture: true, once: true });
+    addEventListener('pointerdown', () => removeEventListener('click', eat, true), { capture: true, once: true });
   }, 600);
-  const stop = () => clearTimeout(held);
-  addEventListener('pointerup', stop, { once: true });
-  addEventListener('pointercancel', stop, { once: true });
+  const stop = () => { clearTimeout(held); removeEventListener('pointerup', stop); removeEventListener('pointercancel', stop); };
+  addEventListener('pointerup', stop);
+  addEventListener('pointercancel', stop);
 }, true);
 // ---------- trips: this drive and since the last charge, kept across restarts ----------
 // Energy is what leaves the battery, climate included, regeneration back: the pack's current times
@@ -2605,6 +2722,7 @@ function tripSoc(soc) {
   trips.soc = soc;
 }
 setInterval(() => {
+  if (DOCK_ONLY) return; // the trips are counted (and saved) by the main page alone
   const now = performance.now(), dt = Math.min(5, (now - tripTickAt) / 1000);
   tripTickAt = now;
   tripWasCharging = !!S.charging;
@@ -2619,13 +2737,38 @@ setInterval(() => {
     t.kwh += kw * dt / 3600;
     if (S.gear !== 'P') t.sec += dt;
   }
+  if (S.gear !== 'P') traceDrive(trips.drive, S.speed * dt / 3600, kw * dt / 3600, dt);
   if (now > tripSaveAt) { tripSaveAt = now + 20000; saveTrips(); }
 }, 1000);
+// The whole drive's consumption for the energy chart (it showed only the last 45 s): the drive's km
+// and kWh in time slices of t.bw seconds ([km, kWh] each, kept with the trip so a restart keeps
+// them). At 120 slices neighbours are joined and the slices twice as long, so any drive fits.
+const TRACE_MAX = 120;
+function traceDrive(t, km, kwh, dt) {
+  if (!t.tr) { t.tr = []; t.bw = 5; t.cur = [0, 0, 0]; }
+  t.cur[0] += km; t.cur[1] += kwh; t.cur[2] += dt;
+  if (t.cur[2] < t.bw) return;
+  t.tr.push([+t.cur[0].toFixed(4), +t.cur[1].toFixed(4)]); t.cur = [0, 0, 0];
+  if (t.tr.length >= TRACE_MAX) {
+    const j = [];
+    for (let i = 0; i + 1 < t.tr.length; i += 2) j.push([t.tr[i][0] + t.tr[i + 1][0], t.tr[i][1] + t.tr[i + 1][1]]);
+    if (t.tr.length % 2) j.push(t.tr[t.tr.length - 1]);
+    t.tr = j; t.bw *= 2;
+  }
+}
+// The trace as Wh/km per slice (null while standing: no distance to divide by), the slice under way
+// last once it holds a second.
+function drivePoints() {
+  const t = trips.drive, w = (km, kwh) => (km > 0.005 ? kwh * 1000 / km : null);
+  const pts = (t.tr || []).map(([km, kwh]) => w(km, kwh));
+  if (t.cur && t.cur[2] >= 1) pts.push(w(t.cur[0], t.cur[1]));
+  return pts;
+}
 function tripGo(i) {
   tripPage = i;
   $('tripPages').style.transform = `translateY(${-i * 100}%)`;
   [...$('tripDots').children].forEach((d, k) => d.classList.toggle('on', k === i));
-  setText($('tripName'), i ? 'Son şarjdan beri' : 'Mevcut yolculuk');
+  setText($('tripName'), ['Mevcut yolculuk', 'Son şarjdan beri', 'Tüm zamanlar'][i]);
 }
 // ---------- cards under the car ----------
 let ccIndex = 0, ccDrag = null;
@@ -2648,7 +2791,7 @@ $('carCards').addEventListener('pointerup', (e) => {
   const dx = (e.clientX - ccDrag.x) / stageScale, dy = (e.clientY - ccDrag.y) / stageScale; ccDrag = null;
   const off = stage.classList.contains('cc-off');
   // On the trip card up and down turn its pages; a further drag down from the first still hides the cards.
-  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) { if (!off && ccIndex === 2 && (dy < 0 || tripPage)) tripGo(dy < 0 ? (tripPage + 1) % 2 : 0); else setCardsOpen(dy < 0); }
+  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) { if (!off && ccIndex === 2 && (dy < 0 || tripPage)) tripGo(dy < 0 ? (tripPage + 1) % 3 : 0); else setCardsOpen(dy < 0); }
   else if (off) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) setCardsOpen(true); }
   else if (Math.abs(dx) > 50) ccGo(ccIndex + (dx < 0 ? 1 : -1));
 });
@@ -2745,6 +2888,9 @@ const appIcon = (x, size) => x.icon ? `<img src="${x.icon}" alt="" style="width:
 // nothing plays: named on the card, and the title then opens it.
 const failedApp = () => { const m = liveMedia, p = m && !m.playing && m.startFailed;
   if (!p) return ''; const a = (m.apps || []).find((x) => x.pkg === p); return a ? a.app : p; };
+// The cover and the source key as last written: every report from the player (some send one a
+// second) replaced both, the same cover decoded again and the card laid out again each time.
+let mmArtKey = null, srcBtnHtml = null;
 function renderLiveMedia() {
   // Every app closed: the card keeps the last one (play starts it again), as in Kinex.
   const m = liveMedia.access && !liveMedia.pkg && liveMedia.last
@@ -2757,13 +2903,15 @@ function renderLiveMedia() {
   const car = m.access && m.pkg === 'com.byd.mediacenter' && window.YunusNative && YunusNative.mediaMode;
   $('mmMode').style.display = car ? '' : 'none';
   if (car) { const md = carModeNow(m); $('mmMode').innerHTML = `<i class="ti ti-${md.icon}"></i>${md.name}<i class="ti ti-switch-horizontal" data-next></i>`; }
-  $('srcBtn').innerHTML = `${m.access && m.pkg ? appIcon(m, 22) : `<i class="ti ti-${m.access ? 'music' : 'lock'}" style="color:var(--mu)"></i>`}${label}<i class="ti ti-chevron-down"></i>`;
+  const srcHtml = `${m.access && m.pkg ? appIcon(m, 22) : `<i class="ti ti-${m.access ? 'music' : 'lock'}" style="color:var(--mu)"></i>`}${escHtml(label)}<i class="ti ti-chevron-down"></i>`;
+  if (srcHtml !== srcBtnHtml) { srcBtnHtml = srcHtml; $('srcBtn').innerHTML = srcHtml; }
   // No cover (radio, some apps): the app's own icon on the tile.
   // A station logo is often a wide banner: whole, on white, not cropped like a cover.
-  $('mmArt').outerHTML = logo ? `<div id="mmArt" class="art" style="background:#fff url('${m.art}') center/contain no-repeat"></div>`
+  const artKey = [logo ? 1 : 0, m.art || '', m.access ? 1 : 0, m.access && m.icon ? m.icon : '', look.icon].join('|');
+  if (artKey !== mmArtKey || !$('mmArt')) { mmArtKey = artKey; $('mmArt').outerHTML = logo ? `<div id="mmArt" class="art" style="background:#fff url('${m.art}') center/contain no-repeat"></div>`
     : m.art ? `<div id="mmArt" class="art" style="background:url('${m.art}') center/cover"></div>`
     : m.access && m.icon ? `<div id="mmArt" class="art fallback"><img src="${m.icon}" alt="" style="width:56%;height:56%;border-radius:22%"></div>`
-    : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`;
+    : `<div id="mmArt" class="art fallback"><i class="ti ti-${m.access ? look.icon : 'bell'}"></i></div>`; }
   $('mmTitle').textContent = !m.access ? 'Müzik kartı için bildirim erişimi ver' : m.pkg ? (m.title || m.app) : 'Çalan bir şey yok';
   $('mmSub').textContent = !m.access ? 'Dokun: ayarı aç, "Yunus müzik kartı"nı etkinleştir' : m.pkg ? (failedApp() ? `${failedApp()} arka planda başlamadı · ▶ ile çal` : m.error || m.artist || m.album || '') : '';
   $('mmPlay').innerHTML = `<i class="ti ti-player-${m.playing ? 'pause' : 'play'}"></i>`;
@@ -2779,9 +2927,9 @@ function openSrcPop() {
     // The open sessions first (pick one to follow it), then the other music apps (start one).
     const apps = (liveMedia.apps || []).filter((a) => !list.some((x) => x.pkg === a.pkg));
     $('srcPop').innerHTML = list.map((x) => { const look = appLook(x.pkg); return `<button data-pkg="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : look.color}">${x.icon ? appIcon(x, 42) : `<i class="ti ti-${look.icon}"></i>`}</div>
-      <span>${x.app}<small>${x.title || ''}${x.playing ? ' · çalıyor' : ''}</small></span>${x.pkg === liveMedia.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`; }).join('')
+      <span>${escHtml(x.app)}<small>${escHtml(x.title || '')}${x.playing ? ' · çalıyor' : ''}</small></span>${x.pkg === liveMedia.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`; }).join('')
       + apps.map((x) => `<button data-start="${x.pkg}"><div class="ic" style="background:${x.icon ? 'none' : appLook(x.pkg).color}">${appIcon(x, 42)}</div>
-      <span>${x.app}<small>Başlat</small></span>${!liveMedia.pkg && liveMedia.last && x.pkg === liveMedia.last.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`).join('')
+      <span>${escHtml(x.app)}<small>Başlat</small></span>${!liveMedia.pkg && liveMedia.last && x.pkg === liveMedia.last.pkg ? '<i class="ti ti-check"></i>' : ''}</button>`).join('')
       || '<button disabled><span>Müzik uygulaması yok<small>Spotify, YouTube Music ya da radyoyu yükle</small></span></button>';
   } else
   $('srcPop').innerHTML = SOURCES.map((x) => `<button data-src="${x.id}"><div class="ic" style="background:${x.color}"><i class="ti ti-${x.icon}"></i></div>
@@ -2899,13 +3047,16 @@ function updateCards() {
     if (S.playing) mmPos = (mmPos + 0.5) % 238;
     $('mmProg').style.width = (mmPos / 238 * 100) + '%';
   }
-  // Energy: instant power and consumption, plus the recent consumption trace.
-  const whkm = S.speed > 3 ? Math.round(S.powerKw * 1000 / S.speed) : null;
-  setText($('enNow'), `${Math.round(S.powerKw)} kW · ${whkm === null ? '—' : whkm} Wh/km`);
-  const vals = SIM.hist.filter((v) => v !== null);
-  const enAvg = vals.length ? `Son ${vals.length >> 1} sn ortalaması ${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} Wh/km` : 'Sürüşe başlayınca tüketim burada çizilir';
-  setText($('enAvg'), enAvg);
-  const enKey = `${S.theme} ${SIM.hist.length} ${SIM.hist[SIM.hist.length - 1]}`;
+  // Energy in kWh per 100 km, as the car's cluster shows it: now in the header, the last 45 s drawn
+  // (SIM.hist: Wh/km every 0.5 s, a tenth of kWh/100 km), the averages and the colour key below.
+  const whkm = S.speed > 3 ? S.powerKw * 1000 / S.speed : null;
+  setText($('enNow'), whkm !== null ? (whkm < 0 ? 'Geri kazanım' : `${kwh100(whkm)} kWh/100 km`)
+    : Math.abs(S.powerKw) >= 0.5 ? `Duruyor · ${dec1(Math.abs(S.powerKw))} kW` : 'Duruyor');
+  const d = trips.drive, carAvg = S.totPhm != null ? `aracın ort. ${dec1(S.totPhm)}` : '';
+  setText($('enAvg'), d.km > 0.5 ? `Bu sürüş ort. ${dec1(Math.max(0, d.kwh * 100 / d.km))}${carAvg ? ' · ' + carAvg : ''} kWh/100 km · yeşil: geri kazanım`
+    : `${carAvg ? carAvg[0].toUpperCase() + carAvg.slice(1) + ' kWh/100 km · ' : ''}düşük olan iyi`);
+  const cvW = $('enChart').offsetWidth;
+  const enKey = `${S.theme} ${cvW} ${(d.tr || []).length} ${d.bw} ${d.cur ? Math.floor(d.cur[2]) : 0} ${S.totPhm}`;
   if (enKey !== enDrawn) { enDrawn = enKey; drawEnergy(); }
   const t = S.tyres, low = ['FL', 'FR', 'RL', 'RR'].some(tyreLow), none = Object.values(t).every((v) => v == null);
   setText($('tyreState'), none ? 'Bekleniyor' : low ? 'Düşük basınç' : 'Normal');
@@ -2915,35 +3066,85 @@ function updateCards() {
     tyre('FL', 'left:22%;top:28px') + tyre('FR', 'right:22%;top:28px') + tyre('RL', 'left:22%;bottom:22px') + tyre('RR', 'right:22%;bottom:22px'));
   setHtml($('tripDrive'), tripHtml(trips.drive));
   setHtml($('tripCharge'), tripHtml(trips.charge));
+  setHtml($('tripTotal'), totalHtml());
 }
+// One decimal, Turkish comma; Wh/km to kWh per 100 km is a tenth.
+const dec1 = (v) => (Math.round(v * 10) / 10).toFixed(1).replace('.', ',');
+const kwh100 = (whkm) => dec1(whkm / 10);
+// All time, as the car itself keeps it (STATISTIC_TOTAL_*: odometer, energy used, its average):
+// how far 1 kWh takes the car is the plainest way to say the average.
+const totalHtml = () => {
+  if (S.odo == null && S.totKwh == null) return '<div style="grid-column:1 / 3;font-size:18px;color:var(--mu)">Araçtan bekleniyor</div>';
+  const avg = S.totPhm != null ? S.totPhm : S.odo > 0 && S.totKwh != null ? S.totKwh * 100 / S.odo : null;
+  const n = (v) => Math.round(v).toLocaleString('tr-TR');
+  return `<div>${S.odo != null ? n(S.odo) : '—'}<span>km</span></div><div>${S.totKwh != null ? n(S.totKwh) : '—'}<span>kWh</span></div>`
+    + `<div>${avg != null ? dec1(avg) : '—'}<span>kWh/100 km ortalama</span></div><div>${avg ? dec1(100 / avg) : '—'}<span>km, 1 kWh ile</span></div>`;
+};
 const tripHtml = (t) => {
   const mins = Math.floor(t.sec / 60);
   return `<div>${t.km.toFixed(1).replace('.', ',')}<span>km</span></div><div>${Math.max(0, t.kwh).toFixed(1).replace('.', ',')}<span>kWh</span></div>`
-    + `<div>${t.km > 0.5 ? Math.round(t.kwh * 1000 / t.km) : '—'}<span>Wh/km ortalama</span></div><div>${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}<span>sürüş süresi</span></div>`;
+    + `<div>${t.km > 0.5 ? dec1(t.kwh * 100 / t.km) : '—'}<span>kWh/100 km ortalama</span></div><div>${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}<span>sürüş süresi</span></div>`;
 };
 function drawEnergy() {
-  // Drawn at the size it is shown (the canvas was 620×130 squeezed into the card, which stretched
-  // its text): the backing store follows the element, sharp at the page's scale.
+  // Drawn at the size it is shown, sharp at the page's scale. 0 to 40 kWh/100 km up, regeneration
+  // down to -20 (the trace is in Wh/km: ten times the numbers on the scale). This whole drive from
+  // the left edge to now; the area under the line lightly filled, green below zero; the scale small
+  // on the right, the car's own average dashed. Before the drive: a line saying what comes.
   const cv = $('enChart'), W = cv.offsetWidth || 620, H = cv.offsetHeight || 96, max = 400, min = -200;
   const k = Math.max(1, stageScale * (window.devicePixelRatio || 1));
   if (cv.width !== Math.round(W * k) || cv.height !== Math.round(H * k)) { cv.width = Math.round(W * k); cv.height = Math.round(H * k); }
   const c = cv.getContext('2d');
   c.setTransform(k, 0, 0, k, 0, 0);
-  const y = (v) => H - (v - min) / (max - min) * H;
   c.clearRect(0, 0, W, H);
-  c.strokeStyle = 'rgba(138,143,152,.35)'; c.lineWidth = 1;
-  c.beginPath(); c.moveTo(0, y(0)); c.lineTo(W, y(0)); c.stroke();
-  c.fillStyle = 'rgba(138,143,152,.8)'; c.font = '14px Inter, sans-serif'; c.fillText('0', 4, y(0) - 4);
-  c.fillText('400 Wh/km', 4, 16);
-  const pts = SIM.hist, step = W / 90;
-  c.lineWidth = 3;
-  for (let i = 1; i < pts.length; i++) {
-    if (pts[i] === null || pts[i - 1] === null) continue;
-    c.strokeStyle = pts[i] < 0 ? '#30a46c' : (S.theme === 'light' ? '#16181b' : '#f2f3f5');
-    c.beginPath();
-    c.moveTo((i - 1) * step, y(THREE.MathUtils.clamp(pts[i - 1], min, max)));
-    c.lineTo(i * step, y(THREE.MathUtils.clamp(pts[i], min, max)));
-    c.stroke();
+  const top = 6, bot = H - 4; // room for the line's width at the ends of the scale
+  const y = (v) => top + (max - THREE.MathUtils.clamp(v, min, max)) / (max - min) * (bot - top);
+  const tx = S.theme === 'light' ? '22,24,27' : '242,243,245', gr = '48,164,108', mu = 'rgba(138,143,152,.9)';
+  const y0 = y(0), f0 = (y0) / H;
+  c.font = '13px Inter, sans-serif'; c.textAlign = 'right'; c.lineWidth = 1;
+  // Scale: faint lines at 20 and 40, a clearer one at 0, their numbers at the right edge.
+  for (const v of [400, 200, 0]) {
+    c.strokeStyle = `rgba(138,143,152,${v ? 0.14 : 0.4})`;
+    c.beginPath(); c.moveTo(0, Math.round(y(v)) + 0.5); c.lineTo(W - 24, Math.round(y(v)) + 0.5); c.stroke();
+    c.fillStyle = mu; c.fillText(String(v / 10), W, y(v) + 4);
+  }
+  if (S.totPhm != null && S.totPhm > 0 && S.totPhm < 40) {
+    const ya = Math.round(y(S.totPhm * 10)) + 0.5;
+    c.strokeStyle = 'rgba(138,143,152,.7)'; c.setLineDash([5, 5]);
+    c.beginPath(); c.moveTo(0, ya); c.lineTo(W - 24, ya); c.stroke(); c.setLineDash([]);
+  }
+  c.textAlign = 'left';
+  const pts = drivePoints(), n = pts.length, step = n > 1 ? (W - 30) / (n - 1) : 0;
+  const x = (i) => (n > 1 ? i * step : W - 30);
+  if (!pts.some((v) => v !== null)) {
+    c.fillStyle = mu; c.font = '15px Inter, sans-serif';
+    c.fillText('Sürüşe başlayınca bu sürüşün tüketimi burada çizilir', 0, y(300) + 5);
+    return;
+  }
+  // Under the trace: where the drive began and how long it has been.
+  const mins = Math.round(trips.drive.sec / 60);
+  c.fillStyle = mu; c.font = '12px Inter, sans-serif';
+  c.fillText('başlangıç', 0, H - 2);
+  c.textAlign = 'right'; c.fillText(mins < 60 ? `${mins} dk` : `${Math.floor(mins / 60)} sa ${mins % 60} dk`, W - 30, H - 2); c.textAlign = 'left';
+  // Runs of points without a gap, each filled down to 0 and then stroked.
+  const fill = c.createLinearGradient(0, 0, 0, H);
+  fill.addColorStop(0, `rgba(${tx},.22)`); fill.addColorStop(f0, `rgba(${tx},.03)`);
+  fill.addColorStop(f0, `rgba(${gr},.06)`); fill.addColorStop(1, `rgba(${gr},.35)`);
+  const line = c.createLinearGradient(0, 0, 0, H);
+  line.addColorStop(0, `rgb(${tx})`); line.addColorStop(f0, `rgb(${tx})`);
+  line.addColorStop(f0, `rgb(${gr})`); line.addColorStop(1, `rgb(${gr})`);
+  c.lineWidth = 2.5; c.lineJoin = 'round'; c.lineCap = 'round';
+  let i = 0;
+  while (i < n) {
+    while (i < n && pts[i] === null) i++;
+    const a = i;
+    while (i < n && pts[i] !== null) i++;
+    if (i - a < 1) continue;
+    c.beginPath(); c.moveTo(x(a), y0);
+    for (let j = a; j < i; j++) c.lineTo(x(j), y(pts[j]));
+    c.lineTo(x(i - 1), y0); c.closePath(); c.fillStyle = fill; c.fill();
+    c.beginPath(); c.moveTo(x(a), y(pts[a]));
+    for (let j = a + 1; j < i; j++) c.lineTo(x(j), y(pts[j]));
+    c.strokeStyle = line; c.stroke();
   }
 }
 let lastFrame = performance.now(), cardsAt = 0;
@@ -2986,7 +3187,27 @@ function applyStack() {
 }
 const layoutNow = () => (S.set.tabSide ? 'tabs' : S.set.stackSide || PORTRAIT ? 'stack' : 'cols'); // upright, side by side is under each other
 function renderLayoutSeg() {
-  document.querySelectorAll('#layoutSeg button').forEach((b) => b.classList.toggle('on', b.dataset.layout === layoutNow()));
+  document.querySelectorAll('#layoutSeg button[data-layout]').forEach((b) => b.classList.toggle('on', b.dataset.layout === layoutNow()));
+  const sw = document.querySelector('#layoutSeg [data-swap]');
+  if (sw) { sw.style.display = layoutNow() === 'cols' && !PORTRAIT ? '' : 'none'; sw.classList.toggle('on', !!S.set.swapSide); }
+  // Side by side with an app open: the map can be closed, the app then takes its room (one window);
+  // pressed again, the two share it again. Closing the app (its ✕) brings the map back by itself.
+  const mo = document.querySelector('#layoutSeg [data-mapoff]');
+  if (mo) {
+    const show = layoutNow() === 'cols' && !PORTRAIT && sideW > 0;
+    mo.style.display = show ? '' : 'none';
+    mo.classList.toggle('on', show && mapClosed());
+    mo.firstElementChild.className = 'ti ' + (show && mapClosed() ? 'ti-map' : 'ti-map-off');
+  }
+}
+const mapClosed = () => sideW > 0 && sideW >= sideRoom() - 1;
+// Side by side the map and the third window trade places (car | app | map); the apps' windows
+// follow their areas (placed from them), the side handle moves to the third window's map edge.
+const SWAPPED = () => !!S.set.swapSide && layoutNow() === 'cols' && !PORTRAIT;
+function applySwap() {
+  stage.classList.toggle('swapped', !!S.set.swapSide);
+  placeHandles(); renderLayoutSeg(); wake(800);
+  setTimeout(syncEmbedSoon, 400); // after the columns' move (.35 s)
 }
 function setLayout(k) {
   // Upright, side by side already shows under each other: only the setting is saved (no re-layout).
@@ -3065,8 +3286,12 @@ function setCarW(w, animate) {
   if (!STACK() && sideW > LEN() - w) setSideW(LEN() - w, animate);
   else placeHandles();
   syncEmbedSoon();
-  setTimeout(fitCard, 400); // after the columns' transition
+  fitCardSoon(); // after the columns' transition
+  try { wake(500); } catch (e) {} // the 3D view follows the width (try: the first call comes before wake is there)
 }
+// One timer, not one for every move of a drag (each read the card's box, a layout).
+var fitCardTimer = 0;
+function fitCardSoon() { clearTimeout(fitCardTimer); fitCardTimer = setTimeout(fitCard, 400); }
 // The embedded navigation app follows the map area: hidden while a divider is dragged (resizing
 // its display every frame would stutter), then fitted to the new area once the layout settles.
 // The map follows the car (as Tesla's does) until it is dragged; Konumuma dön or a route turns it back on.
@@ -3077,13 +3302,17 @@ function syncEmbedSoon() {
   clearTimeout(embedSyncAt);
   embedSyncAt = setTimeout(() => { if (colDrag) syncEmbedSoon(); else syncEmbedNow(); }, 450); // after the layout settles
 }
+// Yunus behind another app (BYD's 360° view in reverse) is laid out at no size: a fit made then
+// measured the map area as 0 and hid Maps, and nothing fitted it again in front (the map area
+// stayed empty after R → D). Nothing is fitted while out of sight; back in front it is fitted again.
+function pageOut() { return document.hidden || !(stageScale > 0.05); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncEmbedSoon(); });
 function syncEmbedNow() {
   try { if (!mapEmbedded && !sidePkg) return; } catch { return; }
   clearTimeout(embedSyncAt);
-  // While a signal column is open the apps are shifted, not resized (see setSigCol).
-  const sigOpen = !!(sigW.left || sigW.right);
-  if (sidePkg && !sigOpen) embedSide();
-  if (!mapEmbedded || sigOpen) return;
+  if (pageOut()) return;
+  if (sidePkg) embedSide();
+  if (!mapEmbedded) return;
   const r = $('map').getBoundingClientRect(), wrap = $('mapWrap').getBoundingClientRect();
   // The area's own row too: upright with the car taking it all, the row is 0 px but the map kept a
   // height and Maps covered the dock.
@@ -3147,8 +3376,11 @@ function loopFrame() {
   const blinkKey = (S.signal || S.hazard) ? Math.floor(tickAt / 380) : -1;
   const trayHold = trayOpen || tickAt < trayMovingUntil; // nothing is drawn under the tray anyway
   const due = !trayHold && (blinkKey !== lastBlinkDrawn || (chargeGear.visible && S.chargeState !== 2 && tickAt - lastDraw >= 66));
-  const calm = S.set.perf && DEVICE && !camAnim && !glassDrag && S.gear !== 'D' && S.gear !== 'R' && tickAt >= awakeUntil;
+  // (Reverse too: nothing of the view moves in R and nothing was drawn, yet the loop ran its whole
+  // tick on every vsync for as long as the car reversed. A lamp that changes is drawn all the same.)
+  const calm = S.set.perf && DEVICE && !camAnim && !glassDrag && S.gear !== 'D' && tickAt >= awakeUntil;
   if (calm && !due && tickAt - lastFrame < 100) return loopCalm(tickAt);
+  sceneMoving = false;
   if (camAnim) {
     camAnim.t = Math.min(1, camAnim.t + 0.025);
     const k = 1 - Math.pow(1 - camAnim.t, 3);
@@ -3168,6 +3400,7 @@ function loopFrame() {
   updateBlindSpotWarning();
   updateRearCam(now);
   if (now > cardsAt) { updateCards(); cardsAt = now + 500; }
+  if (Math.abs((S.trunk ? GATE.openAngle : 0) - gateAngle) > 0.002) sceneMoving = true;
   gateAngle += ((S.trunk ? GATE.openAngle : 0) - gateAngle) * 0.06;
   gateTarget.rotation.x = gateAngle;
   // The trunk lining only exists while the tailgate is up, so it can never show through the body.
@@ -3188,6 +3421,8 @@ function loopFrame() {
   const mapW = $('mapWrap').clientWidth, mapH = $('mapWrap').clientHeight;
   if (mapW !== lastBox.map || mapH !== lastBox.mapH) { lastBox.map = mapW; lastBox.mapH = mapH; if (map && mapW > 10) { map.resize(); if (mapFollow && myPos && !NAV.active) map.jumpTo({ center: myPos }); } }
   stepViewShift();
+  // Something still on its way: drawn until it is there, however long that takes (and no longer).
+  if (sceneMoving) awakeUntil = Math.max(awakeUntil, now + 150);
   // Performance mode: the 3D view is only drawn while something in it moves (camera, a part
   // easing open or shut, blinking lamps, the road while driving), at most 30 times a second.
   // Parked and untouched, the last frame just stays on screen.
@@ -3197,16 +3432,20 @@ function loopFrame() {
   // a second (not once the battery is full: nothing moves then). Both ran the whole time a signal
   // was on or the car was charging, and the page dropped to 7-15 frames a second.
   let draw = !S.set.perf || camAnim || glassDrag || S.gear === 'D' || blinkKey !== lastBlinkDrawn || now < awakeUntil || (chargeGear.visible && S.chargeState !== 2 && now - lastDraw >= 66);
+  if (heldDraw) draw = true;
   if (draw && (S.set.perf || S.gear === 'D') && now - lastDraw < 32) draw = false; // driving: 30/s is smooth enough for the lines
   // The app tray up or sliding (parked): the car behind it holds still, so the tray's own movement
   // has the whole frame (drawing the car under it made the tray stutter as it opened and closed).
-  if (draw && S.gear !== 'D' && (trayOpen || now < trayMovingUntil)) draw = false;
+  if (draw && S.gear !== 'D' && (trayOpen || now < trayMovingUntil)) { draw = false; heldDraw = true; }
+  // The car's column closed (the map full screen): nothing of it shows, nothing is drawn. It was
+  // drawn 30 times a second while driving all the same, taken from the map beside it.
+  if (box.clientWidth <= 10 || box.clientHeight <= 10) { draw = false; lastBlinkDrawn = blinkKey; }
   if (resized) draw = true;
   if (draw) {
     controls.update();
     placeHotspots();
     renderer.render(scene, cam);
-    lastDraw = now; draws++; lastBlinkDrawn = blinkKey;
+    lastDraw = now; draws++; lastBlinkDrawn = blinkKey; heldDraw = false;
   }
   if (now - fpsAt >= 1000) {
     $('fpsMeter').textContent = `${Math.round(frames * 1000 / (now - fpsAt))} fps · 3D ${Math.round(draws * 1000 / (now - fpsAt))}/sn${S.set.perf ? ' · performans' : ''}`;
@@ -3220,17 +3459,24 @@ function loopFrame() {
 function loopCalm(now) {
   let wait = Math.max(1, 100 - (now - lastFrame));
   if (S.signal || S.hazard) wait = Math.min(wait, 380 - now % 380 + 1);
-  if (chargeGear.visible && S.chargeState !== 2) wait = Math.min(wait, Math.max(1, 50 - (now - lastDraw))); // woken a frame early: a timer is late by up to one
+  // (Not under the app tray: nothing is drawn there, lastDraw stood still and the wait was 1 ms,
+  // a frame asked for on every vsync for as long as the tray was open.)
+  if (chargeGear.visible && S.chargeState !== 2 && !(trayOpen || now < trayMovingUntil)) wait = Math.min(wait, Math.max(1, 50 - (now - lastDraw))); // woken a frame early: a timer is late by up to one
   return wait;
 }
 let frames = 0, draws = 0, fpsAt = performance.now(), lastDraw = 0, awakeUntil = 0, lastBlinkDrawn = -1;
 const wake = (ms = 3000) => { awakeUntil = Math.max(awakeUntil, performance.now() + ms); loopKick(); };
 loopKick();
-// Anything touched or changed may set a part moving, so keep drawing for a few seconds after it.
-addEventListener('pointerdown', () => wake(), true);
-addEventListener('click', () => wake(), true);
+// Anything touched or changed may change the car's picture, so it is drawn for a moment after it,
+// and on for as long as something is then moving (sceneMoving). It was 3 s of drawing after every
+// touch, wherever on the page: 90 pictures of the car for a tap on a key that has nothing to do
+// with it, taken from whatever that tap had started.
+addEventListener('pointerdown', () => wake(600), true);
+addEventListener('click', () => wake(600), true);
+addEventListener('input', () => wake(600), true); // typed or slid: the plate's text, a setting
+addEventListener('change', () => wake(600), true);
 controls.addEventListener('change', () => wake(400));
-controls.addEventListener('end', () => wake(1500)); // let the orbit damping settle
+controls.addEventListener('end', () => wake(500)); // the damping's own changes keep it awake from here
 function applyPerf() {
   stage.classList.toggle('perf', S.set.perf);
   $('fpsMeter').classList.toggle('show', S.set.fps);
@@ -3327,7 +3573,11 @@ function setCharge(v, fromCar) {
   refreshCard();
 }
 // Sunshade opening in percent (0 closed, 100 fully back), like the window percentages.
-function setShade(p) {
+function setShade(p, fromCar) {
+  // On the car the shade is the car's to move, as the lock, the tailgate and the charge flap are:
+  // the tap asks the car, and the screen follows what the car then reports. (The tap only changed
+  // the screen: "Perde %100" and the model's shade open, with the real one where it was.)
+  if (S.live && !fromCar) return carCmd('sunshade', { open: Math.round(THREE.MathUtils.clamp(p, 0, 100)) });
   S.sunshade = Math.round(THREE.MathUtils.clamp(p, 0, 100));
   $('hShade').innerHTML = S.sunshade > 0 ? `<b>Kapat</b><span>Perde %${S.sunshade}</span>` : '<b>Aç</b><span>Tavan perdesi</span>';
   refreshCard();
@@ -3349,6 +3599,11 @@ function rayAt(e) {
 }
 function glassAt(e) {
   if (!carObj || S.gear !== 'P') return null;
+  // A ray against the whole car is ~65 ms on the head unit, and it was sent at every touch of the
+  // view (the hitch as a turn of the car began). Against the glass alone it is nothing: only a
+  // touch with glass somewhere under it goes on to ask what is in front.
+  const glass = CORNERS.map((k) => moving.windows[k]).concat([SHADE.node, SHADE.glass]).filter(Boolean);
+  if (!pickRay.intersectObjects(glass, true).length) return null;
   const targets = SHADE.node ? [carObj, SHADE.node] : [carObj];
   // First solid hit; the additive lamp glows and halos are skipped.
   const hit = pickRay.intersectObjects(targets, true).find((h) => h.object.visible && h.object.material.blending === THREE.NormalBlending);
@@ -3364,9 +3619,15 @@ box.addEventListener('pointerdown', (e) => {
   if (e.target !== renderer.domElement) return;
   rayAt(e);
   const g = glassAt(e);
-  if (g) beginGlassDrag(g);
+  if (g) beginGlassDrag(g, e);
 }, true);
-function beginGlassDrag(g) {
+// On the car a drag ends in a command to the real window or shade, so it is tied to the finger
+// that began it (g.id) and counts only once that finger has moved (g.moved): a touch on the glass
+// to turn the car, or a tap on a dot, sent the glass's own percent, which the car takes as one of
+// three positions (a window 30 % open went to half, one at 80 % fully open).
+const GLASS_SLOP = 10; // px the finger must travel before it is a drag
+function beginGlassDrag(g, e) {
+  g.id = e.pointerId; g.x0 = e.clientX; g.y0 = e.clientY; g.moved = false;
   controls.enabled = false; // the finger moves the glass (preview) or the dot (car), not the camera
   const p = g.point;
   if (g.kind === 'window') {
@@ -3412,29 +3673,31 @@ function placeGlassDots(w, h) {
       facing = k[1] === 'L' ? toCam.x > 0.35 : toCam.x < -0.35;
     }
     const show = dragging || (!!p && facing && S.gear === 'P');
-    el.style.opacity = show ? 1 : 0;
-    el.style.pointerEvents = show ? 'auto' : 'none';
+    if (el._show !== show) { el._show = show; el.style.opacity = show ? 1 : 0; el.style.pointerEvents = show ? 'auto' : 'none'; }
     if (!p) return;
     el._p = p;
-    const v = p.clone().project(cam);
-    el.style.left = ((v.x + 1) / 2 * w) + 'px';
-    el.style.top = ((1 - v.y) / 2 * h) + 'px';
+    const v = (hotV || (hotV = new THREE.Vector3())).copy(p).project(cam);
+    placeAt(el, (v.x + 1) / 2 * w, (1 - v.y) / 2 * h, false);
   });
 }
 document.querySelectorAll('[data-dot]').forEach((el) => {
   el.addEventListener('pointerdown', (e) => {
-    if (!el._p) return;
+    if (!el._p || S.gear !== 'P') return; // parked only, as a touch on the glass itself (glassAt)
     e.stopPropagation();
     rayAt(e);
     const k = el.dataset.dot;
-    beginGlassDrag(k === 'shade' ? { kind: 'shade', point: el._p.clone() } : { kind: 'window', k, point: el._p.clone() });
+    beginGlassDrag(k === 'shade' ? { kind: 'shade', point: el._p.clone() } : { kind: 'window', k, point: el._p.clone() }, e);
   });
 });
 addEventListener('pointermove', (e) => {
-  if (!glassDrag) return;
-  const p = rayAt(e).intersectPlane(glassDrag.plane, new THREE.Vector3());
-  if (!p) return;
+  if (!glassDrag || e.pointerId !== glassDrag.id) return;
   const g = glassDrag;
+  if (!g.moved) {
+    if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < GLASS_SLOP) return;
+    g.moved = true;
+  }
+  const p = rayAt(e).intersectPlane(g.plane, new THREE.Vector3());
+  if (!p) return;
   const pct = g.kind === 'window'
     ? Math.round(THREE.MathUtils.clamp(g.from + (g.start.y - p.y) / g.drop * 100, 0, 100))
     : Math.round(THREE.MathUtils.clamp(g.from + (g.start.z - p.z) / (SHADE.front - SHADE.rear) * 100, 0, 100));
@@ -3445,16 +3708,27 @@ addEventListener('pointermove', (e) => {
   if (g.kind === 'window') { S.windows[g.k] = pct; moving.anim.windows[g.k] = pct / 100; }
   else { setShade(pct); moving.anim.shade = pct / 100; }
 });
-window.addEventListener('pointerup', () => {
-  if (!glassDrag) return;
+// The one way a drag ends. A command goes to the car only from the lifting of the finger that
+// dragged, parked, and to somewhere other than where the glass is. A drag that ends any other way
+// (the touch taken away by the system, the page hidden, another finger, the gear leaving P) ends
+// without one: it used to stay held, the car's view would not turn, the loop never went calm, and
+// the next finger lifted anywhere on the page, in any gear, sent the command.
+function endGlassDrag(send) {
   const g = glassDrag;
-  // On the car the command goes to where the dot was dragged (g.target); the glass then animates to
-  // whatever the car reports. In the preview the glass already moved with the finger.
-  if (S.live) g.kind === 'window' ? carCmd('window', { pos: g.k, open: g.target }) : carCmd('sunshade', { open: g.target });
+  if (!g) return;
   glassDrag = null;
   controls.enabled = true;
+  // On the car the command goes to where the dot was dragged (g.target); the glass then animates to
+  // whatever the car reports. In the preview the glass already moved with the finger.
+  if (send && S.live && S.gear === 'P' && g.moved && g.target !== g.from)
+    g.kind === 'window' ? carCmd('window', { pos: g.k, open: g.target }) : carCmd('sunshade', { open: g.target });
   refreshCard();
-});
+  wake(400); // the dot goes back to the glass
+}
+addEventListener('pointerup', (e) => { if (glassDrag && e.pointerId === glassDrag.id) endGlassDrag(true); });
+addEventListener('pointercancel', (e) => { if (glassDrag && e.pointerId === glassDrag.id) endGlassDrag(false); });
+addEventListener('pointerdown', (e) => { if (glassDrag && e.pointerId !== glassDrag.id) endGlassDrag(false); }, true); // before the view's own listener starts the next drag
+document.addEventListener('visibilitychange', () => { if (document.hidden) endGlassDrag(false); });
 
 // Demo: tap the gear letters to toggle P / D. On the car this comes from the gearbox HAL.
 // Reverse: BYD's own 360° view comes up full screen over Yunus and goes away out of reverse;
@@ -3464,6 +3738,7 @@ function setGear(g) {
   // The camera is not kept warm in D any more: streaming it nonstop cost the car's camera services
   // about one whole core and made everything lag. It opens on the signal and stays 30 s after.
   S.gear = g;
+  if (g !== 'P') endGlassDrag(false); // a glass held as the car is put in gear is let go, nothing sent
   [...$('gears').children].forEach((s) => s.classList.toggle('on', s.textContent === g));
   const driving = g === 'D' || g === 'R';
   stage.classList.toggle('driving', driving);
@@ -3487,12 +3762,6 @@ $('gears').onclick = () => { if (S.live || DEVICE) return; setGear(S.gear === 'P
 // On the car: signal state from the light HAL, video from the BYD AVM (360) camera.
 // Here the camera feed is a drawn placeholder.
 let bsHideTimer = null, bsSide = 'left', bsRaf = null;
-let sigPending = null, sigPendTimer = 0; // a column waiting for the camera's first frame
-function sigCamReady() {
-  clearTimeout(sigPendTimer);
-  const side = sigPending; sigPending = null;
-  if (side && blindSpotWanted() && bsSide === side) setSigCol(side);
-}
 // Both status-bar arrows blink together with the hazards; otherwise just the signalled side.
 function updateSignalArrows() {
   $('sigL').classList.toggle('on', S.signal === 'left' || S.hazard);
@@ -3539,43 +3808,9 @@ function blindSpotWanted() {
   if (!S.signal) sigDismissed = null;
   if (S.signal && sigDismissed === S.signal) return false;
   if (!S.signal || S.gear === 'R' || S.bsMode === 'off') return false; // parked too (asked on the car), not reversing
-  return S.bsMode === 'always' || S.speed < 30;
-}
-// Trial: the signal's side view as a column at that edge (landscape); the map gives up the room.
-// The column opens and closes at once (no sliding: the 3D view and the map would follow it every
-// frame), and the embedded Maps is not resized for it - that made it redraw: late, black, jerky.
-// The room comes off the map, cut off its far side: a left column pushes it right, a right column
-// pushes the third window left, which stays live and at its width.
-const SIG_COL = 520, SIG_MAP_MIN = 120;
-const sigW = { left: 0, right: 0 };
-const SIG_MS = 150; // as CarCamera.SLIDE_MS
-let sigAnimEnd = 0;
-function setSigCol(side) {
-  stage.classList.add('sigAnim');
-  clearTimeout(sigAnimEnd); sigAnimEnd = setTimeout(() => stage.classList.remove('sigAnim'), SIG_MS + 80);
-  sigW.left = side === 'left' ? SIG_COL : 0; sigW.right = side === 'right' ? SIG_COL : 0;
-  // Third window under the map or in a tab: it narrows with the map (shifted and cut the same way), nothing lent.
-  const stacked = STACK() || TABS();
-  stage.style.setProperty('--sigL', sigW.left + 'px'); stage.style.setProperty('--sigR', sigW.right + 'px');
-  // Beside the map the third window keeps its width and stays live: the map gives up the column,
-  // down to a strip, and the car the rest.
-  const carGives = side && !stacked ? Math.min(carW, Math.max(0, SIG_COL + SIG_MAP_MIN - (LEN() - carW - sideW))) : 0;
-  stage.style.setProperty('--carW', (carW - carGives) + 'px');
-  placeHandles(); wake(1500);
-  if (!side) syncEmbedSoon(); // a layout switched while the column was open fits the apps now
-  // No app is resized for the column (a resized app redraws, black for a moment): each is shifted
-  // past the column and its far edge cut off, and put back as it was when the column closes. Under
-  // the map or in a tab the third window shares the map's width, so it moves the same way.
-  // They slide there with the column, over the same time and curve (one movement, not two steps).
-  const dx = Math.round(sigW.left * stageScale);
-  if (stacked) {
-    const cut = Math.round((side ? SIG_COL : 0) * stageScale);
-    try { if (mapEmbedded) YunusNative.embedShift('map', dx, cut, SIG_MS); if (sidePkg) YunusNative.embedShift('side', dx, cut, SIG_MS); } catch {}
-    return;
-  }
-  const give = Math.round(carGives * stageScale), mapCut = side ? Math.round(SIG_COL * stageScale) - give : 0;
-  try { if (mapEmbedded) YunusNative.embedShift('map', side === 'left' ? mapCut : -give, mapCut, SIG_MS); } catch {}
-  try { if (sidePkg) YunusNative.embedShift('side', side === 'right' ? -Math.round(SIG_COL * stageScale) : 0, 0, SIG_MS); } catch {}
+  // (35 on the way up once it shows: a speed hovering at 30 would open and close it.)
+  const up = $('bsCam').classList.contains('show') && !bsHideTimer;
+  return S.bsMode === 'always' || S.speed < (up ? 35 : 30);
 }
 function updateBlindSpot() {
   // The dock over other apps is a page of its own with the car's data too: the cameras are the main
@@ -3592,23 +3827,17 @@ function updateBlindSpot() {
     cam.classList.add('show');
     cam.classList.toggle('edgeMode', !!S.set.sigEdge);
     if (S.set.sigEdge && LIVE_CAM) {
-      // The car's camera, drawn at once where the column will be (#sigSpot is that place), as the
-      // column opens beneath it; the camera is kept running while driving, so its picture is there.
-      // Switched sides: the other side's column closes now, this one opens with its first frame.
-      if (sigW[bsSide === 'left' ? 'right' : 'left']) setSigCol(null);
+      // The car's camera, floating over the map at #sigSpot. Nothing moves for it: the old column that
+      // pushed the map and the car aside relaid the page and shifted the embedded apps on every
+      // signal (asked off, for speed).
       $('sigSpot').classList.toggle('right', bsSide === 'right');
       const [x, y, w, h] = screenRect($('sigSpot'));
       YunusNative.sideCam(x, y, w, h, JSON.stringify(PORTRAIT ? Object.assign({}, SIDE_CAM[bsSide], SIDE_CAM_PORTRAIT[bsSide]) : SIDE_CAM[bsSide]));
-      // The column opens with the camera's first frame (sideCamReady), not before: a column waiting
-      // for the camera was black. It waits for the frame (the camera can take a few seconds to start;
-      // opened after 1.5 s anyway, the column stood black meanwhile); 8 s at most.
-      if (!PORTRAIT && !sigW[bsSide] && sigPending !== bsSide) { sigPending = bsSide; clearTimeout(sigPendTimer); sigPendTimer = null; } // no picture, no column (never black)
     } else if (S.set.sigEdge) {
       $('sigPane').classList.toggle('right', bsSide === 'right');
       $('sigArrow').className = `ti ti-arrow-big-${bsSide}`;
       $('sigTxt').textContent = bsSide === 'left' ? 'Sol kamera' : 'Sağ kamera';
-      $('sigPane').classList.add('show');
-      if (!PORTRAIT) setSigCol(bsSide); // landscape: a column; upright it slides over the edge
+      $('sigPane').classList.add('show'); // floats over the edge, as on the car
     }
     if (!bsRaf) { bsBoxAt = 0; bsLast = ''; bsRaf = requestAnimationFrame(drawBlindSpot); } // fresh box and picture
   } else if (cam.classList.contains('show') && !bsHideTimer) {
@@ -3616,9 +3845,7 @@ function updateBlindSpot() {
     const delay = S.gear === 'D' && !sigDismissed ? 1000 : 0; // closed with a tap: at once
     bsHideTimer = setTimeout(() => {
       cam.classList.remove('show'); $('sigPane').classList.remove('show'); bsHideTimer = null;
-      sigPending = null; clearTimeout(sigPendTimer);
-      if (sigW.left || sigW.right) setSigCol(null);
-      // The camera window slides out with the column (natively, same time and curve).
+      // The camera window slides out (natively, CarCamera.SLIDE_MS).
       if (LIVE_CAM) { clearTimeout(sideCamAt); YunusNative.sideCamHide(); }
     }, delay);
   }
@@ -3973,7 +4200,7 @@ const here = () => myPos || CENTER;
 const fmtDist = (m) => (m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`);
 const fmtDur = (s) => (s < 3600 ? `${Math.max(1, Math.round(s / 60))} dk` : `${Math.floor(s / 3600)} sa ${Math.round((s % 3600) / 60)} dk`);
 const fmtClock = (s) => new Date(Date.now() + s * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); } // a function: used above this line too
 function distM(a, b) { // great-circle metres between [lng, lat] points
   const r = Math.PI / 180, dLat = (b[1] - a[1]) * r, dLng = (b[0] - a[0]) * r;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dLng / 2) ** 2;
@@ -4053,7 +4280,9 @@ function navPanelMsg(text) { $('navPanel').style.display = ''; $('navPanel').inn
 
 // Route from here to the place; avoided road classes as chosen (retried without if the server
 // can't avoid them). While navigating it re-routes quietly.
+let routeSeq = 0;
 async function routeTo(place, quiet) {
+  const seq = ++routeSeq;
   const from = here(), avoid = Object.keys(navPlaces.avoid).filter((k) => navPlaces.avoid[k]);
   const url = (ex) => `https://router.project-osrm.org/route/v1/driving/${from.join(',')};${place.at.join(',')}?overview=full&geometries=geojson&steps=true${ex.length ? '&exclude=' + ex.join(',') : ''}`;
   if (!quiet) navPanelMsg('Rota hesaplanıyor…');
@@ -4062,12 +4291,15 @@ async function routeTo(place, quiet) {
     NAV.avoidIgnored = false;
     if (j.code !== 'Ok' && avoid.length) { j = await (await fetch(url([]))).json(); NAV.avoidIgnored = true; }
     if (j.code !== 'Ok') throw new Error(j.code);
+    // Stopped or arrived meanwhile, or a later route asked for: this answer is nobody's (its line
+    // stayed drawn after navigation had ended).
+    if (seq !== routeSeq || !NAV.dest || (quiet && !NAV.active)) return;
     const r = j.routes[0];
     NAV.route = { coords: r.geometry.coordinates, dist: r.distance, dur: r.duration, steps: r.legs[0].steps };
     Object.assign(NAV, { step: 1, offCount: 0, farSaid: 0, nearSaid: 0 });
     drawRoute();
     if (NAV.active) updateNav(); else { fitRoute(); showRoutePreview(); }
-  } catch { if (!quiet) navPanelMsg('Rota bulunamadı'); }
+  } catch { if (!quiet) navPanelMsg('Rota bulunamadı'); else if (seq === routeSeq) NAV.offCount = 0; } // off the route still: counted to three again, asked again (it was asked once, ever)
 }
 function drawRoute() {
   if (!map || !map.getSource('route')) return;
@@ -4441,6 +4673,13 @@ if (DEVICE) $('navCard').style.display = 'none';
 // ---------- cards ----------
 let current = null;
 const card = $('card'), body = $('cardBody');
+let cardHeld = false;
+card.addEventListener('pointerdown', () => { cardHeld = true; }, true);
+for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { cardHeld = false; }, true);
+function cardBusy() {
+  const a = document.activeElement;
+  return cardHeld || (!!a && body.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !/^(range|checkbox|radio|button)$/.test(a.type))));
+}
 
 const CARDS = {
   climate: { tall: true, cam: null, render: () => `
@@ -4537,7 +4776,7 @@ const CARDS = {
         <input id="plateIn" value="${S.plate}" maxlength="12" autocomplete="off" spellcheck="false"
           style="width:300px;height:64px;border-radius:14px;border:2px solid var(--cd2);background:var(--cd);color:var(--tx);font:500 28px Inter,sans-serif;padding:0 18px;text-transform:uppercase">
         <button class="btn on" data-do="plate">Kaydet</button>
-        <img src="${plateCanvas.toDataURL()}" alt="Plaka önizleme" style="height:56px;border-radius:6px">
+        <img src="${plateImage()}" alt="Plaka önizleme" style="height:56px;border-radius:6px">
       </div>
       <p id="plateErr" style="font-size:18px;color:var(--dn);min-height:24px;margin:8px 0 0"></p>
       <p style="font-size:22px;color:var(--mu);margin:16px 0 14px">Sinyalde kör nokta kamerası</p>
@@ -4568,7 +4807,7 @@ const CARDS = {
   apps: { tall: true, render: () => {
     const real = deviceApps();
     return `<p class="title">Uygulamalar</p><div class="grid apps">${real
-      ? real.map((a) => `<button class="app" data-app="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('')
+      ? real.map((a) => `<button class="app" data-app="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="">` : '<i class="ti ti-apps"></i>'}</div><span>${escHtml(a.app)}</span></button>`).join('')
       : APPS.map(([n, i, c]) => `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('')}</div>`;
   } },
 };
@@ -4630,19 +4869,23 @@ function setSideW(w, animate) {
   stage.classList.toggle('dragging', !animate);
   stage.style.setProperty('--sideW', sideW + 'px');
   placeHandles();
+  renderLayoutSeg(); // the map's close key: shown with an app open, lit with the map closed
   syncEmbedSoon();
-  setTimeout(fitCard, 400);
+  fitCardSoon();
+  try { wake(500); } catch (e) {}
 }
 // The side window's handle sits on its left edge, but never on top of the car column's handle.
 function placeHandles() {
   const h = $('sideHandle').style;
   if (STACK()) { // across the map column, in the third window's top strip (the apps' windows cover the rest), clear of its keys
-    h.left = sigW.left + carW + 70 + 'px'; h.right = sigW.right + 70 + 'px';
+    h.left = carW + 70 + 'px'; h.right = '70px';
     h.top = (sideW ? STACK_H - sideW : STACK_H - 28) + 'px';
     return;
   }
   h.right = ''; h.top = '';
-  const at = Math.max(sigW.left + carW + 18, LEN() - sigW.right - sideW - 36) + (PORTRAIT ? 56 : 0) + 'px'; // upright, below the status bar (56 px, as LEN counts it)
+  // Swapped: at the third window's right edge (next to the map), just right of the car's divider when closed.
+  const at = (SWAPPED() ? carW + (sideW ? sideW - 18 : 18)
+    : Math.max(carW + 18, LEN() - sideW - 36)) + (PORTRAIT ? 56 : 0) + 'px'; // upright, below the status bar (56 px, as LEN counts it)
   $('sideHandle').style.left = PORTRAIT ? '' : at;
   $('sideHandle').style.top = PORTRAIT ? at : '';
   // Upright with the car at full height it lay over the dock's climate row and took its taps.
@@ -4653,7 +4896,15 @@ stage.classList.toggle('tabbed', TABS());
 placeHandles();
 renderSideTabs();
 renderLayoutSeg();
-$('layoutSeg').onclick = (e) => { const b = e.target.closest('[data-layout]'); if (b) setLayout(b.dataset.layout); };
+$('layoutSeg').onclick = (e) => {
+  if (e.target.closest('[data-swap]')) { S.set.swapSide = !S.set.swapSide; saveSettings(); applySwap(); return; }
+  if (e.target.closest('[data-mapoff]')) {
+    if (mapClosed()) { setSideW(THIRDS(), true); normalizeLayout(); } else setSideW(sideRoom(), true);
+    return;
+  }
+  const b = e.target.closest('[data-layout]'); if (b) setLayout(b.dataset.layout);
+};
+stage.classList.toggle('swapped', !!S.set.swapSide);
 // Outside the tabbed layout a tab first switches to it.
 $('tabMap').onclick = () => { const sw = !TABS(); if (sw) setLayout('tabs'); setSideTab('map', sw); }; // a new layout: Maps refitted once it settles
 $('tabApp').onclick = () => { if (!TABS()) setLayout('tabs'); fillSideApps(); setSideTab('app'); };
@@ -4667,10 +4918,10 @@ function fillSideApps() {
   if (!DEVICE || sideFilled) return;
   sideFilled = true;
   $('sideApps').innerHTML = (appsCache || deviceApps() || []).map((a) =>
-    `<button class="app" data-side-pkg="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="" decoding="async">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('');
+    `<button class="app" data-side-pkg="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="" decoding="async">` : '<i class="ti ti-apps"></i>'}</div><span>${escHtml(a.app)}</span></button>`).join('');
 }
 function embedSide() {
-  if (DOCK_ONLY) return;
+  if (DOCK_ONLY || pageOut()) return; // out of sight: its place can't be measured (see pageOut)
   const [x, y, w, h] = screenRect($('sideApp'));
   // Closed (no size along the long side) or too small: hide it. Upright a closed window still has
   // its full width, so both sides count.
@@ -4689,6 +4940,9 @@ function openInSide(pkg) {
   // The map app already in the map area: shown there (moved into this window and closed, the map
   // area was left black).
   if (document.documentElement.classList.contains('mapsIn') && navPackages().includes(pkg)) { if (TABS()) setSideTab('map'); return; }
+  // The car's view full screen leaves the window no room (it stayed 0 wide, and the app was never
+  // started): back to the usual width first, as the car key does for its card.
+  if (carW >= LEN()) setCarW(CAR_W, true);
   if (TABS()) setSideTab('app');
   else if (!sideW) setSideW(sideSnaps()[1], true);
   fillSideApps();
@@ -4770,20 +5024,32 @@ function useApp(pkg) {
   renderRecent();
 }
 function launchApp(pkg) { if (YunusNative.openApp(pkg)) useApp(pkg); }
+// Where an app opens: the car's own apps (BYD's, and anything on the system partition: radio, the
+// 360 view, settings, Android Auto) want the whole screen and do not run in a window of another
+// app, so they open full screen; the user's own apps open in the third window. A choice made in
+// the app list's held-down menu (Pencerede ac / Tam ekran ac) wins over the rule.
+function opensFull(pkg) {
+  const pick = (S.set.appOpen || {})[pkg];
+  if (pick === 'full' || pick === 'side') return pick === 'full';
+  if (/^com\.byd\./.test(pkg)) return true;
+  const a = (deviceApps() || []).find((x) => x.pkg === pkg);
+  return !!(a && a.sys);
+}
+function openApp(pkg) { if (opensFull(pkg)) launchApp(pkg); else openInSide(pkg); }
 function renderRecent() {
   if (!DEVICE) return;
   const room = Math.max(1, Math.min(3, DOCK_MAX - dockIds.length));
   const shown = recentApps.filter((p) => !dockIds.includes('pkg:' + p) && appInfo(p)).slice(0, room);
   $('dockRecent').innerHTML = shown.map((p) => { const a = appInfo(p);
-    return `<button class="dk dkApp" data-recent="${p}" aria-label="${a.app}">${dockIcon([a.app, null, null, a.icon])}</button>`; }).join('');
+    return `<button class="dk dkApp" data-recent="${p}" aria-label="${escHtml(a.app)}">${dockIcon([a.app, null, null, a.icon])}</button>`; }).join('');
 }
 // In Yunus a recent app opens in the third window (its ⛶ key takes it full screen); the dock over
 // another app opens it full screen as before.
-$('dockRecent').onclick = (e) => { const b = e.target.closest('[data-recent]'); if (!b) return; if (DOCK_ONLY) launchApp(b.dataset.recent); else openInSide(b.dataset.recent); };
+$('dockRecent').onclick = (e) => { const b = e.target.closest('[data-recent]'); if (!b) return; if (DOCK_ONLY) launchApp(b.dataset.recent); else openApp(b.dataset.recent); };
 function renderDock() {
   $('dockApps').innerHTML = dockIds.map((id) => {
     const it = dockItem(id);
-    return `<button class="dk dkApp" data-dock="${id}" ${id.startsWith('card:') ? `data-card="${id.slice(5)}"` : ''} aria-label="${it[0]}">${dockIcon(it)}<span class="del"><i class="ti ti-x"></i></span></button>`;
+    return `<button class="dk dkApp" data-dock="${id}" ${id.startsWith('card:') ? `data-card="${id.slice(5)}"` : ''} aria-label="${escHtml(it[0])}">${dockIcon(it)}<span class="del"><i class="ti ti-x"></i></span></button>`;
   }).join('');
   $('dockAdd').style.visibility = dockIds.length < DOCK_MAX ? '' : 'hidden';
   renderRecent();
@@ -4795,7 +5061,7 @@ function setDockEditing(on) {
 }
 function openDockItem(id) {
   if (id.startsWith('card:')) return openCard(id.slice(5));
-  if (id.startsWith('pkg:')) return launchApp(id.slice(4));
+  if (id.startsWith('pkg:')) return openApp(id.slice(4));
   if (TABS()) setSideTab('app'); else if (!sideW) setSideW(sideSnaps()[1], true);
   openSideApp(APPS.findIndex((a) => a[0] === id.slice(4)));
 }
@@ -4845,7 +5111,7 @@ $('dockAdd').onclick = () => {
   const free = [...cards, ...apps].filter((id) => !dockIds.includes(id));
   $('dockPick').innerHTML = `<p>Alt çubuğa ekle (${dockIds.length}/${DOCK_MAX})</p>` + (free.length ? free.map((id) => {
     const it = dockItem(id);
-    return `<button data-add="${id}">${dockIcon(it)}${it[0]}</button>`;
+    return `<button data-add="${id}">${dockIcon(it)}${escHtml(it[0])}</button>`;
   }).join('') : '<p>Eklenecek uygulama kalmadı.</p>');
   $('dockPick').classList.toggle('show');
 };
@@ -4887,12 +5153,12 @@ $('sideHandle').onpointerdown = (e) => {
 };
 addEventListener('pointermove', (e) => {
   if (!sideDrag) return;
-  const dx = (sideAxis(e) - sideDrag.x) / stageScale;
+  const dx = (sideAxis(e) - sideDrag.x) / stageScale * (SWAPPED() ? -1 : 1); // swapped: it grows to the right
   setSideW(sideDrag.w - dx, false);
 });
 function endSideDrag(e) {
   if (!sideDrag) return;
-  const dx = (sideAxis(e) - sideDrag.x) / stageScale, from = sideDrag.w;
+  const dx = (sideAxis(e) - sideDrag.x) / stageScale * (SWAPPED() ? -1 : 1), from = sideDrag.w;
   sideDrag = null;
   const snaps = sideSnaps();
   // A tap opens to the narrow width or closes; a drag snaps to the nearest width, and a quick
@@ -4953,7 +5219,7 @@ function buildTray(cached) {
   if (key === trayBuilt) return;
   trayBuilt = key;
   $('trayGrid').innerHTML = real
-    ? real.map((a) => `<button class="app" data-tray="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="" decoding="async">` : '<i class="ti ti-apps"></i>'}</div><span>${a.app}</span></button>`).join('')
+    ? real.map((a) => `<button class="app" data-tray="${a.pkg}"><div class="real">${a.icon ? `<img src="${a.icon}" alt="" decoding="async">` : '<i class="ti ti-apps"></i>'}</div><span>${escHtml(a.app)}</span></button>`).join('')
     : APPS.map(([n, i, c]) => `<button class="app"><div style="background:${c}"><i class="ti ti-${i}"></i></div>${n}</button>`).join('');
 }
 if (window.YunusNative && YunusNative.apps) setTimeout(() => { if (!trayOpen) buildTray(); fillSideApps(); }, 8000); // ready before the first open
@@ -4982,7 +5248,7 @@ $('trayGrid').onclick = (e) => {
   const b = e.target.closest('[data-tray]'); if (!b) return;
   if (trayHeld) { trayHeld = false; return; } // the long press's own release: the menu is up
   closeAppTray();
-  launchApp(b.dataset.tray);
+  openApp(b.dataset.tray);
 };
 // Held down (half a second, without moving): Uygulama bilgisi and Kaldır, as the car's own launcher.
 let trayHold = null, trayHeld = false;
@@ -5001,6 +5267,7 @@ function showTrayMenu(b) {
   const pkg = b.dataset.tray, m = $('trayMenu'), tray = $('appTray');
   b.classList.add('held');
   m.innerHTML = `<button data-menu="info"><i class="ti ti-info-circle"></i>Uygulama bilgisi</button>`
+    + (opensFull(pkg) ? `<button data-menu="side"><i class="ti ti-layout-sidebar-right"></i>Pencerede aç</button>` : `<button data-menu="full"><i class="ti ti-maximize"></i>Tam ekran aç</button>`)
     + (YunusNative.appRemovable(pkg) ? `<button data-menu="del" class="dn"><i class="ti ti-trash"></i>Kaldır</button>` : '');
   m.dataset.pkg = pkg;
   m.classList.add('show');
@@ -5019,6 +5286,10 @@ function hideTrayMenu() {
 $('trayMenu').onclick = (e) => {
   const b = e.target.closest('[data-menu]'); if (!b) return;
   const pkg = $('trayMenu').dataset.pkg;
+  if (b.dataset.menu === 'side' || b.dataset.menu === 'full') { // remembered for this app, and opened that way now
+    S.set.appOpen = { ...(S.set.appOpen || {}), [pkg]: b.dataset.menu }; saveSettings();
+    hideTrayMenu(); closeAppTray(); openApp(pkg); return;
+  }
   hideTrayMenu(); closeAppTray();
   // After the tray has gone: the screen that opens is a pop-up, and Yunus behind it stops drawing.
   setTimeout(() => (b.dataset.menu === 'info' ? YunusNative.appDetails(pkg) : YunusNative.appUninstall(pkg)), 260);
@@ -5048,7 +5319,7 @@ function closeCard() {
   current = null; card.classList.remove('open', 'full');
   if (appTabOn()) { if (sidePkg) embedSide(); }
   // Refitted, not just shown: the screen may have turned or the layout changed while the card was open.
-  else if (mapEmbedded) { if (sigW.left || sigW.right) YunusNative.embedVisible('map', true); else syncEmbedNow(); }
+  else if (mapEmbedded) syncEmbedNow();
   document.querySelectorAll('[data-card]').forEach((b) => b.classList.remove('on'));
   if (S.gear === 'P') camTo('default');
 }
@@ -5239,7 +5510,7 @@ const acTimers = {};
 const acSend = (cmd, args, wait = 400) => { clearTimeout(acTimers[cmd]); acTimers[cmd] = setTimeout(() => carCmd(cmd, args), wait); };
 function renderTemp() { // with the climate off the set temperature stays, dimmed (as on Tesla)
   $('tVal').textContent = S.temp.toFixed(S.live ? 0 : 1) + '°'; // the car sets whole degrees
-  $('tVal').style.opacity = S.ac === false ? 0.35 : '';
+  $('tVal').style.opacity = S.ac === false ? 0.5 : ''; // (0.35 was hard to read on the light bar)
 }
 let acSentAt = -1e9; // when Yunus last sent a temperature (none yet)
 function setTemp(v, fromCar) {
@@ -5276,7 +5547,7 @@ function setFan(v, fromCar) {
   // The propeller turns while air blows, faster with the speed.
   const spin = S.fan > 0 && S.ac !== false;
   $('fVal').innerHTML = `${S.acAuto ? '<span class="fAuto">AUTO</span>' : S.fan}<i class="ti ti-propeller${spin ? ' spin' : ''}" style="--fanT:${(3.2 / Math.max(1, S.fan)).toFixed(2)}s"></i>`;
-  $('fVal').style.opacity = S.fan === 0 ? 0.35 : ''; // off, dimmed like the temperature
+  $('fVal').style.opacity = S.fan === 0 ? 0.5 : ''; // off, dimmed like the temperature
   if (current === 'climate') refreshCard();
 }
 // Hold the fan to switch the climate's Auto on or off (the car then sets fan and air itself).
@@ -5593,7 +5864,7 @@ tickClock(); setInterval(tickClock, 10000);
 // Levels 0–4, -1: none. Wi-Fi has four Tabler steps, mobile five bars.
 // Status-bar panels, as the car's own: Wi-Fi (switch, networks, join), … The car's data comes
 // from the shell helper ({wifi:{on, ssid, nets}}); off the car a sample list.
-let netPopKind = null, netJoin = null;
+let netPopKind = null, netJoin = null, netPassFor = null; // netPassFor: the network the password field on screen is for
 const netData = { bt: window.YunusNative ? null : { on: true, devs: [{ name: 'Telefonum', addr: 'A', on: true }, { name: 'Eşin telefonu', addr: 'B' }] },
   wifi: window.YunusNative ? null : { on: true, ssid: 'Ev', nets: [
   { ssid: 'Ev', bars: 3, lock: true, saved: true, on: true }, { ssid: 'Telefon', bars: 2, lock: true, saved: true },
@@ -5644,7 +5915,10 @@ function renderNetPop() {
       <span class="nm">${escHtml(n.ssid)}<small>${n.on ? 'Bağlı' : n.saved ? 'Kayıtlı' : ''}</small></span>
       ${n.lock ? '<i class="ti ti-lock lk"></i>' : ''}${n.on ? '<i class="ti ti-check"></i>' : ''}</div>
       ${netJoin === n.ssid ? `<div class="join"><input id="netPass" type="password" placeholder="Şifre" autocomplete="off"><button data-np="join">Bağlan</button></div>` : ''}`).join('');
+  const typed = $('netPass') && netPassFor === netJoin ? $('netPass').value : ''; // what was typed so far, for this same network
   $('netPop').innerHTML = head + body;
+  netPassFor = netJoin;
+  if (typed && $('netPass')) $('netPass').value = typed;
   if (netJoin) setTimeout(() => { const f = $('netPass'); if (f) f.focus(); }, 50);
 }
 // The bell's panel: the notifications, newest first; a tap opens one, × dismisses it.
@@ -5717,15 +5991,20 @@ function renderNet(n) {
 // Slide a finger along a dock control to change it continuously; a tap still steps it once.
 // [stepPx]: page pixels per step; [onSlide]: called once when a slide starts.
 function dockSlider(el, stepPx, get, set, onSlide) {
-  let x0 = null, v0 = 0, sliding = false;
+  let x0 = null, v0 = 0, sliding = false, last = null;
   // Captured from the touch on: the arrows are narrow, and a finger leaves them in a few pixels.
-  el.addEventListener('pointerdown', (e) => { x0 = e.clientX; v0 = get(); sliding = false; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointerdown', (e) => { x0 = e.clientX; v0 = get(); sliding = false; last = null; el.setPointerCapture(e.pointerId); });
   el.addEventListener('pointermove', (e) => {
     if (x0 === null) return;
     const d = (e.clientX - x0) / stageScale;
     if (!sliding && Math.abs(d) < 12) return;
     if (!sliding) { sliding = true; if (onSlide) onSlide(); }
-    set(v0 + Math.round(d / stepPx));
+    // A step, not a move: every move of the finger ran the setter again with the same value (the
+    // volume's pop-up measured and sent, the seats' keys rebuilt, "climate off" sent over and over).
+    const v = v0 + Math.round(d / stepPx);
+    if (v === last) return;
+    last = v;
+    set(v);
   });
   const end = () => { x0 = null; };
   el.addEventListener('pointerup', end);
@@ -5902,6 +6181,8 @@ const CAR_HAL_MAP = {
   'Get soc': (v) => ({ soc: v }),
   'Get range': (v) => ({ range: v }),
   'Get odo': (v) => ({ odo: v }),
+  'Get totKwh': (v) => (v > 0 ? { totKwh: v } : {}), // getTotalElecConValue: kWh used since new (3120.4 at 19183 km)
+  'Get totPhm': (v) => (v > 0 && v < 100 ? { totPhm: v } : {}), // getTotalElecConPHMValue: kWh/100 km (15.1)
   // The cluster's park-brake and belt lights come as events only on change; these are read every second.
   'Get parkSw': (v) => ({ tt: { epb: v === 1 ? 1 : 2 } }), // getParkBrakeSwitch: 1 applied, 0 released
   'Get belt1': (v) => ({ belts: { drv: v } }), // getSafetyBeltStatus(MAIN): 1 buckled, 0 not, 2 invalid
@@ -5940,7 +6221,7 @@ function sendCarHalWant() {
   try { if (window.YunusNative && YunusNative.carHalWant) YunusNative.carHalWant(JSON.stringify(Object.keys(CAR_HAL_MAP).filter((k) => !(realSpeed && k === 'Engine 0x44100008')))); } catch {}
 }
 sendCarHalWant();
-const CAR_HAL_KEEP = ['Ota 0x40700008', 'Statistic 0x4A502010', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
+const CAR_HAL_KEEP = ['Ota 0x40700008', 'Statistic 0x4A502010', 'Get totKwh', 'Get totPhm', 'Tyre 0x99000124', 'Tyre 0x99000128', 'Tyre 0x9900012C', 'Tyre 0x99000130', 'Statistic 0x4A50203E', 'Statistic 0x4A505038', 'Statistic 0x44400030', 'Instrument 0x4A503040',
   'Setting 0x34100022', 'Setting 0x24C00010', 'Ac 0x40400028', 'Ac 0x40400038', 'Ac 0x40400010', 'Ac 0x4040001C', 'Charging 0x44400008',
   // The light knob and the lamps: the car reports them only when they change, so a start shows
   // them as they were last reported (lamps off with the car are reported too).
@@ -5967,7 +6248,9 @@ window.yunusCar = (m) => {
     if (liveMedia.playing && liveMedia.pkg !== playingPkg) useApp(liveMedia.pkg);
     playingPkg = liveMedia.playing ? liveMedia.pkg : null;
     // Setting "Araç çalışınca son müziği çal": once per start, the last app resumes if nothing plays.
-    if (!autoPlayDone && liveMedia.access) {
+    // (Not the dock overlay's page: loaded at the first switch to another app, it found the music
+    // paused and started it.)
+    if (!DOCK_ONLY && !autoPlayDone && liveMedia.access) {
       autoPlayDone = true;
       if (S.set.autoPlay && !liveMedia.playing) {
         if (liveMedia.pkg) YunusNative.media('play'); // its app still open, paused
@@ -5997,7 +6280,7 @@ window.yunusCar = (m) => {
     updateTelltales();
     return;
   }
-  if (m.redraw) { wake(800); return; } // back in front: draw again
+  if (m.redraw) { wake(800); if (!DOCK_ONLY) syncEmbedSoon(); return; } // back in front: draw again, and fit the apps again
   if (m.rearClosed) { S.set.rearMirror = false; saveSettings(); mirrorShown = false; return; } // its ✕
   if (m.rearSwitch) { // front ↔ rear
     mirrorView = mirrorView === 'rear' ? 'front' : 'rear';
@@ -6008,10 +6291,15 @@ window.yunusCar = (m) => {
   // it does nothing (it used to bring the app behind Yunus forward).
   if (m.back) { if (sidePkg && YunusNative.embedBack) YunusNative.embedBack('side'); return; }
   if (m.sideMaxOff) { setSideMax(false); return; }
-  if (m.sideRefused) { if (sidePkg) { sidePkg = null; closeSideApp(); } return; } // the helper did not start it there
+  if (m.sideRefused) { // not startable in the window: full screen instead, and from then on (unless the driver picked the window
+    // in the held-down menu, which can also switch it back), so it does not try the window and fail again on every open
+    const p = sidePkg; if (sidePkg) { sidePkg = null; closeSideApp(); }
+    if (p && !(S.set.appOpen || {})[p]) { S.set.appOpen = { ...(S.set.appOpen || {}), [p]: 'full' }; saveSettings(); }
+    if (p) launchApp(p); return;
+  }
   if (m.sideBack) { closeSideApp(); return; } // the floating keys over the third window's app
   if (m.sideClose) { $('sideClose').onclick(); return; }
-  if (m.sideCamReady) { sigCamReady(); return; } // the signal camera's first frame: open its column
+  if (m.sideCamReady) return; // the signal camera's first frame (it floats; nothing waits for it)
   if (m.sideCamDismissed) { sigDismissed = S.signal; updateBlindSpot(); return; } // tapped closed
   if (m.embedStatus) {
     window.YunusEmbedStatus = m.embedStatus;
@@ -6040,31 +6328,40 @@ window.yunusCar = (m) => {
     const val = m.carHal.int || m.carHal.float || m.carHal.double || 0;
     if (map && val != null) {
       window.yunusCar(map(val));
-      if (CAR_HAL_KEEP.includes(key)) {
-        try { const kept = JSON.parse(localStorage.getItem('carHalKept') || '{}'); kept[key] = val; localStorage.setItem('carHalKept', JSON.stringify(kept)); } catch {}
-      }
+      // Kept in memory and written a little later, once for all that changed (each change read the
+      // whole list from storage, parsed it and wrote it back: the odometer every 100 m, the pack's
+      // voltage, and twenty times at a start as the kept ones were replayed). The main page's only.
+      if (!DOCK_ONLY && CAR_HAL_KEEP.includes(key) && keptValues()[key] !== val) { carKept[key] = val; if (!keepTimer) keepTimer = setTimeout(keepNow, 3000); }
     }
     return;
   }
   const telemetryKeys = ['speed', 'powerKw', 'gear', 'locked', 'doors', 'trunk', 'windows', 'chargePort',
     'soc', 'range', 'tyres', 'signal', 'hazard', 'lights', 'highBeam', 'lowLamp', 'sideLamp', 'brake', 'drl', 'adas', 'fog', 'acOn', 'acTemp', 'fan', 'outside', 'climate', 'seats', 'faults',
-    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle', 'belts'];
+    'wheelHeat', 'regen', 'steer', 'tyreState', 'odo', 'chargeState', 'gun', 'chargeKw', 'chargeMin', 'battCurrent', 'battVolt', 'sunshade', 'steerAngle', 'belts', 'totKwh', 'totPhm'];
   if (!telemetryKeys.some((key) => Object.prototype.hasOwnProperty.call(m, key))) return;
   if (!S.live) { S.live = true; stage.classList.add('live'); }
-  if (m.speed != null) S.speed = m.speed;
+  if (m.speed != null) {
+    S.speed = m.speed;
+    // "30 km/s altında": signalling at 50 and slowing for the turn, the camera never came (it was
+    // only decided when the signal or the gear changed); opened at 25, it stayed at 90.
+    if (S.signal && S.bsMode !== 'always' && S.bsMode !== 'off' && !DOCK_ONLY &&
+      blindSpotWanted() !== ($('bsCam').classList.contains('show') && !bsHideTimer)) updateBlindSpot();
+  }
   if (m.powerKw != null) S.powerKw = m.powerKw;
   if (m.gear && m.gear !== S.gear) { setGear(m.gear); updateBlindSpot(); }
   if (m.locked != null && (m.locked !== S.locked || !lockKnown)) setLock(m.locked, true);
   if (m.doors) Object.assign(S.doors, m.doors);
   if (m.trunk != null && m.trunk !== S.trunk) setTrunk(m.trunk, true);
   if (m.windows) Object.assign(S.windows, m.windows);
-  if (m.sunshade != null) setShade(m.sunshade);
+  if (m.sunshade != null) setShade(m.sunshade, true);
   if (m.steerAngle != null) S.steerAngle = m.steerAngle;
   if (m.belts) Object.assign(S.belts, m.belts);
   if (m.chargePort != null && m.chargePort !== S.charging) setCharge(m.chargePort, true);
   if (m.soc != null || m.range != null) setBattery(m.soc, m.range);
   if (m.tyres) Object.assign(S.tyres, m.tyres);
   if (m.odo != null) { S.odo = m.odo; $('odoTxt').textContent = `Toplam ${Math.round(m.odo).toLocaleString('tr-TR')} km`; }
+  if (m.totKwh != null) S.totKwh = m.totKwh;
+  if (m.totPhm != null) S.totPhm = m.totPhm;
   if (m.battCurrent != null) S.battCurrent = m.battCurrent;
   if (m.battVolt != null) S.battVolt = m.battVolt;
   if (m.chargeState != null || m.gun != null || m.chargeKw != null || m.chargeMin != null || m.battCurrent != null || m.battVolt != null) {
@@ -6084,7 +6381,7 @@ window.yunusCar = (m) => {
   if (m.highBeam != null) S.highBeam = m.highBeam;
   if (m.lowLamp != null) S.lowLamp = m.lowLamp;
   if (m.sideLamp != null) S.sideLamp = m.sideLamp;
-  if (m.brake != null && m.brake !== S.brake) { S.brake = m.brake; wake(1000); }
+  if (m.brake != null && m.brake !== S.brake) { S.brake = m.brake; wake(300); }
   if (m.drl != null) S.drl = m.drl;
   if (m.adas) {
     const a = Object.assign(S.adas = S.adas || {}, m.adas);
@@ -6129,11 +6426,27 @@ window.yunusCar = (m) => {
   if (m.regen) S.set.regen = m.regen;
   if (m.steer) S.set.steer = m.steer;
   const now = performance.now();
-  if (current && now > liveRefreshAt) { liveRefreshAt = now + 500; refreshCard(); }
+  // (Not while a field of the card is being typed in or something in it is held: the car's next
+  // value rebuilt the card, the keyboard closed and the slider let go.)
+  if (current && now > liveRefreshAt && !cardBusy()) { liveRefreshAt = now + 500; refreshCard(); }
   // The 3D view is drawn again only for what shows on the model: the car sends many values a
   // second (currents, settings, temperatures), and waking on each kept it drawing all the time.
-  if (MODEL_KEYS.some((k) => m[k] != null)) wake(1500);
+  // For a moment only: what the value then sets moving (a door, a lamp's glow) keeps the view
+  // drawn until it is there (sceneMoving). It was 1.5 s of drawing for every such value, also for
+  // a signal, whose every blink is drawn anyway.
+  if (MODEL_KEYS.some((k) => m[k] != null)) wake(300);
 };
+var carKept = null, keepTimer = 0;
+function keptValues() {
+  if (!carKept) { try { carKept = JSON.parse(localStorage.getItem('carHalKept') || '{}'); } catch (e) { carKept = {}; } }
+  return carKept;
+}
+function keepNow() {
+  clearTimeout(keepTimer); keepTimer = 0;
+  try { localStorage.setItem('carHalKept', JSON.stringify(carKept)); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden && keepTimer) keepNow(); });
+addEventListener('pagehide', () => { if (keepTimer) keepNow(); });
 // Replay the slow values kept from the last run (see CAR_HAL_KEEP); fresh events replace them.
 try {
   const kept = JSON.parse(localStorage.getItem('carHalKept') || '{}');

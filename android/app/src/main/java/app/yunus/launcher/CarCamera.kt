@@ -40,7 +40,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         const val BUF_H = 1080
         private const val IDLE_CLOSE_MS = 30_000L
         private const val NO_FRAME_MS = 1_500L
-        const val SLIDE_MS = 150L // the signal window's slide, as long as the page's column (setSigCol)
+        const val SLIDE_MS = 100L // the signal window's slide in and out (was 150, with the page's column; asked faster)
     }
 
     private val loader by lazy { dalvik.system.PathClassLoader("/system/framework/bmmcamera.jar", "/system/lib64:/system/lib", activity.classLoader) }
@@ -405,8 +405,8 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
                 if (black) win.blackSkips++
                 EGL14.eglSwapBuffers(display, surface)
                 if (black) continue
-                // Its third frame: shown at once, and the page told (sideCamReady), which opens the
-                // signal column just then, so the column is never black while the camera starts.
+                // Its third frame: shown at once (never black while the camera starts), the page told
+                // (sideCamReady).
                 if (win.waiting > 0 && --win.waiting == 0) root.post { if (win.visible) ready(win) }
             }
         }

@@ -107,7 +107,10 @@ object ShellHelper {
                     "redrawn" -> { val w = fields.getOrNull(2)?.toIntOrNull() ?: continue; val h = fields.getOrNull(3)?.toIntOrNull() ?: continue
                         Thread { waitDrawn(display, w, h)
                             try { synchronized(out) { out.write(("shown $display" + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } }.start() }
-                    "close" -> taskExec.execute { try { close(display) } catch (t: Throwable) { System.err.println("close: $t") } }
+                    // "close <display> keep": the screen's tasks go, the app stays running (the hidden
+                    // screen a music app is started on: it plays on in its service).
+                    "close" -> { val stop = fields.getOrNull(2) != "keep"
+                        taskExec.execute { try { close(display, stop) } catch (t: Throwable) { System.err.println("close: $t") } } }
                     "full" -> { val c = fields.getOrNull(2) ?: continue; taskExec.execute { try { full(display, c) } catch (t: Throwable) { System.err.println("full: $t") } } }
                     // The back key for the app in that window (its own back: out of a full-screen channel…).
                     "back" -> ProcessBuilder("input", "-d", display.toString(), "keyevent", "4").inheritIO().start().waitFor()
@@ -172,7 +175,7 @@ object ShellHelper {
     // swiping an app away in recents does; the next launch starts the app afresh.
     // The app is then stopped as well (it kept running in the background otherwise), unless it is
     // also open somewhere else (the map window, the main screen).
-    private fun close(display: Int) {
+    private fun close(display: Int, stop: Boolean = true) {
         synchronized(watching) { watching.remove(display) }
         val roots = Tasks.roots()
         val pkgs = HashSet<String>()
@@ -180,6 +183,7 @@ object ShellHelper {
             pkgs.addAll(names)
             try { Tasks.remove(task) } catch (t: Throwable) { System.err.println("close $display task $task: $t") }
         }
+        if (!stop) return
         val elsewhere = roots.filter { it.second != display }.flatMap { it.third }.toSet()
         for (pkg in pkgs) if (pkg !in elsewhere && pkg != OWNER && Regex("[A-Za-z0-9_.]+").matches(pkg))
             ProcessBuilder("am", "force-stop", pkg).inheritIO().start().waitFor()
@@ -500,7 +504,11 @@ private object CarWatch {
         "safetybelt.BYDAutoSafetyBeltDevice" to listOf(Get("belt1", "getSafetyBeltStatus", 1)), // SAFETY_BELT_AREA_MAIN; 1 buckled, 0 not
         "doorlock.BYDAutoDoorLockDevice" to listOf(Get("lock", "getDoorLockStatus", 1)), // driver's door: 1 unlocked, 2 locked
         "statistic.BYDAutoStatisticDevice" to listOf(Get("soc", "getElecPercentageValue"), Get("range", "getElecDrivingRangeValue"),
-            Get("odo", "getTotalMileageValue")),
+            Get("odo", "getTotalMileageValue"),
+            // The car's own all-time figures (the trip card's third page): energy used and its average
+            // per 100 km, as the car keeps them since it was new. (getDrivingTimeValue read 63.6, unit
+            // unknown, so it is not read.)
+            Get("totKwh", "getTotalElecConValue"), Get("totPhm", "getTotalElecConPHMValue")),
         "bodywork.BYDAutoBodyworkDevice" to listOf(Get("steer", "getSteeringWheelValue", 1), // BODYWORK_CMD_STEERING_WHEEL_ANGEL
             Get("winFL", "getWindowOpenPercent", 1), Get("winFR", "getWindowOpenPercent", 2),
             Get("winRL", "getWindowOpenPercent", 3), Get("winRR", "getWindowOpenPercent", 4),
@@ -526,7 +534,7 @@ private object CarWatch {
     // Read in their own loops.
     private val FAST = setOf("steer", "speed")
     // These also come as events when they change, and change slowly: read every 5 s, not every second.
-    private val SLOW = setOf("soc", "range", "odo", "chgGun", "chgState", "chgPower", "restMin", "shade")
+    private val SLOW = setOf("soc", "range", "odo", "totKwh", "totPhm", "chgGun", "chgState", "chgPower", "restMin", "shade")
     private var pollTurn = 0
     private val polls = ArrayList<Poll>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
