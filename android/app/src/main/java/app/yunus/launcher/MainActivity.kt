@@ -1369,9 +1369,10 @@ private class CarHal(private val ctx: android.content.Context, private val want:
         "engine.BYDAutoEngineDevice", "gearbox.BYDAutoGearboxDevice",
         "charging.BYDAutoChargingDevice", "statistic.BYDAutoStatisticDevice",
         "tyre.BYDAutoTyreDevice", "light.BYDAutoLightDevice",
-        "pm2p5.BYDAutoPM2p5Device", "power.BYDAutoPowerDevice",
-        "sensor.BYDAutoSensorDevice", "ota.BYDAutoOtaDevice",
-        "safetybelt.BYDAutoSafetyBeltDevice", "setting.BYDAutoSettingDevice",
+        "ota.BYDAutoOtaDevice", "setting.BYDAutoSettingDevice",
+        // Not listened to: sensor (slope/acceleration, ~10 a second while driving), safety belt
+        // (~2.5 a second), PM2.5, power: the page uses none of their events, and each one cost a
+        // callback on the main thread (12 700 of 32 000 in a 16-minute drive, 2026-11-16).
         // Windows and the sunshade live here; it is expected to refuse (signature _GET), tried
         // in case this head unit's build lets the listener through.
         "bodywork.BYDAutoBodyworkDevice")
