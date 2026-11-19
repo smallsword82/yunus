@@ -1924,6 +1924,7 @@ if (!DOCK_ONLY) try {
       document.getElementById('disclaimerOk').addEventListener('click', () => {
         dlg.classList.remove('show');
         try { localStorage.setItem('yunusDisclaimer', '1'); } catch (e) {}
+        modalChanged(); // the embedded Maps / side app come back
       });
     }
   }
@@ -3616,6 +3617,7 @@ function syncEmbedNow() {
   try { if (!mapEmbedded && !sidePkg) return; } catch { return; }
   clearTimeout(embedSyncAt);
   if (pageOut()) return;
+  if (modalUp()) return modalChanged(); // a whole-screen notice is up: they stay hidden
   if (sidePkg) embedSide();
   if (!mapEmbedded) return;
   const r = $('map').getBoundingClientRect(), wrap = $('mapWrap').getBoundingClientRect();
@@ -4436,7 +4438,27 @@ if (window.YunusNative && YunusNative.embedApp) requestAnimationFrame(() => requ
 // preview's map. A Yunus card over the area hides Maps while it is open.
 let mapEmbedded = false, mapAreaStarted = false;
 function mapsIn(on) { stage.classList.toggle('mapsIn', on); document.documentElement.classList.toggle('mapsIn', on); }
+// A whole-screen notice (the first-run disclaimer, the trial screen) must not be cut by the embedded
+// apps: they are drawn above the page (their own surfaces), so they are hidden while it is up and
+// put back when it goes. Seen on a fresh install: Maps covered half the disclaimer and its button.
+function modalUp() {
+  try { return document.getElementById('disclaimer').classList.contains('show') || licShown(); } catch { return false; }
+}
+function modalChanged() {
+  if (!(window.YunusNative && YunusNative.embedApp)) return;
+  if (modalUp()) {
+    try { YunusNative.embedVisible('map', false); } catch {}
+    try { if (sidePkg) YunusNative.embedVisible('side', false); } catch {}
+    return;
+  }
+  if (!mapAreaStarted) startMapArea(); else syncEmbedNow();
+}
 function startMapArea() {
+  if (window.YunusNative && YunusNative.embedApp && modalUp()) { // started when the notice goes
+    mapAreaStarted = false;
+    try { YunusNative.embedVisible('map', false); } catch {}
+    return;
+  }
   mapAreaStarted = true;
   if (!(window.YunusNative && YunusNative.embedApp)) return startMap();
   delete $('map').dataset.wait;
@@ -5292,7 +5314,7 @@ function embedSide() {
   const [x, y, w, h] = screenRect($('sideApp'));
   // Closed (no size along the long side) or too small: hide it. Upright a closed window still has
   // its full width, so both sides count.
-  if ((TABS() ? sideTab !== 'app' : sideW < 80) || w < 60 || h < 60 || trayOpen) return YunusNative.embedVisible('side', false);
+  if ((TABS() ? sideTab !== 'app' : sideW < 80) || w < 60 || h < 60 || trayOpen || modalUp()) return YunusNative.embedVisible('side', false);
   YunusNative.embedApp('side', sidePkg, x, y, w, h);
 }
 // An element's place on the screen in physical pixels, for the embedded apps' windows. The page is
@@ -6498,7 +6520,7 @@ function licText() {
 function licDevice() { const s = licState(); return s ? s.device.slice(0, 4) + '-' + s.device.slice(4) : '—'; }
 let licEl = null, licManual = false;
 const licShown = () => !!licEl && licEl.style.display !== 'none';
-function licHide() { if (licEl) licEl.style.display = 'none'; }
+function licHide() { if (licEl) licEl.style.display = 'none'; modalChanged(); }
 function licShow(manual) {
   const s = licState();
   if (!s) { if (manual) alert(t('Bu sürümde deneme süresi yok.')); return; }
@@ -6535,6 +6557,7 @@ function licShow(manual) {
       ${s.expired ? `<button class="btn" data-lic="byd" style="flex:1;background:var(--cd2)">${t('BYD ana ekranına dön')}</button>` : `<button class="btn" data-lic="close" style="flex:1;background:var(--cd2)">${t('Kapat')}</button>`}</div>
   </div>`;
   licEl.style.display = 'flex';
+  modalChanged();
 }
 function licTick() {
   if (DOCK_ONLY) return;
