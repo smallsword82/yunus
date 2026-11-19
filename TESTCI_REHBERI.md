@@ -9,14 +9,31 @@ Desteklenen modeller: Dolphin, Seal, Atto 3, Atto 2, Seal U, Seal U DM-i, Tang, 
 - Kurulumu, ayar değişikliklerini ve denemeleri **yalnızca araç P'deyken ve dururken** yap.
 - Sürüş sırasında ekranla uğraşma.
 
+## Önce şunu kontrol et: kablosuz ADB açılabiliyor mu?
+Yunus'un kurulması ve araç verilerini okuması için aracında **kablosuz ADB açık** olmalı.
+- BYD'nin yeni yazılımlarında kablosuz ADB **açılamıyor**; bu yazılımlarda BYD üçüncü parti
+  uygulama kurulmasına da izin vermiyor (USB'den kurarken "Fail in installation of desktop apps" hatası).
+- Kablosuz ADB'yi **eski bir yazılımdayken açmış** olanlarda, yazılım sonradan güncellense de açık kalıyor;
+  bu araçlara Yunus kurulabiliyor.
+- Kablosuz ADB'si hiç açılmamış, yeni yazılımlı bir araçta Yunus şu an kurulamaz. Bunu aşmanın tek
+  bilinen yolu aracın yazılımını eski sürüme düşürmek; bu **garantiyi etkileyebilir ve ekran ünitesini
+  bozma riski taşır**. Bu rehber bunu önermez ve anlatmaz; yaparsan tüm risk sana aittir.
+
 ## Kurulum
 1. **Kablosuz ADB'yi aç:** aracın mühendislik menüsü → Test Tool → kablosuz ADB.
    Yunus araç verilerini (kapılar, camlar, klima, şarj) bu yolla okur; kapalıysa yalnızca ekran açılır.
-2. `yunus-0.2.apk` dosyasını bir USB belleğe kopyala, araca tak ve dosya yöneticisiyle aç, kur.
+2. Kur: aynı Wi-Fi ağındaki bir bilgisayardan `adb connect ARACIN_IP:5555` ve ardından
+   `adb install yunus-0.2.apk`. (BYD'nin USB kurulumu yalnızca üçüncü parti kurulumuna izin veren araçlarda çalışır.)
+   Hata alırsan ekrandaki `INSTALL_FAILED_...` satırını geliştiriciye gönder.
 3. Yunus'u aç. Araç ekranında **"USB hata ayıklamasına izin verilsin mi?"** sorusu çıkarsa
    "Bu bilgisayara her zaman izin ver" kutusunu işaretleyip **İzin ver**'e bas.
-4. **Ayarlar › Araç modeli** bölümünden kendi modelini seç (otomatik tanıma henüz yok).
-5. Yunus'u ana ekran yapmak için Ayarlar › **Ana ekran uygulaması** › **Varsayılan yap**'a bas.
+4. **Bütün izinleri ver.** İlk açılışta çıkan her izin penceresinde **İzin ver**'e bas (araç verileri,
+   konum, hata ayıklama). Sonra Yunus › Ayarlar › **Sistem** › **İzinler** bölümünde dört satırın da
+   (Araç verileri, Konum, Müzik kartı, Yardımcı) yeşil olduğunu kontrol et; kırmızı varsa **İzinleri tazele**'ye bas.
+5. **Otomatik başlatmaya izin ver.** BYD ayarlarındaki uygulama otomatik başlatma iznini Yunus için aç.
+   BYD bu izni her kurulumda ve güncellemede kapatır; her güncellemeden sonra tekrar aç.
+6. **Ayarlar › Araç modeli** bölümünden kendi modelini seç (otomatik tanıma henüz yok).
+7. Yunus'u ana ekran yapmak için Ayarlar › **Ana ekran uygulaması** › **Varsayılan yap**'a bas.
 
 ## BYD ana ekranına geri dönmek
 - Ayarlar › Ana ekran uygulaması › **BYD ana ekranına dön**; BYD'nin üst ve alt çubukları da geri gelir.
