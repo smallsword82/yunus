@@ -31,7 +31,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 4
-        versionName = "0.2.2"
+        versionName = "0.2.1"
         buildConfigField("String", "LICENSE_SECRET", "\"${licenseSecret.replace("\\", "").replace("\"", "")}\"")
     }
     buildFeatures { buildConfig = true }
