@@ -97,6 +97,13 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // MainActivity (the HOME screen) ships disabled so BYD's file manager installs the APK (see
+        // the manifest); the first start, through the launcher icon's alias, turns it on.
+        try {
+            val home = android.content.ComponentName(this, MainActivity::class.java)
+            if (packageManager.getComponentEnabledSetting(home) != android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
+                packageManager.setComponentEnabledSetting(home, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP)
+        } catch (_: Throwable) { }
         alive = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemBars()

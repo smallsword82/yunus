@@ -66,23 +66,34 @@
         android:theme="@style/Theme.Yunus"
         android:hardwareAccelerated="true">
 
-        <!-- The car's home screen (HOME), and still an app with a launcher icon. Made the default
-             with `cmd package set-home-activity`; BYD's own home stays installed as the fallback. -->
+        <!-- The car's home screen (HOME). It is installed DISABLED, the way Kinex ships: BYD's
+             file manager refuses an APK whose enabled activity is a HOME screen ("Fail in
+             installation of desktop apps", Atto 2 / Dolphin). MainActivity.onCreate enables it on
+             the first start; it is then made the default with `cmd package set-home-activity`. BYD's
+             own home stays installed as the fallback. -->
         <activity
             android:name=".MainActivity"
+            android:enabled="false"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode"
             android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- The launcher icon: enabled from install, opens MainActivity (as Kinex's MainActivityLauncher). -->
+        <activity-alias
+            android:name=".MainActivityLauncher"
+            android:targetActivity=".MainActivity"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Lets Yunus read the media sessions for the music card (now playing and its controls);
              no notifications are read. Enabled once by the owner in notification access. -->

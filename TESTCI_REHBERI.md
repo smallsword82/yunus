@@ -1,4 +1,4 @@
-﻿# Yunus 0.2.1 — Test Sürümü Rehberi
+﻿# Yunus 0.2.2 — Test Sürümü Rehberi
 
 Yunus, BYD DiLink 3 araçlar için resmî olmayan, ücretsiz bir ana ekrandır. Bu bir **test sürümüdür**:
 hatalar olabilir. Kurmadan önce `DISCLAIMER.md` dosyasını oku; kuran kişi koşulları kabul etmiş sayılır.
@@ -23,7 +23,7 @@ Yunus'un kurulması ve araç verilerini okuması için aracında **kablosuz ADB 
 1. **Kablosuz ADB'yi aç:** aracın mühendislik menüsü → Test Tool → kablosuz ADB.
    Yunus araç verilerini (kapılar, camlar, klima, şarj) bu yolla okur; kapalıysa yalnızca ekran açılır.
 2. Kur: aynı Wi-Fi ağındaki bir bilgisayardan `adb connect ARACIN_IP:5555` ve ardından
-   `adb install yunus-0.2.1.apk`. (BYD'nin USB kurulumu yalnızca üçüncü parti kurulumuna izin veren araçlarda çalışır.)
+   `adb install yunus-0.2.2.apk`. (BYD'nin USB kurulumu yalnızca üçüncü parti kurulumuna izin veren araçlarda çalışır.)
    Hata alırsan ekrandaki `INSTALL_FAILED_...` satırını geliştiriciye gönder.
 3. Yunus'u aç. Araç ekranında **"USB hata ayıklamasına izin verilsin mi?"** sorusu çıkarsa
    "Bu bilgisayara her zaman izin ver" kutusunu işaretleyip **İzin ver**'e bas.

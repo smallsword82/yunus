@@ -30,8 +30,8 @@ android {
         applicationId = "app.yunus.launcher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
         buildConfigField("String", "LICENSE_SECRET", "\"${licenseSecret.replace("\\", "").replace("\"", "")}\"")
     }
     buildFeatures { buildConfig = true }
