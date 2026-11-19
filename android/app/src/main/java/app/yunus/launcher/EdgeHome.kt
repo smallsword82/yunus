@@ -27,7 +27,9 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
     private var active = false // another app in front
     private var fullScreen = false // that app hides the system bars (a video full screen)
     private var peek = false // brought up by a swipe while full screen
-    private val endPeek = Runnable { peek = false; update() }
+    // The dock no longer goes after a few seconds over another app, full screen or not (asked on the
+    // car, 2026-11-17): nothing ends the peek but Yunus coming back (hide).
+    private val endPeek = Runnable { }
 
     // Full screen, the system lays overlay windows out down to the screen's hidden bottom (BYD's bar
     // is moved off the screen there), so a window at the bottom ends up below the visible screen.
@@ -77,10 +79,7 @@ class EdgeHome(private val ctx: Context, private val recents: () -> Unit, privat
         if (!android.provider.Settings.canDrawOverlays(ctx)) return
         active = true
         addStrip()
-        // Over another app the dock stays only a few seconds after that app came up, then gets
-        // out of the app's way (apps are laid out to the screen's bottom); a swipe up brings it.
         peek = true
-        strip?.let { it.removeCallbacks(endPeek); it.postDelayed(endPeek, PEEK_MS) }
         update()
         strip?.let { it.removeCallbacks(poll); it.post(poll) }
     }

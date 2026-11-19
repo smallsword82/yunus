@@ -1,0 +1,49 @@
+{
+  "_comment": "Kinex/Sketchfab (Ddiaz Design, CC BY-NC-SA 4.0) modelinden; kapi/cam/bagaj/on tekerlek parcalari tools/split_model.py ile ayrildi (tools/parts/byd_han.json). Koordinatlar sayfanin olcekledigi model uzayinda (uzunluk 4.29, on = +z). Dogrulandi (BYD Turkiye resmi donanim tablosu + EV Database): sarj portu tarafi, klima bolge sayisi, cam tavan tipi. Sarj: sag arka. En az cift bolgeli klima (TR 2024 tablosu iki, bayi listesi uc bolge). Acilir panoramik tavan. Dogrulanamayan: acHalfDegree (HAL kodlamasi, yalniz aracta gorulur) ve hCharge'in santim hassasiyeti.",
+  "id": "byd_han",
+  "name": "BYD Han",
+  "platform": "dl3",
+  "fuel": "EV",
+  "glb": "byd_han_parts.glb",
+  "fallbackGlb": "byd_han.glb",
+  "baseRadiusFactor": 4,
+  "presets": {
+    "default": { "theta": 20, "phi": 70, "r": 50 },
+    "actions": { "theta": 20, "phi": 70, "r": 45 },
+    "left": { "theta": 90, "phi": 83, "r": 55 },
+    "right": { "theta": 270, "phi": 83, "r": 55 },
+    "overhead": { "theta": 270, "phi": 1, "r": 90 },
+    "rear": { "theta": 160, "phi": 72, "r": 60 },
+    "drive": { "theta": 180, "phi": 58, "r": 120 },
+    "roof": { "theta": 25, "phi": 38, "r": 60 },
+    "charge": { "theta": 270, "phi": 83, "r": 92 }
+  },
+  "chargeTarget": [0, 0.75, -0.7],
+  "driveTarget": [0, 0.4, 3.2],
+  "hot": {
+    "hTrunk": [0, 0.98, -2.45],
+    "hCharge": [-0.87, 0.86, -1.44],
+    "hShade": [0, 1.46, -0.28]
+  },
+  "chargeNode": "ChargeSocket",
+  "nodes": {
+    "paintMat": "CarPaint",
+    "roofMat": "none",
+    "darkGlass": "^(Window_gls|black_gls|sun_roof)",
+    "sunroof": "^sun_roof",
+    "tailgate": "Tailgate"
+  },
+  "caps": {
+    "window": true,
+    "preciseWindow": false,
+    "sunroof": true,
+    "rearDefrost": true,
+    "dualClimate": true
+  },
+  "acHalfDegree": false,
+  "silhouette": {
+    "viewBox": "0 0 48 17.3",
+    "strokeWidth": 2.1,
+    "svg": "<path d=\"M2.0 9.3 2.2 8.9 2.4 8.8 2.5 6.0 4.2 6.0 4.4 5.9 5.1 5.8 5.3 5.8 5.4 5.2 6.6 5.0 6.7 4.5 9.0 3.6 12.2 2.7 15.8 2.1 18.6 1.9 22.8 2.0 25.5 2.4 27.4 2.9 30.4 4.1 34.4 6.2 35.5 6.0 36.8 6.3 39.8 6.7 42.3 7.3 44.1 8.0 45.2 8.7 45.3 9.2 45.9 10.1 46.0 12.9 45.7 13.7 41.0 12.1 40.8 11.1 40.5 10.3 39.9 9.5 39.1 8.9 38.3 8.6 37.3 8.4 36.3 8.6 35.5 8.9 34.7 9.5 34.1 10.3 33.8 11.1 33.6 12.1 15.5 12.1 15.3 11.1 15.0 10.3 14.4 9.5 13.6 8.9 12.8 8.6 11.8 8.4 10.8 8.6 10.0 8.9 9.2 9.5 8.6 10.3 8.3 11.1 8.1 12.1 2.5 13.2Z\"/><circle cx=\"37.3\" cy=\"12.1\" r=\"2.6\"/><circle cx=\"11.8\" cy=\"12.1\" r=\"2.6\"/>"
+  }
+}

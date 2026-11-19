@@ -2,3 +2,12 @@ __pycache__/
 *.blend1
 release/
 .claude/settings.local.json
+# Kinex uygulamasından çıkarılmış dosyalar: yalnız yerel inceleme için, depoya ve APK ya girmez.
+kinex_*.jar
+kinex_nav_style.json
+
+# Draco originals (Ddiaz Design via Kinex): the car can't decode them; only *_parts.glb ship
+viewer/byd_*.glb
+!viewer/byd_*_parts.glb
+viewer/prof.json
+screen_*.png

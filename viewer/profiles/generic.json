@@ -1,0 +1,9 @@
+{
+  "_comment": "TanInmayan DiLink 3 araci icin guvenli yedek. Kendi 3D modeli yok (Dolphin govdesini gosterir); kamera notr. Yetenekler araca gelen carInfo ile calisma aninda duzeltilir. Dolphin'e benzeyen her alan DOLPHIN_PROFILE'den dolar.",
+  "id": "generic",
+  "name": "BYD (tanInmayan model)",
+  "platform": "dl3",
+  "glb": "dolphin_parts.glb",
+  "fallbackGlb": "dolphin.glb",
+  "caps": { "window": true, "preciseWindow": false, "sunroof": true, "rearDefrost": true }
+}

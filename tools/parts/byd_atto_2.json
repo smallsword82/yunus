@@ -1,0 +1,30 @@
+{
+ "id": "byd_atto_2",
+ "wheels": "Atto2:mk_Tires|Atto2:mk_colorAtlas_1|Atto2:mk_Exterior_meshes_Agg",
+ "tyre": "Atto2:mk_Tires",
+ "solid": "Atto2:mk_Body",
+ "glass": "Atto2:mk_Glass_Atto2:mk_Glass",
+ "paint_mat": "Atto2phong1SG1",
+ "pillar_only": "Atto2:mk_Body",
+ "door_skip": "Atto2:18070|Atto2:mk_plastic_beige|Atto2:mk_ceiling|Atto2:mk_carpet|Atto2:mk_microphone|Atto2:mk_leather_perforated|Atto2:mk_buttons_atlas_3",
+ "tailgate_skip": "Atto2:18070|Atto2:mk_plastic_beige|Atto2:mk_ceiling|Atto2:mk_carpet|Atto2:mk_leather|Atto2:mk_microphone|Atto2:mk_buttons",
+ "card": "Atto2:mk_leather|Atto2:mk_plastic_skin_black|Atto2:mk_emissive_blue|Atto2:mk_buttons_atlas_1",
+ "card_inner_x": 0.612,
+ "islands": true,
+ "island_cut": "Atto2:mk_colorAtlas_3",
+ "skip_wheels": false,
+ "keep_boxes": [[0, 0.70, 1.0, 1.52, 0.6, 1.1], [0, 0.60, 1.0, 1.75, 0.6, 1.15], [0.55, 0.63, 1.8, 2.0, 0.45, 0.55], [0, 0.60, 2.5, 3.5, 0.3, 1.1], [0, 0.5, 4.0, 4.2, 0.72, 0.75]],
+ "inner_x": 0.48, "card_x": 0.70, "hinge_x": 0.84, "belt_z": 1.10,
+ "front_seam": {"guide": [[1.395, 0.26], [1.385, 0.35], [1.37, 0.50], [1.355, 0.65], [1.347, 0.85], [1.349, 1.0], [1.356, 1.06], [1.367, 1.105]], "snap": "gap"},
+ "b_seam": {"guide": [[2.393, 0.26], [2.392, 0.70], [2.398, 0.82], [2.41, 0.95], [2.417, 1.0], [2.44, 1.10], [2.465, 1.20], [2.49, 1.35], [2.505, 1.45], [2.515, 1.545]], "snap": "gap"},
+ "rear_seam": {"guide": [[3.097, 0.26], [3.097, 0.40], [3.105, 0.48], [3.13, 0.56], [3.16, 0.61], [3.20, 0.65], [3.28, 0.70], [3.355, 0.735], [3.42, 0.86], [3.47, 0.98], [3.50, 1.05], [3.52, 1.125]], "snap": "gap"},
+ "front_top": {"guide": [[2.515, 1.545], [2.30, 1.548], [2.03, 1.545], [1.98, 1.525], [1.90, 1.47], [1.70, 1.335], [1.50, 1.20], [1.38, 1.115], [1.367, 1.105]], "snap": "gap"},
+ "rear_top": {"guide": [[3.52, 1.125], [3.48, 1.18], [3.44, 1.22], [3.38, 1.30], [3.30, 1.42], [3.235, 1.52], [3.0, 1.535], [2.80, 1.542], [2.60, 1.547], [2.515, 1.545]], "snap": "gap"},
+ "charge_flap": {"side": -1, "only": "Atto2:mk_Body"},
+ "tailgate": {
+  "outline_left_half": [[-0.63, 1.62], [-0.66, 1.45], [-0.70, 1.21], [-0.705, 1.12], [-0.705, 0.68], [-0.01, 0.68]],
+  "front_edge": [[0, 3.59], [0.51, 3.59], [0.56, 3.65], [0.65, 3.86], [0.70, 4.05]],
+  "low_y": 3.55, "near_y": 3.4,
+  "hinge": [3.62, 1.56]
+ }
+}

@@ -174,3 +174,49 @@ Araçta iki ucuz yakalama bunu kesin ayırır:
   verilmezse aracın kendi BT MAC'i), `{"retry":true}` ile hemen ardından `setDoorLock`'u tekrar dener.
   Logcat'ten gerçek metot/değer çıkınca doğru olanı ekle/ayarla.
 - Araca geçince ilk sıra: (a) Kinex kilitlerken logcat + btsnoop, (b) `{cmd:"ikey","retry":true}`.
+
+---
+
+# ARAÇTA CANLI TEST — bulgular (2026-11-09, fork oturumu)
+
+Araç bağlı (10.26.49.214:5555), park. Kinex'ten elle kilitle/aç yapıldı, logcat ile yakalandı;
+yeni komutlar derlenip kurulup denendi. Sonuçlar:
+
+## 1) Kilit sinyali KESİN: Bodywork `0x48e00037`
+Kinex kilitlediğinde, kilit durumu değişmeden (~150 ms önce) her seferinde:
+`BYDAutoBodyworkDevice postEvent device_type: 1001, event_type=48e00037, value=1` (kilit) /
+`value=0` (aç). Kilit durumu ayrıca `BYDAutoOTAdevice 0x40700008` (=`Ota.OTA_LF_DOOR_LOCK`):
+**2=kilitli, 1=açık** (fiziksel tuşla da doğrulandı). Kinex daemon pid'i: `com.lexwah.kinex.hal.HalApiServiceMain`.
+Korna + dörtlüler → bu **kumanda (remote-control)** kilidi, iç merkezî kilit değil.
+
+## 2) Aktüasyon bizden HER YOLDA reddediliyor
+`ShellHelper` komutlarıyla (Permissive context, shell/uid 2000) araçta denendi:
+- `set(1001, 0x18000009)` (REMOTE_CONTROL_LOCK) → `0x80000400`
+- `set(1001, 0x48e00037, 1)` → `0x800003E8` (feature ne olursa olsun set kapalı)
+- `setDoorLock(1/0/2)` → `0x800003E8` (value 2 farklı: `0x800003EB`, ama hepsi red)
+- `postEvent(1001, 0x48e00037, 1)` → sadece yayın, aktüe etmiyor (Kinex'inki de aynı postEvent'i
+  üretir AMA araç kilitlenir → postEvent bildirim, aktüasyon ayrı)
+- **`setLockOff(1)` → `0`** ve **`setRemoteCtlUnlockingState(1)` → `0`** (KABUL! reddedilmedi) —
+  ama araç **kilitlenmedi** (ayar toggle'ı, aktüatör değil). value=2 → `0x800003EB`.
+- `sendBTMacToIKEY(..)` → `0` (kabul) ama `getBTMacAddr()` = `00:00:00:00:00:00` (gerçek MAC yok);
+  ardından setDoorLock yine red.
+
+## 3) Paket allowlist DEĞİL
+Kinex daemon'ının context sarmalayıcısı (`b/W.java`, `HalContextFactory`) op-package'ı **yine
+`com.android.shell`** yapıyor — bizimkiyle birebir aynı. Yani kapı `callingPackage` değil.
+Setting cihazında kilit-**tetikleyici** başka metot yok (`introspect` 1223-1649): tek aktüatör
+`setDoorLock` ve o kapalı; diğerleri ayar.
+
+## 4) Kinex'in tam metodu şifreli, daemon loglamıyor
+Metot adları `assets/kav.bin`'de AES/CTR şifreli (anahtar `MainActivity:5679` `setKey` ile Dart'tan;
+offline kırılamadı — base64/sertifika/54k-string-hash denendi, tutmadı). Daemon (25234) reflection
+çağrısını logcat'e basmıyor (çağıran taraf loglamaz; loglar sistem servisinden gelir).
+
+## SONUÇ ve KALAN YOL
+Kendi-imzalı uygulamadan HAL üzerinden remote-control kilidi her yolda reddediliyor; Kinex şifreli
+bir metot ve/veya bir sistem servisine Binder transaction'ı ile geçiyor. **Kesin çözüm için runtime
+hook:** Kinex daemon'ı (pid ~25234, **bizimle aynı uid=shell**, yani frida ptrace same-uid mümkün
+olmalı) çalışırken `java.lang.reflect.Method.invoke`'u veya `AbstractC0488j.f(index)` çözücüsünü
+frida ile hook'layıp kilit anında çağrılan **gerçek metot adı + argümanları** dökmek. Alternatif:
+`AbstractC0488j.d(key)`'i hook'layıp AES anahtarını alıp `kav.bin`'i çözerek 27 metot adını dökmek.
+Gerekli: araca uygun `frida-server` (arm64) push edilip çalıştırılması.

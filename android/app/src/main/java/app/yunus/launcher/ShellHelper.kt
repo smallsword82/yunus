@@ -37,6 +37,8 @@ object ShellHelper {
         val port = args[0].toInt()
         val token = args[1]
         val injector = TouchInjector()
+        System.err.println("=== helper start " + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + ", up " + SystemClock.uptimeMillis() / 1000 + " s")
+        stampTrialAnchor()
         // The main thread runs a looper (the car's listeners call back through it, as in Kinex's
         // daemon); connections are served on their own threads.
         android.os.Looper.prepareMainLooper()
@@ -50,6 +52,26 @@ object ShellHelper {
         }.start()
         android.os.Looper.loop()
     }
+
+    // Run a shell command and return its stdout (we run as shell, uid 2000).
+    private fun shOut(cmd: String): String = try {
+        val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+        val out = p.inputStream.bufferedReader().readText(); p.waitFor(); out
+    } catch (_: Throwable) { "" }
+
+    // The free trial's first-run day, stamped where an uninstall cannot reach: Settings.Global and
+    // /data/local/tmp (we hold WRITE_SECURE_SETTINGS as shell). Written only when there is no anchor
+    // yet — i.e. once, on the very first install — so a later reinstall finds the original day still
+    // there and License.kt counts the 30 days from it instead of starting over. A factory reset or
+    // ADB could still clear it; this closes the common uninstall/reinstall reset, not every path.
+    private fun stampTrialAnchor() = try {
+        val today = (System.currentTimeMillis() / 86_400_000L).toString()
+        val cur = shOut("settings get global yunus_lf").trim()
+        if (cur.isEmpty() || cur == "null") shOut("settings put global yunus_lf $today")
+        val f = java.io.File("/data/local/tmp/yunus_lf")
+        if (!f.exists()) { f.writeText(today); f.setReadable(true, false) }
+        System.err.println("trial anchor: global=${shOut("settings get global yunus_lf").trim()}")
+    } catch (t: Throwable) { System.err.println("trial anchor: ${t.cause ?: t}") }
 
     // A dropped connection (Yunus restarting) must end only this thread: an exception left to escape
     // here took the whole helper down with it.
@@ -98,8 +120,23 @@ object ShellHelper {
                     // starting ran first, and the start then put the app back). "refused": not started
                     // here (it is in Yunus's other window), so Yunus hides the empty window.
                     "launch" -> { val c = fields.getOrNull(2) ?: continue
-                        taskExec.execute { val ok = try { launch(display, c) } catch (t: Throwable) { System.err.println("launch: $t"); true }
-                            try { synchronized(out) { out.write(((if (ok) "shown " else "refused ") + display + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } } }
+                        taskExec(display).execute {
+                            // Was its process already running? A cold start is told to Yunus ("shown <d> cold").
+                            val cold = !processRunning(c.substringBefore('/'))
+                            val ok = try { launch(display, c) } catch (t: Throwable) { System.err.println("launch: $t"); true }
+                            try { synchronized(out) { out.write(((if (ok) "shown " else "refused ") + display + (if (ok && cold) " cold" else "") + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } } }
+                    // "aarestart <display>": Android Auto's screen opened again on the display (its new
+                    // size): it lays itself out only as it opens. NEW_TASK|CLEAR_TASK: only the activity,
+                    // not its service, so the phone stays connected. AAPActivity: its exported start screen (the video one is not exported); it opens the video screen itself.
+                    "aarestart" -> taskExec(display).execute { try { ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-f", "0x10008000",
+                        "-n", "com.byd.androidauto/com.google.android.projection.sink.ui.AAPActivity").inheritIO().start().waitFor() } catch (t: Throwable) { System.err.println("aarestart: $t") } }
+                    // "relaunch <display> <component>": the window changed shape (wide/tall) or density; the
+                    // app's activity is started afresh there (NEW_TASK|CLEAR_TASK), then "shown".
+                    "relaunch" -> { val c = fields.getOrNull(2) ?: continue; if (!COMPONENT.matches(c)) continue
+                        taskExec(display).execute { val t0 = SystemClock.uptimeMillis()
+                            try { ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-f", "0x10008000", "-n", c).inheritIO().start().waitFor() } catch (t: Throwable) { System.err.println("relaunch: $t") }
+                            System.err.println("${stamp()} relaunch $c on $display in ${SystemClock.uptimeMillis() - t0} ms")
+                            try { synchronized(out) { out.write(("shown $display" + System.lineSeparator()).toByteArray()); out.flush() } } catch (_: Throwable) { } } }
                     "pause" -> synchronized(paused) { paused.add(display) }
                     "resume" -> synchronized(paused) { paused.remove(display) }
                     // "redrawn <display> <w> <h>": the window was resized; "shown <display>" once its app
@@ -110,8 +147,8 @@ object ShellHelper {
                     // "close <display> keep": the screen's tasks go, the app stays running (the hidden
                     // screen a music app is started on: it plays on in its service).
                     "close" -> { val stop = fields.getOrNull(2) != "keep"
-                        taskExec.execute { try { close(display, stop) } catch (t: Throwable) { System.err.println("close: $t") } } }
-                    "full" -> { val c = fields.getOrNull(2) ?: continue; taskExec.execute { try { full(display, c) } catch (t: Throwable) { System.err.println("full: $t") } } }
+                        taskExec(display).execute { try { close(display, stop) } catch (t: Throwable) { System.err.println("close: $t") } } }
+                    "full" -> { val c = fields.getOrNull(2) ?: continue; taskExec(display).execute { try { full(display, c) } catch (t: Throwable) { System.err.println("full: $t") } } }
                     // The back key for the app in that window (its own back: out of a full-screen channel…).
                     "back" -> ProcessBuilder("input", "-d", display.toString(), "keyevent", "4").inheritIO().start().waitFor()
                 }
@@ -125,11 +162,21 @@ object ShellHelper {
     // app force-stopped so it always started cold. Now the display is set upright once, and an app
     // already running is moved over as it is (warm, at once); only an app not running is started.
     private val upright = HashSet<Int>()
-    private val taskExec = java.util.concurrent.Executors.newSingleThreadExecutor()
+    // One ordered queue per window (a close tapped while its app was still starting must run after
+    // that start), but the windows apart: on one shared queue the map's start waited behind the side
+    // window's YouTube, whose cold start at power-on takes many seconds (the map stayed black).
+    private val taskExecs = HashMap<Int, java.util.concurrent.ExecutorService>()
+    private fun taskExec(display: Int) = synchronized(taskExecs) { taskExecs.getOrPut(display) { java.util.concurrent.Executors.newSingleThreadExecutor() } }
     // Windows Yunus can't show now (hidden, or Yunus in the background): their app is not pulled back.
     private val paused = HashSet<Int>()
+    private fun processRunning(pkg: String): Boolean = try {
+        ProcessBuilder("pidof", pkg).start().inputStream.bufferedReader().readText().isNotBlank()
+    } catch (_: Throwable) { false }
+    private fun stamp() = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
     private fun launch(display: Int, component: String): Boolean {
         if (!COMPONENT.matches(component)) return true
+        val t0 = SystemClock.uptimeMillis()
+        System.err.println("${stamp()} launch $component on $display asked")
         // Alongside the start, not before it: four window commands, ~0.4 s a launch was kept waiting.
         if (upright.add(display)) Thread { lockRotation(display) }.start()
         val pkg = component.substringBefore('/')
@@ -142,7 +189,8 @@ object ShellHelper {
             // -W: back once the app's first frame is drawn (then the window's cover goes).
             ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
         }
-        keepOnDisplay(display, pkg)
+        System.err.println("${stamp()} launch $pkg on $display: ${if (moved) "moved" else if (running != null) "restarted" else "started"} in ${SystemClock.uptimeMillis() - t0} ms")
+        keepOnDisplay(display, pkg, component)
         return true
     }
 
@@ -161,6 +209,13 @@ object ShellHelper {
             }
         }
     }
+
+    private val DRAW_CHECK_AT = longArrayOf(6000, 15000, 30000)
+    // A window of an app on the display that has drawn (dumpsys, as waitDrawn reads it).
+    private fun drawnOn(display: Int): Boolean = try {
+        val dump = ProcessBuilder("dumpsys", "window", "windows").start().inputStream.bufferedReader().readText()
+        dump.split("  Window #").any { it.contains("mDisplayId=$display ") && it.contains("mDrawState=HAS_DRAWN") }
+    } catch (_: Throwable) { true } // not known: left alone
 
     private fun nudge(display: Int) {
         val line = ProcessBuilder("dumpsys", "display").start().inputStream.bufferedReader().readText()
@@ -206,8 +261,11 @@ object ShellHelper {
     // while after the launch, a task of that same app found on the main screen is moved back onto
     // the display. Only that app, only from the main screen, only onto Yunus's own display.
     private val watching = HashMap<Int, Long>()
-    private fun keepOnDisplay(display: Int, pkg: String) {
+    private fun keepOnDisplay(display: Int, pkg: String, component: String) {
         val id = System.nanoTime()
+        var gone = 0; var restarts = 0
+        var drawChecks = 0; var undrawn = 0
+        var aaSeen: Boolean? = null
         synchronized(watching) { watching[display] = id }
         Thread {
             // Kept on the display for as long as it is the slot's app (until another launch, close or
@@ -218,10 +276,46 @@ object ShellHelper {
             while (synchronized(watching) { watching[display] == id }) {
                 // Often at first (an app's own screens come soon after its start: an escape shows full
                 // screen until it is moved back), then calmer.
-                SystemClock.sleep(if (SystemClock.uptimeMillis() - start < 20000) 150 else 600)
+                // Then every 2 s: each look is a task list from the window manager (a costly binder call),
+                // and two windows asked 3 times a second each, all drive long (2026-11-18).
+                SystemClock.sleep(if (SystemClock.uptimeMillis() - start < 20000) 150 else 2000)
                 if (synchronized(paused) { display in paused }) continue
                 try {
-                    for ((task, onDisplay, pkgs) in Tasks.roots())
+                    val roots = Tasks.roots()
+                    // Android Auto come onto this display by itself (the phone connected while it had the
+                    // focus): Yunus is told, and gives the display the car screen's size (in the window's
+                    // size Android Auto cut its picture at the sides).
+                    val aa = roots.any { (_, d, names) -> d == display && "com.byd.androidauto" in names }
+                    if (aa != aaSeen) { aaSeen = aa; CarWatch.tell("aa $display ${if (aa) 1 else 0}") }
+                    // The app gone from every screen while still this window's (it crashed: Maps did, on
+                    // a WebView update, and the map area stayed black for a whole drive): started again
+                    // here, at most 3 times a launch. A close or a full-screen move ends this watch first.
+                    if (roots.none { pkg in it.third }) {
+                        if (++gone >= 4 && restarts < 3 && SystemClock.uptimeMillis() - start > 8000) {
+                            gone = 0; restarts++
+                            System.err.println("keep $pkg: gone from display $display, started again ($restarts)")
+                            ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
+                        }
+                        continue
+                    }
+                    gone = 0
+                    // Started but nothing on the screen (a black window, seen at a cold power-on): looked at
+                    // 6, 15 and 30 s after the launch. Not drawn: first a relayout (1 px and back), then the
+                    // app started again on the display.
+                    val age = SystemClock.uptimeMillis() - start
+                    if (drawChecks < DRAW_CHECK_AT.size && age > DRAW_CHECK_AT[drawChecks]) {
+                        drawChecks++
+                        if (roots.any { (_, d, names) -> d == display && pkg in names } && !drawnOn(display)) {
+                            undrawn++
+                            System.err.println("keep $pkg: nothing drawn on display $display after ${age / 1000} s ($undrawn)")
+                            if (undrawn == 1) nudge(display)
+                            else if (undrawn == 2) {
+                                ProcessBuilder("am", "force-stop", pkg).inheritIO().start().waitFor()
+                                ProcessBuilder("am", "start", "-W", "--display", display.toString(), "-n", component).inheritIO().start().waitFor()
+                            }
+                        }
+                    }
+                    for ((task, onDisplay, pkgs) in roots)
                         if (onDisplay == 0 && pkg in pkgs) {
                             // Its start put it in front of Yunus on the main screen. Yunus (single task)
                             // is brought back in front of it FIRST: started while the app is still on
@@ -452,7 +546,10 @@ private object CarWatch {
         for (name in listOf("bodywork.BYDAutoBodyworkDevice", "speed.BYDAutoSpeedDevice",
                 "doorlock.BYDAutoDoorLockDevice", "ota.BYDAutoOtaDevice",
                 // Driver assist: the lane camera's lines come as events at once (the poll is once a second).
-                "adas.BYDAutoADASDevice"))
+                "adas.BYDAutoADASDevice",
+                // The gear as an event, at once: Yunus keeps its dock off BYD's 360 view in R (read ten
+                // times a second instead, it cost a steady load; the 1 s poll stays as the fallback).
+                "gearbox.BYDAutoGearboxDevice"))
             try { listen(ctx, "android.hardware.bydauto.$name") } catch (t: Throwable) { System.err.println("watch $name: ${t.cause ?: t}") }
         // TEMPORARY, to find the blind spot's side on a drive: every other device, while this file exists.
         if (java.io.File("/data/local/tmp/yunus_rec").exists()) for (name in listOf("radar.BYDAutoRadarDevice", "signal.BYDAutoSignalDevice",
@@ -481,9 +578,43 @@ private object CarWatch {
                 cls = cls.superclass
             }
         } catch (t: Throwable) { System.err.println("watch instrument: ${t.cause ?: t}") }
+        broadcastCarInfo()
         poll()
         steerPoll()
         speedPoll()
+    }
+
+    // Once, after the devices are built: tell the page which car this is and what it has, so it can
+    // auto-pick the matching profile (Settings › System › Car model = Otomatik) and hide controls the
+    // car lacks. Model name + VIN are on the Bodywork device; the config getters say what is fitted
+    // (introspect-dilink3.txt). Each getter may be signature-gated and throw — skipped, not fatal;
+    // an empty result sends nothing, so the page stays on its current (Dolphin) profile. Replayed to
+    // a reconnecting page from `last`. The page reads it as "msg {carInfo:{...}}".
+    private fun broadcastCarInfo() {
+        val info = org.json.JSONObject()
+        fun puti(dev: Any?, getter: String, key: String) {
+            dev ?: return
+            try { (dev.javaClass.getMethod(getter).invoke(dev) as? Int)?.let { if (it != 65535) info.put(key, it) } } catch (_: Throwable) {}
+        }
+        fun puts(dev: Any?, getter: String, key: String) {
+            dev ?: return
+            try { (dev.javaClass.getMethod(getter).invoke(dev) as? String)?.takeIf { it.isNotBlank() }?.let { info.put(key, it) } } catch (_: Throwable) {}
+        }
+        puti(bodyworkDev, "getAutoModelName", "model")
+        puts(bodyworkDev, "getAutoVIN", "vin")
+        puti(bodyworkDev, "getMoonRoofConfig", "moonRoof")
+        puti(bodyworkDev, "getCarWindowAntiPinchConfig", "antiPinch")
+        puti(acDev, "getDefrostRearConfig", "rearDefrost")
+        // Dual-zone climate hints (encoding unverified — surfaced for the model author to read on the
+        // car): AC type and the temperature control (sync/independent) mode.
+        puti(acDev, "getAcType", "acType")
+        puti(acDev, "getAcTemperatureControlMode", "acTempCtrlMode")
+        puti(instrumentDev, "getTyrePressureCarType", "tyreType")
+        if (info.length() == 0) { System.err.println("carInfo: nothing readable"); return }
+        val line = "msg " + org.json.JSONObject().put("carInfo", info).toString()
+        synchronized(last) { last.put("carInfo", line) }
+        send(line)
+        System.err.println("carInfo $info")
     }
 
     // Device → (key sent, getter, its int argument or null).
@@ -603,9 +734,29 @@ private object CarWatch {
 
     // The screen's turn watched closely (on its own thread, not the 1 s poll): the bars are set
     // again for the new rotation within a frame or two, so the screen doesn't show the in-between.
+    // It asked the system 20 times a second, all drive long (a binder call each: part of system_server's
+    // 18-22% of a core while driving, 2026-11-18). Now the display's own change event wakes it, and the
+    // poll is only a slow fallback; without the event (registration failed) it polls as before.
+    private val turnLock = Object()
+    @Volatile private var turnEvents = false
     private val turnWatch = Thread {
-        while (true) { keepBars(); try { Thread.sleep(50) } catch (_: InterruptedException) { break } }
+        turnEvents = registerTurnListener()
+        while (true) {
+            keepBars()
+            try { synchronized(turnLock) { turnLock.wait(if (turnEvents) 1000L else 50L) } } catch (_: InterruptedException) { break }
+        }
     }.apply { isDaemon = true; name = "yunus-turn" }
+    private fun registerTurnListener(): Boolean = try {
+        val l = object : android.hardware.display.DisplayManager.DisplayListener {
+            override fun onDisplayAdded(id: Int) {}
+            override fun onDisplayRemoved(id: Int) {}
+            override fun onDisplayChanged(id: Int) { if (id == 0) synchronized(turnLock) { turnLock.notifyAll() } }
+        }
+        val m = displayGlobal.javaClass.methods.first { it.name == "registerDisplayListener" && (it.parameterTypes.size == 2 || it.parameterTypes.size == 3) }
+        // Android 10: (listener, handler); 12+: (listener, handler, eventsMask) - EVENT_FLAG_DISPLAY_CHANGED is 1 << 2.
+        if (m.parameterTypes.size == 2) m.invoke(displayGlobal, l, main) else m.invoke(displayGlobal, l, main, 4L)
+        true
+    } catch (t: Throwable) { System.err.println("turn listener: ${t.cause ?: t}"); false }
 
     private fun poll() {
         copyDabSlide()
@@ -843,12 +994,12 @@ private object CarWatch {
     private fun acCommand(json: String) {
         val o0 = try { org.json.JSONObject(json) } catch (_: Throwable) { return }
         if (o0.optString("cmd") == "seat") {
-            // {seat: driver|pass, heat 0..2, vent 0..2} → setSeatHeatingState / setSeatVentilatingState
-            // (area 1 driver, 2 passenger; level 1 off, 2 low, 3 high). Heat and vent exclude each
-            // other, so the one switched off goes first.
+            // {seat: driver|pass|rl|rr, heat 0..2, vent 0..2} → setSeatHeatingState / setSeatVentilatingState
+            // (area 1 driver, 2 passenger, 3 rear-left, 4 rear-right on cars with rear seats; level 1 off,
+            // 2 low, 3 high). Heat and vent exclude each other, so the one switched off goes first.
             val sd = settingDev ?: run { System.err.println("cmd: no setting device"); return }
             try {
-                val area = if (o0.optString("seat") == "pass") 2 else 1
+                val area = when (o0.optString("seat")) { "pass" -> 2; "rl" -> 3; "rr" -> 4; else -> 1 }
                 val heat = o0.optInt("heat", 0).coerceIn(0, 2) + 1
                 val vent = o0.optInt("vent", 0).coerceIn(0, 2) + 1
                 val c = sd.javaClass
@@ -887,12 +1038,24 @@ private object CarWatch {
             }
             when (o.optString("cmd")) {
                 "acPower" -> call(if (o.optBoolean("on")) "start" else "stop", arrayOf(0))
-                "acTemp" -> call("setAcTemperature", arrayOf(0, Math.round(o.optDouble("c", 22.0)).toInt().coerceIn(17, 33), 0, 1))
+                // Whole °C (unit 1, 17..33). Half-degree cars (profile acHalfDegree, page sends half)
+                // use the framework's half-degree range 34..66 with unit 2 (17.0 °C = 34 … 33.0 = 66) —
+                // the same 34..66 the Dolphin misreads as 33; verify on that model when adding it.
+                // area: 0 both zones (single-zone Dolphin default), 1 driver, 2 passenger (dual-zone cars).
+                "acTemp" -> if (o.optBoolean("half")) call("setAcTemperature", arrayOf(o.optInt("area", 0), Math.round(o.optDouble("c", 22.0) * 2).toInt().coerceIn(34, 66), 0, 2))
+                    else call("setAcTemperature", arrayOf(o.optInt("area", 0), Math.round(o.optDouble("c", 22.0)).toInt().coerceIn(17, 33), 0, 1))
                 "acFan" -> call("setAcWindLevel", arrayOf(0, o.optInt("level", 1).coerceIn(1, 7)))
                 "acFlow" -> call("setAcWindMode", arrayOf(0, o.optInt("mode", 1).coerceIn(1, 7)))
                 "acDefrost" -> call("setAcDefrostState", arrayOf(0, o.optInt("area", 1), if (o.optBoolean("on")) 1 else 0))
                 "acCycle" -> call("setAcCycleMode", arrayOf(0, if (o.optBoolean("inside")) 1 else 0))
                 "acAuto" -> call("setAcControlMode", arrayOf(0, if (o.optBoolean("on")) 0 else 1))
+                // Rear climate panel (profile caps.rearClimate). Fan and auto have dedicated rear
+                // setters; the rear set temperature reuses setAcTemperature with the rear area (3) —
+                // verify that area on a car that has a rear panel.
+                "acRearFan" -> call("setRearAcWindLevel", arrayOf(0, o.optInt("level", 0).coerceIn(0, 7)))
+                "acRearAuto" -> call("setRearAcControlMode", arrayOf(0, if (o.optBoolean("on")) 0 else 1))
+                "acRearTemp" -> if (o.optBoolean("half")) call("setAcTemperature", arrayOf(3, Math.round(o.optDouble("c", 22.0) * 2).toInt().coerceIn(34, 66), 0, 2))
+                    else call("setAcTemperature", arrayOf(3, Math.round(o.optDouble("c", 22.0)).toInt().coerceIn(17, 33), 0, 1))
             }
         } catch (t: Throwable) { System.err.println("cmd $json: ${t.cause ?: t}") }
     }
@@ -1001,6 +1164,9 @@ private object CarWatch {
     }
 
     private val ids = java.util.concurrent.ConcurrentHashMap<Int, String>()
+
+    /** A line to every watcher (Yunus), from outside the car watch ("aa <display> 1|0"). */
+    fun tell(line: String) = send(line)
 
     private fun send(line: String) {
         for (o in subscribers) try { synchronized(o) { o.write("$line\n".toByteArray()); o.flush() } } catch (_: Throwable) { subscribers.remove(o) }

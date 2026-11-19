@@ -1,0 +1,6 @@
+# Deneme süresi açma kodlarının gizli anahtarı — bu dosyayı "license.properties" olarak kopyala.
+# license.properties repoya GİRMEZ (.gitignore'da). Bu anahtarı bilen herkes açma kodu üretebilir;
+# kaybedersen eski kodlar yeni derlemelerde çalışmaz. Dosya yoksa derleme süresiz çalışır.
+# Rastgele bir anahtar üretmek için:  python -c "import secrets; print(secrets.token_hex(32))"
+
+secret=DEGISTIR

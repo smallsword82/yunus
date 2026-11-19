@@ -1,0 +1,26 @@
+{
+ "id": "byd_seal",
+ "wheels": "tyre|alpha_rim|badges_rim|blk_B_Rim|crom[.]001|disk|Rear_caliper|inner_rim",
+ "tyre": "^tyre",
+ "under": "UC_under",
+ "solid": "^bodypaint_A",
+ "glass": "^(f_gls|b_gls)",
+ "card": "^Interior",
+ "paint_mat": "Car_Paint",
+ "pillar_only": "^(bodypaint_A|blk[.]001)",
+ "door_skip": "roof_gls|wiper|defooger",
+ "inner_x": 0.60, "card_x": 0.63, "hinge_x": 0.78, "belt_z": 0.93,
+ "front_seam": {"guide": [[1.30, 0.22], [1.30, 0.87]], "snap": "seam"},
+ "b_seam": {"guide": [[2.285, 0.26], [2.285, 0.75], [2.31, 0.90], [2.33, 1.00], [2.37, 1.15], [2.395, 1.25]], "snap": "seam"},
+ "rear_seam": {"guide": [[2.68, 0.23], [2.83, 0.27], [3.00, 0.45], [3.12, 0.63], [3.20, 0.75], [3.30, 0.88], [3.24, 0.96]], "snap": "seam"},
+ "front_top": {"guide": [[2.395, 1.25], [2.10, 1.215], [1.90, 1.16], [1.70, 1.08], [1.50, 0.98], [1.30, 0.87]], "snap": "gap", "dz": 0.004},
+ "rear_top": {"guide": [[3.24, 0.96], [3.52, 1.005], [3.45, 1.05], [3.30, 1.11], [3.10, 1.18], [2.90, 1.22], [2.60, 1.245], [2.395, 1.25]], "snap": "gap", "dz": 0.004},
+ "tailgate": {
+  "outline_left_half": [[-0.562, 1.06], [-0.566, 0.868], [-0.01, 0.868]],
+  "front_edge": [[0, 3.918], [0.1, 3.912], [0.2, 3.899], [0.3, 3.877], [0.4, 3.841], [0.5, 3.80], [0.57, 3.78]],
+  "low_y": 3.78, "near_y": 3.6,
+  "trunk": {"floor_z": 0.62, "front_y": 3.82, "back_y": 4.06, "half_w": 0.52, "top_z": 0.96}
+ },
+ "tailgate_skip": "Interior|defooger|b_gls",
+ "charge_flap": {"side": -1, "box": [3.47, 3.72, 0.71, 0.88], "only": "^(bodypaint_A|corner)"}
+}

@@ -49,7 +49,6 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     private var gl: Renderer? = null
     private val windows = HashMap<String, Win>()
     private val idle = Runnable { close() }
-    private var warm = false
 
     private inner class Win(val name: String) {
         val box = FrameLayout(activity)
@@ -96,6 +95,15 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     }
     private fun canOverlay() = android.provider.Settings.canDrawOverlays(activity)
 
+    // Yunus behind another app: the mirror's window (over every app) is put away, and back as it was.
+    private var away = false
+    fun away(on: Boolean) {
+        away = on
+        val win = windows["rear"] ?: return
+        if (!win.overlay || !win.visible) return
+        win.box.visibility = if (on) View.GONE else View.VISIBLE
+    }
+
     /** Shows window [name] at x,y w×h (screen px) with the page's settings [json] (see pack). */
     fun show(name: String, x: Int, y: Int, w: Int, h: Int, json: String) {
         root.removeCallbacks(idle)
@@ -133,7 +141,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         // the camera takes a moment); it shows with that frame.
         val fresh = !win.visible
         if (fresh) { win.box.animate().cancel(); win.leaving = false; win.box.alpha = 0f; win.box.translationX = 0f; win.waiting = 2; win.blackSkips = 0; win.frames = 0 }
-        win.box.visibility = View.VISIBLE
+        win.box.visibility = if (away && name == "rear" && win.overlay) View.GONE else View.VISIBLE
         win.visible = true
         renderer() // starts the camera when the first window comes up
         // The no-frame check counts from the window's opening: the car repeats the signal every
@@ -142,7 +150,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         if (fresh) { restarts = 0; root.removeCallbacks(noFrames); root.postDelayed(noFrames, NO_FRAME_MS) }
     }
 
-    /** Hides window [name]; the camera is let go 30 s after the last window went (unless kept warm). */
+    /** Hides window [name]; the camera is let go 30 s after the last window went. */
     fun hide(name: String) {
         val win = windows[name] ?: return
         win.visible = false
@@ -165,15 +173,6 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
         return if (left + width / 2 < root.width / 2) -width.toFloat() else width.toFloat()
     }
 
-    /**
-     * Keeps the camera running while driving (the page asks in D and R), so a signal's window shows
-     * a picture at once: opening the camera and its first frame took a moment on the car. Frames
-     * are only taken from it, not drawn, while no window is up.
-     */
-    fun warm(on: Boolean) {
-        warm = on
-        if (on) { root.removeCallbacks(idle); renderer() } else idleLater()
-    }
 
     // A window up without a frame: the camera kept open (warm, while driving) gave no more frames
     // after BYD's 360 view took the camera and let it go (reversing out of a space). Opened afresh.
@@ -194,7 +193,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
 
     private fun idleLater() {
         root.removeCallbacks(idle)
-        if (!warm && windows.values.none { it.visible }) root.postDelayed(idle, IDLE_CLOSE_MS)
+        if (windows.values.none { it.visible }) root.postDelayed(idle, IDLE_CLOSE_MS)
     }
 
     fun close() {
@@ -228,7 +227,7 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
             }
             win.box.addView(win.label, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
                 android.view.Gravity.TOP or android.view.Gravity.START).apply { topMargin = 12; leftMargin = 16 })
-            dragging(win.box)
+            dragging(win)
         } else {
             win.box.setOnClickListener { hide(name); onEvent("sideCamDismissed") }
             win.box.addView(android.widget.TextView(activity).apply {
@@ -244,7 +243,10 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
             override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
             override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean { gl?.detach(win); win.out = null; return true }
         }
-        if (name == "side" && canOverlay()) {
+        // The mirror too, in a small window of its own over Yunus: inside Yunus's window each camera
+        // frame redrew the whole window (page, 3D car, cards) 30 times a second, and driving the page
+        // fell to ~10 frames a second and touches went unanswered (measured on the car, 2026-11-17).
+        if ((name == "side" || name == "rear") && canOverlay()) {
             win.box.visibility = View.GONE
             try { wm.addView(win.box, overlayParams(win, w, h, false)); win.overlay = true; return win } catch (t: Throwable) { android.util.Log.w("Yunus", "sidecam overlay: $t") }
         }
@@ -253,9 +255,24 @@ class CarCamera(private val activity: Activity, private val root: FrameLayout, p
     }
 
     /** A finger moves the window anywhere on the screen; where it is let go is kept. */
-    private fun dragging(box: FrameLayout) {
+    private fun dragging(win: Win) {
+        val box = win.box
         var dx = 0f; var dy = 0f
         box.setOnTouchListener { v, ev ->
+            // In a window of its own: its place is the window's (x, y in Yunus's coordinates).
+            if (win.overlay) {
+                val wlp = v.layoutParams as? android.view.WindowManager.LayoutParams ?: return@setOnTouchListener true
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { dx = ev.rawX - win.x; dy = ev.rawY - win.y }
+                    MotionEvent.ACTION_MOVE -> {
+                        win.x = (ev.rawX - dx).toInt().coerceIn(0, root.width - v.width)
+                        win.y = (ev.rawY - dy).toInt().coerceIn(0, root.height - v.height)
+                        try { wm.updateViewLayout(v, overlayParams(win, wlp.width, wlp.height, true)) } catch (_: Throwable) { }
+                    }
+                    MotionEvent.ACTION_UP -> prefs.edit().putInt("rearCamX", win.x).putInt("rearCamY", win.y).apply()
+                }
+                return@setOnTouchListener true
+            }
             val lp = v.layoutParams as FrameLayout.LayoutParams
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> { dx = ev.rawX - lp.leftMargin; dy = ev.rawY - lp.topMargin }

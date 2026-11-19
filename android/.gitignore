@@ -4,3 +4,9 @@ app/build/
 local.properties
 .idea/
 *.iml
+# Personal signing — the key and its passwords never go in the repo.
+keystore.properties
+*.jks
+*.keystore
+# The trial unlock secret — never in the repo.
+license.properties

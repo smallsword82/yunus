@@ -1,0 +1,19 @@
+{
+  "_comment": "Araç profili kayıt defteri. 'models' listesi model seçicide görünür (sıra korunur). 'detect' araçtan gelen değerleri profil id'sine eşler: 'modelName' = getAutoModelName() int kodu, 'vin' = VIN'in başındaki desen (büyük harf). Yeni model: profiles/<id>.json ekle, buraya bir models girdisi + (biliniyorsa) bir detect kuralı ekle. Dolphin sayfada gömülü (dolphin.json yalnız referans), yine de burada listelenir.",
+  "models": [
+    { "id": "auto", "name": "Otomatik (araçtan algıla)" },
+    { "id": "dolphin", "name": "BYD Dolphin" },
+    { "id": "generic", "name": "BYD (tanınmayan model)" },
+    { "id": "byd_seal", "name": "BYD Seal" },
+    { "id": "byd_atto_3", "name": "BYD Atto 3" },
+    { "id": "byd_atto_2", "name": "BYD Atto 2" },
+    { "id": "byd_seal_u", "name": "BYD Seal U" },
+    { "id": "byd_seal_u_dmi", "name": "BYD Seal U DM-i" },
+    { "id": "byd_tang", "name": "BYD Tang" },
+    { "id": "byd_han", "name": "BYD Han" }
+  ],
+  "detect": {
+    "modelName": {},
+    "vin": {}
+  }
+}

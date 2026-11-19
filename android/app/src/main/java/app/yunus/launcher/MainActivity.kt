@@ -218,18 +218,25 @@ class MainActivity : Activity() {
                 // Hides a slot while a Yunus card covers its area, and shows it again after.
                 @JavascriptInterface
                 fun embedVisible(slot: String, visible: Boolean) = runOnUiThread { embed.setVisible(slot, visible) }
-                @JavascriptInterface
-                fun embedShift(slot: String, dx: Int, cut: Int, ms: Int) = runOnUiThread { embed.shift(slot, dx, cut, ms.toLong()) }
 
-                // While a Yunus pop-up over the map is open the page is raised above the embedded apps
-                // (it is see-through there), so the pop-up shows over live Maps; after, Maps is on
-                // top again, fastest and taking its touches. Raised by Z, not moved: a TextureView
-                // taken out and put back loses its picture until the app draws again.
+                // A Yunus card over the map: Maps stays on the screen, live, above the card (the card
+                // only covers part of the area; hidden, the rest was gray), and its touches go to the
+                // page meanwhile.
+                @JavascriptInterface
+                // The page goes above the map's window meanwhile (raised by Z, nothing moved): the map's
+                // window cuts a hole through what is drawn before it, and the card under it was invisible.
+                fun embedTouch(slot: String, on: Boolean) = runOnUiThread { embed.setTouch(slot, on); web.translationZ = if (on) 0f else 1f }
                 // The car's home screen: Yunus or DiLink's launcher (see the helper's "home").
                 @JavascriptInterface
                 fun isHome(): Boolean = isDefaultHome()
                 @JavascriptInterface
                 fun setHome(yunus: Boolean) { wantHome(this@MainActivity, yunus); shell.send(if (yunus) "home yunus" else "home byd") }
+
+                // The 30-day trial and its unlock code (see License): the page shows the notice, only in P.
+                @JavascriptInterface
+                fun licenseState(): String = License.state(this@MainActivity)
+                @JavascriptInterface
+                fun licenseEnter(code: String): Boolean = License.enter(this@MainActivity, code)
 
                 // The recent apps (BYD's bar with its key is off the screen); the shell sends the key.
                 @JavascriptInterface
@@ -245,8 +252,6 @@ class MainActivity : Activity() {
                 fun rearCam(x: Int, y: Int, w: Int, h: Int, json: String) = runOnUiThread { carCam.show("rear", x, y, w, h, json) }
                 @JavascriptInterface
                 fun rearCamHide() = runOnUiThread { carCam.hide("rear") }
-                @JavascriptInterface
-                fun camWarm(on: Boolean) = runOnUiThread { carCam.warm(on) }
 
                 @JavascriptInterface
                 fun mapUnder(under: Boolean) = runOnUiThread {
@@ -266,8 +271,6 @@ class MainActivity : Activity() {
                         else Regex("[0-9.]+").findAll(css).map { it.value.toFloat().toInt() }.toList().let { android.graphics.Color.rgb(it[0], it[1], it[2]) } } catch (_: Throwable) { null }
                     if (c != null) { (web.parent as? android.view.View)?.setBackgroundColor(c); embed.coverColor = c }
                 }
-                @JavascriptInterface
-                fun embedFull(slot: String) = runOnUiThread { embed.fullApp(slot) }
                 @JavascriptInterface
                 fun embedBack(slot: String) = runOnUiThread { embed.back(slot) }
                 @JavascriptInterface
@@ -362,15 +365,6 @@ class MainActivity : Activity() {
                 @JavascriptInterface
                 fun openCarPanel() = shell.send("qsbar")
 
-                // The bell: pulls down the system's notification shade over Yunus.
-                @JavascriptInterface
-                fun openNotifications() = runOnUiThread {
-                    try {
-                        val sb = getSystemService("statusbar")
-                        sb.javaClass.getMethod("expandNotificationsPanel").invoke(sb)
-                    } catch (_: Throwable) { }
-                }
-
                 @JavascriptInterface
                 fun volumeSet(level: Int) = runOnUiThread { volume.set(level) }
 
@@ -395,6 +389,11 @@ class MainActivity : Activity() {
                 // From the dock over another app: Yunus to the front, then [card] opened there ('' just home).
                 @JavascriptInterface
                 fun dockHome(card: String) = runOnUiThread {
+                    // At most once a second: a loop that called it again (fixed) started Yunus ten times a
+                    // second and made everything lag; this keeps any such loop from doing that again.
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (now - lastDockHome < 1000) return@runOnUiThread
+                    lastDockHome = now
                     edge.hideDock()
                     startActivity(android.content.Intent(this@MainActivity, MainActivity::class.java)
                         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
@@ -644,8 +643,21 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { postToPage(JSONObject().put("back", true).toString()) }
 
-    override fun onResume() { super.onResume(); web.onResume(); media.refresh(); edge.hide(); embed.backFromFull(); embed.pauseAll(false) }
-    override fun onPause() { web.onPause(); if (isDefaultHome()) edge.show(); super.onPause() }
+    override fun onResume() { super.onResume(); away = false; carCam.away(false); web.onResume(); media.refresh(); hideEdgeSoon(); embed.backFromFull(); embed.pauseAll(false) }
+    // Behind another app Yunus's dock goes over it, at once, in the same place as Yunus's own (the bar
+    // never leaves the screen). Not in R: the app in front is BYD's 360 view, and Yunus does nothing
+    // there (asked on the car, 2026-11-17). R comes from the gearbox's event, the gear the page shows.
+    override fun onPause() {
+        web.onPause(); away = true; carCam.away(true)
+        if (isDefaultHome() && !reverse) edge.show()
+        super.onPause()
+    }
+    private var away = false // Yunus behind another app (between onPause and onResume)
+    private var lastDockHome = 0L
+    // Back in Yunus, the dock over the apps stays until Yunus's window is on the screen (its opening
+    // animation): hidden at once, the bar was gone until Yunus came (asked on the car, 2026-11-17).
+    private fun hideEdgeSoon() { web.postDelayed({ if (!away) edge.hide() }, 450) }
+    @Volatile private var reverse = false // the gearbox's last word was R (see postToPage)
     override fun onStop() { embed.pauseAll(true); super.onStop() }
 
     private fun isDefaultHome(): Boolean = isDefaultHome(this)
@@ -656,7 +668,9 @@ class MainActivity : Activity() {
     // "ev <Device> 0x<id> <i|f|d> <value>" from the shell helper → the page's car events.
     private fun carFromHelper(line: String) {
         if (line.startsWith("msg ")) return postToPage(line.substring(4)) // a reply for the page as it is (Wi-Fi, …)
-        if (line.startsWith("shown ")) { line.substring(6).trim().toIntOrNull()?.let { d -> runOnUiThread { embed.shown(d) } }; return }
+        if (line.startsWith("aa ")) { val f = line.split(' '); val d = f.getOrNull(1)?.toIntOrNull(); if (d != null) runOnUiThread { embed.androidAuto(d, f.getOrNull(2) == "1") }; return }
+        if (line.startsWith("shown ")) { val f = line.substring(6).trim().split(' ')
+            f[0].toIntOrNull()?.let { d -> val cold = f.getOrNull(1) == "cold"; runOnUiThread { embed.shown(d, cold) } }; return }
         if (line.startsWith("refused ")) { line.substring(8).trim().toIntOrNull()?.let { d -> runOnUiThread { embed.refused(d) } }; return }
         val f = line.split(' ')
         if (f.size != 5 || f[0] != "ev" || !halWant(f[1] + " " + f[2])) return
@@ -681,7 +695,16 @@ class MainActivity : Activity() {
             ?: o.keys().asSequence().joinToString(",")
     } catch (_: Throwable) { message }
 
+    private val DOCK_SKIP = setOf("hal Get steer", "hal Get speed")
     private fun postToPage(message: String) {
+        // The gear (2 = R), for onPause: the helper's 1 s poll ("Get gear") or the gearbox event
+        // (0x34200020). A string test first, most messages are neither.
+        if (message.contains("\"gear\"") || message.contains("0x34200020")) try {
+            JSONObject(message).optJSONObject("carHal")?.let { val t = it.optString("type"); if (t == "gear" || t == "0x34200020") {
+                reverse = (if (it.has("int")) it.optInt("int") else it.optDouble("double", 0.0).toInt()) == 2
+                if (reverse) runOnUiThread { if (away && ::edge.isInitialized) edge.hide() }
+            } }
+        } catch (_: Throwable) { }
         runOnUiThread {
             if (::web.isInitialized && !isFinishing) {
                 val quoted = JSONObject.quote(message)
@@ -692,7 +715,11 @@ class MainActivity : Activity() {
                     dockCache.remove(key); dockCache[key] = message
                     if (dockCache.size > 600) dockCache.remove(dockCache.keys.first())
                 }
-                if (::edge.isInitialized) edge.dockWeb()?.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
+                // Not what the main page is asked to do (open a card, go home): on the dock's page that
+                // started Yunus again, which asked again, in a loop.
+                // Nor the steering, the speed and the lane camera (up to ten a second): the dock shows none
+                // of them, and over other apps its page kept redrawing for them.
+                if (::edge.isInitialized && key != "openCard" && key !in DOCK_SKIP && !key.startsWith("hal ADAS ")) edge.dockWeb()?.evaluateJavascript("window.yunusCar && window.yunusCar(JSON.parse($quoted))", null)
             }
         }
     }
@@ -721,11 +748,19 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // the window keeping its shape); 0: the window's size. cw×ch: the picture's size in the window.
         var vw = 0; var vh = 0; var w = 0; var h = 0; var cw = 0f; var ch = 0f
         var dw = 0; var dh = 0 // the display's size as last set (see resize)
+        var dpi = 0 // the display's density as last set (see displayDpi)
+        var land: Boolean? = null // the display wider than tall, as last set
         var cover: android.view.View? = null // the page's colour over the window while its app starts
         var starting = false // a launch sent, its "shown" not back yet
+        var launchedAt = 0L // uptime of the last launch sent
+        var wanted: String? = null // the app last asked for (a deferred launch checks it is still this one)
         var locate = false // Google Maps just started here: its my-location button is pressed once it is shown
+        var touch = true // its touches go to its app (not while a Yunus card is over it)
+        var aa = false // Android Auto on its display (come by itself, see androidAuto)
+        var again: (() -> Unit)? = null // the last show(), to fit it again
     }
     private val slots = HashMap<String, Slot>()
+    private val bornAt = android.os.SystemClock.uptimeMillis()
     // A display is never given a size of zero or less: the window manager takes it as it comes and
     // dies on it ("width and height must be positive" on its own thread), and the whole system
     // restarts. Seen twice on the car, coming back to Yunus from another app: the display's metrics
@@ -753,8 +788,12 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (v.visibility != android.view.View.VISIBLE) return
         v.animate().alpha(0f).setDuration(150).withEndAction { v.visibility = android.view.View.GONE }.start()
     }
-    fun shown(display: Int) { slots.values.firstOrNull { it.displayId == display }?.let { s -> s.starting = false; root.postDelayed({ uncover(s) }, 120) // its frame reaches the screen just after
-        if (s.locate) { s.locate = false; root.postDelayed({ locate(s, display) }, 1000) } } }
+    // cold: the app's process was started by this launch. Only then is Google Maps on its first view,
+    // with its my-location button where locate() taps; already running (Yunus restarted, an update),
+    // it comes back as it was left, its bottom sheet maybe up, and the tap opened its directions
+    // instead (2026-11-18). It then keeps its own view, which was already the car's.
+    fun shown(display: Int, cold: Boolean = false) { slots.values.firstOrNull { it.displayId == display }?.let { s -> s.starting = false; root.postDelayed({ uncover(s) }, 120) // its frame reaches the screen just after
+        if (s.locate) { s.locate = false; if (cold) root.postDelayed({ locate(s, display) }, 1000) } } }
     // Google Maps opens on its last view, not following the car: one tap on its my-location button
     // (bottom-right, ~45 dp from the right, ~122 dp up) centres it on the car and turns on follow
     // mode. Sent 1 s after its first frame (a fixed 4.5 s after the launch fell before a cold
@@ -799,6 +838,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // No area (a layout in between): nothing to show an app in, and no display of that size (see resize).
         if (w < 1 || h < 1) { android.util.Log.w("Yunus", "embed $name ${w}x$h skipped"); return }
         val slot = slots.getOrPut(name) { newSlot(name) }
+        slot.again = { show(name, packages, x, y, w, h, onReady) }
         slot.box.layoutParams = android.widget.FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y }
         // Android Auto lays its 16:9 picture out for a car screen: in a window-sized display it came out
         // wider than the window (its app bar cut off) with bars above and below. It gets a display of
@@ -808,7 +848,9 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // into the window.
         val minH = 720
         val sc = if (name == "side" && h in 1 until minH) minOf(minH.toFloat() / h, 4096f / w) else 1f // at most 4096 px wide
-        val (dw, dh) = if (launch.packageName == "com.byd.androidauto") 1920 to 1080
+        // (Tried 2026-11-17: a display of the window's shape. The phone's picture stays 16:9 whatever the
+        // display, so Android Auto only added bars of its own inside it - back to the car screen's size.)
+        val (dw, dh) = if (launch.packageName == "com.byd.androidauto" || slot.aa) 1920 to 1080
             else if (sc > 1f) (w * sc).toInt() to (h * sc).toInt() else w to h
         val resized = slot.display != null && (slot.w != w || slot.h != h)
         slot.w = w; slot.h = h; slot.vw = if (dw != w || dh != h) dw else 0; slot.vh = if (slot.vw > 0) dh else 0
@@ -818,8 +860,6 @@ private class AppEmbed(private val activity: Activity, private val root: android
         // scales the buffer to the view).
         slot.view.layoutParams = android.widget.FrameLayout.LayoutParams(slot.cw.toInt(), slot.ch.toInt()).apply {
             leftMargin = ((w - slot.cw) / 2).toInt(); topMargin = ((h - slot.ch) / 2).toInt() }
-        slot.view.translationX = 0f; slot.box.translationX = 0f; slot.box.clipBounds = null // placed for real: no shift (see shift)
-        cuts.remove(name)
         // Covered from the moment it shows: a new app (until its first frame) - the window was black
         // until its display existed - or a resized one while it redraws at the new size (Maps showed
         // its old picture stretched, black under it, as the layout changed).
@@ -827,15 +867,36 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (newApp || resized) cover(slot)
         // Until the app has laid out and drawn at the new size (the helper watches; up to 4 s for some).
         if (resized && !newApp && !slot.starting) shell.send("redrawn ${slot.displayId} $dw $dh")
-        slot.box.visibility = android.view.View.VISIBLE
+        slot.box.translationX = 0f; slot.box.visibility = android.view.View.VISIBLE
         if (slot.displayId > 0) shell.send("resume ${slot.displayId}")
         if (slot.keys.isNotEmpty()) { placeKeys(slot, x, y, w); showKeys(slot, true) }
-        val dpi = activity.resources.displayMetrics.densityDpi
+        val dpi = displayDpi(name, dw, dh)
+        // The window turned from wide to tall or back (three windows <-> two), or its density changed:
+        // an app already on it (YouTube) kept the layout it had and drew it into the new shape - a
+        // tablet layout in a narrow window, black below it, or a phone's upright strip in a wide one
+        // (2026-11-18). It is opened again on the display, as on a fresh start (its playback goes on).
+        val land = dw > dh
+        val reshaped = slot.display != null && slot.component == launch.flattenToShortString() && !slot.aa &&
+            name != "map" && launch.packageName != "com.byd.androidauto" && (slot.land != null && slot.land != land || slot.dpi > 0 && slot.dpi != dpi)
+        slot.dpi = dpi; slot.land = land
         val component = launch.flattenToShortString()
         // The helper stops the app's task elsewhere first; otherwise that task would just come to
         // the front on the main screen. A different app chosen for the slot is started on top.
         fun launchIfNew() {
             if (slot.component == component) return
+            slot.wanted = component
+            // The map first: at power-on Maps, YouTube, the page and the 3D car all started at once, and
+            // the map window stayed black (2026-11-18). Another window's app waits while Maps is
+            // starting (until it is shown, at most 6 s after its launch).
+            val map = slots["map"]
+            // Only in Yunus's first minute (power-on): later an app asked for opens at once.
+            val nowMs = android.os.SystemClock.uptimeMillis()
+            if (name != "map" && map != null && map !== slot && map.starting && nowMs - bornAt < 60000 && nowMs - map.launchedAt < 6000) {
+                slot.starting = true // its cover stays up meanwhile
+                root.postDelayed({ if (slots[name] === slot && slot.wanted == component && slot.display != null) launchIfNew() }, 700)
+                return
+            }
+            slot.launchedAt = android.os.SystemClock.uptimeMillis()
             slot.component = component
             // Not started after all: forget it, so choosing the app again retries the launch.
             slot.starting = true
@@ -846,11 +907,16 @@ private class AppEmbed(private val activity: Activity, private val root: android
         slot.view.holder.setFixedSize(dw, dh)
         slot.dw = dw; slot.dh = dh
         val existing = slot.display
-        if (existing != null) { resize(existing, dw, dh, dpi); launchIfNew(); onReady(slot.displayId); return }
+        if (existing != null) {
+            resize(existing, dw, dh, dpi)
+            if (reshaped) { cover(slot); slot.starting = true; shell.send("relaunch ${slot.displayId} $component") }
+            launchIfNew(); onReady(slot.displayId); return
+        }
         // The display is made once its surface is there (now, or when the view's surface comes).
         slot.pending = { surface ->
             val dm = activity.getSystemService(android.hardware.display.DisplayManager::class.java)
-            // OWN_CONTENT_ONLY | DESTROY_CONTENT_ON_REMOVAL (hidden flag 1 << 8), as Kinex uses.
+            // OWN_CONTENT_ONLY | DESTROY_CONTENT_ON_REMOVAL (hidden flag 1 << 8), as Kinex uses. (Without it the
+            // app was destroyed with the display all the same: a private display's content always is, 2026-11-18.)
             val flags = android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or (1 shl 8)
             slot.display = dm.createVirtualDisplay("yunus-$name", dw, dh, dpi, surface, flags)
             launchIfNew()
@@ -858,6 +924,17 @@ private class AppEmbed(private val activity: Activity, private val root: android
         }
         val sf = slot.view.holder.surface
         if (sf != null && sf.isValid) slot.pending?.let { slot.pending = null; it(sf) }
+    }
+
+    // A wide side window at the screen's 240 dpi is 578 dp tall (1200×868): under 600 dp, so YouTube
+    // took it for a phone, asked for portrait and was boxed into a 627 px upright strip in the middle
+    // (seen 2026-11-18). A wide window that is not the map gets a density low enough to be 620 dp
+    // tall (a tablet's layout, filling the window), never below 200 dpi; the map keeps the screen's.
+    private fun displayDpi(name: String, w: Int, h: Int): Int {
+        val base = activity.resources.displayMetrics.densityDpi
+        if (name == "map" || w <= h || base < 1) return base
+        val short = minOf(w, h)
+        return if (short * 160 / base >= 600) base else maxOf(200, minOf(base, short * 160 / 620))
     }
 
     private fun newSlot(name: String): Slot {
@@ -868,11 +945,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
         box.addView(view)
         root.addView(box)
         val slot = Slot(box, view)
-        // A touch in the cut-off part (a signal column took it) is the page's, not the app's.
-        view.setOnTouchListener { _, ev ->
-            val c = cuts[name] ?: 0f
-            if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN && c > 0.5f && ev.x + slot.view.left >= slot.w - c) return@setOnTouchListener false
-            shell.send(touchLine(slot, ev)); true }
+        view.setOnTouchListener { _, ev -> if (!slot.touch) false else { shell.send(touchLine(slot, ev)); true } }
         view.holder.addCallback(object : android.view.SurfaceHolder.Callback {
             // The surface comes and goes with the view on the screen (hidden, Yunus in the
             // background): the app keeps running on its display, drawn again into the new surface.
@@ -886,7 +959,7 @@ private class AppEmbed(private val activity: Activity, private val root: android
                 // The size is the one show() set, not the display's metrics (they read 0×0 here at
                 // times, see resize), and the size of the moment for the way back (a show() in between
                 // was undone by the old one).
-                val dpi = activity.resources.displayMetrics.densityDpi
+                val dpi = if (slot.dpi > 0) slot.dpi else activity.resources.displayMetrics.densityDpi
                 if (slot.dw < 1 || slot.dh < 2) return
                 resize(d, slot.dw, slot.dh - 1, dpi)
                 root.postDelayed({ if (slot.display === d) resize(d, slot.dw, slot.dh, dpi) }, 60)
@@ -939,47 +1012,35 @@ private class AppEmbed(private val activity: Activity, private val root: android
         if (full == name) full = null
         val slot = slots[name] ?: return
         if (slot.displayId > 0) shell.send("close ${slot.displayId}")
-        slot.component = null
+        slot.component = null; slot.wanted = null; slot.starting = false // a deferred launch is dropped too
         slot.box.visibility = android.view.View.GONE
         showKeys(slot, false)
     }
 
-    fun setVisible(name: String, visible: Boolean) {
-        val slot = slots[name] ?: return
-        slot.box.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
-        if (slot.displayId > 0) shell.send((if (visible) "resume " else "pause ") + slot.displayId)
-        showKeys(slot, visible)
+    fun setTouch(name: String, on: Boolean) { slots[name]?.touch = on }
+
+    // Android Auto came onto (or left) a slot's display by itself: the display is fitted again, at the
+    // car screen's size while it is there (whole in the window, no part cut off).
+    fun androidAuto(display: Int, on: Boolean) {
+        val slot = slots.values.firstOrNull { it.displayId == display } ?: return
+        if (slot.aa == on) return
+        slot.aa = on
+        slot.again?.invoke()
+        // It doesn't follow a resized display (it stayed at the old size, cut and small): opened again
+        // at the car screen's size.
+        if (on && slot.displayId > 0) shell.send("aarestart ${slot.displayId}")
     }
 
-    /**
-     * Moves slot [name] sideways by [dx] px and cuts [cut] px off its right side, without resizing
-     * it (resizing makes the app redraw): the map area for a moment narrower, the third window or a
-     * column at its right not covered. Over [ms] it slides there, in step with the page's column.
-     */
-    private val cuts = HashMap<String, Float>()
-    private val shifting = HashMap<String, android.animation.ValueAnimator>()
-    fun shift(name: String, dx: Int, cut: Int, ms: Long = 0) {
+    fun setVisible(name: String, visible: Boolean) {
         val slot = slots[name] ?: return
-        val v = slot.view
-        shifting.remove(name)?.cancel()
-        // The box slides with its picture, and its right side is cut off (its clip, and so the hole the
-        // picture is seen through, is that much narrower). The picture alone slid out of its box and
-        // was clipped by it: shifted left for a right signal column, only a 120 px strip of the third
-        // window was left.
-        fun place(x: Float, c: Float) {
-            v.translationX = 0f
-            slot.box.translationX = x
-            cuts[name] = c
-            slot.box.clipBounds = if (c > 0.5f) android.graphics.Rect(0, 0, (slot.w - c).toInt().coerceIn(0, slot.w), slot.h) else null
-        }
-        val x0 = slot.box.translationX; val c0 = cuts[name] ?: 0f
-        if (ms <= 0) return place(dx.toFloat(), cut.toFloat())
-        shifting[name] = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = ms
-            interpolator = android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f) // the page's column curve
-            addUpdateListener { val f = it.animatedValue as Float; place(x0 + (dx - x0) * f, c0 + (cut - c0) * f) }
-            start()
-        }
+        // The third window's app put out of sight (the map alone on the screen) is moved off the screen,
+        // not hidden: hidden, its display went off and YouTube was stopped, and it started over each
+        // time the window came back (asked on the car, 2026-11-17). Off the screen it plays on as it was.
+        val park = !visible && name == "side" && slot.component != null
+        slot.box.translationX = if (park) 100000f else 0f
+        slot.box.visibility = if (visible || park) android.view.View.VISIBLE else android.view.View.GONE
+        if (slot.displayId > 0) shell.send((if (visible) "resume " else "pause ") + slot.displayId)
+        showKeys(slot, visible)
     }
 
     fun close() {
@@ -1076,7 +1137,10 @@ private class ShellLink(private val ctx: android.content.Context, private val st
                     it.connect()
                     // "[S]" so the pattern does not match this pkill's own command line.
                     it.shell("pkill -f 'app.yunus.launcher.[S]hellHelper'", 1)
-                    it.hold("CLASSPATH=$apk exec app_process /system/bin app.yunus.launcher.ShellHelper $PORT $token 2>/data/local/tmp/yunus_helper.log")
+                    // The log is kept across starts (a black map at power-on left nothing to read: each
+                    // start emptied it); over 512 KB it moves to .1. In the same shell: no extra wait.
+                    it.hold("f=/data/local/tmp/yunus_helper.log; [ \$(stat -c %s \$f 2>/dev/null || echo 0) -gt 524288 ] && mv \$f \$f.1; " +
+                        "CLASSPATH=$apk exec app_process /system/bin app.yunus.launcher.ShellHelper $PORT $token 2>>\$f")
                 }
             } catch (t: Throwable) { status("Kabuk yardımcısı durdu: ${t.message ?: t.javaClass.simpleName}") }
         }, "yunus-shell-adb").apply { isDaemon = true }.start()

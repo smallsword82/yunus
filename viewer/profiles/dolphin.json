@@ -1,0 +1,27 @@
+{
+  "_comment": "BYD Dolphin (DiLink 3) referans profili. Sayfa Dolphin icin gomulu DOLPHIN_PROFILE'i kullanir (birebir ayni kalsin diye); bu dosya sema referansi ve yeni profiller icin ornektir.",
+  "id": "dolphin",
+  "name": "BYD Dolphin",
+  "platform": "dl3",
+  "glb": "dolphin_parts.glb",
+  "fallbackGlb": "dolphin.glb",
+  "baseRadiusFactor": 4,
+  "presets": {
+    "default": { "theta": 20, "phi": 70, "r": 50 },
+    "actions": { "theta": 20, "phi": 70, "r": 45 },
+    "left": { "theta": 90, "phi": 83, "r": 55 },
+    "right": { "theta": 270, "phi": 83, "r": 55 },
+    "overhead": { "theta": 270, "phi": 1, "r": 90 },
+    "rear": { "theta": 160, "phi": 72, "r": 60 },
+    "drive": { "theta": 180, "phi": 58, "r": 120 },
+    "roof": { "theta": 25, "phi": 38, "r": 60 },
+    "charge": { "theta": 270, "phi": 83, "r": 92 }
+  },
+  "chargeTarget": [0, 0.75, 0.7],
+  "driveTarget": [0, 0.4, 3.2],
+  "hot": { "hTrunk": [0, 1.25, -2.45], "hCharge": [-0.95, 1.02, 1.12], "hShade": [0, 1.75, -0.4] },
+  "chargeNode": "ChargeSocket",
+  "nodes": { "paintMat": "CarPaint_1", "roofMat": "PCrPaint_2", "darkGlass": "^(f_gls|b_gls|sunroof|Window_)", "sunroof": "^sunroof", "tailgate": "Tailgate" },
+  "caps": { "window": true, "preciseWindow": true, "sunroof": true, "rearDefrost": true, "dualClimate": false, "rearClimate": false, "rearSeats": false },
+  "acHalfDegree": false
+}
