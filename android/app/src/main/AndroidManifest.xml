@@ -22,28 +22,11 @@
     <!-- The car's signed-in user (name and photo) from BYD's account app (normal permission). -->
     <uses-permission android:name="com.byd.permission.ACCOUNT_SERVICE_LINK" />
 
-    <!-- BYDAuto HAL _COMMON permissions (protectionLevel=dangerous, source package "android",
-         so grantable to any app once the user approves — the same set BYD Road Computer and the
-         electro reader hold). They let the app CONSTRUCT the HAL devices and register listeners;
-         live data then arrives through the device push/listener path, which is not permission-gated.
-         The signature _GET/_SET perms are NOT requested: they need BYD's platform certificate and
-         no third-party app can hold them. -->
-    <uses-permission android:name="android.permission.BYDAUTO_AC_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_BODYWORK_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_CHARGING_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_DOOR_LOCK_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_ENERGY_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_ENGINE_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_GEARBOX_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_INSTRUMENT_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_LIGHT_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_PM2P5_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_SAFETY_BELT_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_SETTING_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_SPEED_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_STATISTIC_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_TIME_COMMON" />
-    <uses-permission android:name="android.permission.BYDAUTO_TYRE_COMMON" />
+    <!-- No BYDAuto HAL permissions (BYDAUTO_*_COMMON) on purpose: BYD's file manager refuses to
+         install an app that asks for them ("Fail in installation of desktop apps", seen on an
+         Atto 2), while Kinex and Electro, which ask for none, install. The car is read and driven
+         through the shell helper over ADB, as Kinex and Electro do; CarHal still tries in-process
+         and simply gets nothing where the image refuses it. -->
     <!-- The app tray's "Kaldır": Android's own uninstall screen. -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 

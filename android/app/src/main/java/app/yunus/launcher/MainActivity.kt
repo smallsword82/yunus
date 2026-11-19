@@ -516,7 +516,9 @@ class MainActivity : Activity() {
 
     private fun requestCarPermissions() {
         try {
-            val want = (CAR_COMMON_PERMS + android.Manifest.permission.ACCESS_FINE_LOCATION).filter {
+            // Only location: the BYDAuto _COMMON permissions are no longer in the manifest (BYD's
+            // installer refuses apps that ask for them); the car comes through the shell helper.
+            val want = arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION).filter {
                 checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
             }
             if (want.isNotEmpty()) requestPermissions(want.toTypedArray(), 1)

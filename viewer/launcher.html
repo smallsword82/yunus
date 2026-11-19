@@ -1427,7 +1427,7 @@ const SETTINGS = {
     ['seg', 'pressUnit', 'Lastik basıncı', [['bar', 'bar'], ['psi', 'PSI'], ['kpa', 'kPa']]],
     ['seg', 'lang', 'Dil', [['tr', 'Türkçe'], ['en', 'English']]],
     ['models', 'carModel', 'Araç modeli'],
-    ['info', 'Yazılım', 'Yunus 0.2 · DiLink 3.0'],
+    ['info', 'Yazılım', 'Yunus 0.2.1 · DiLink 3.0'],
     ['info', '3B araç modelleri', 'Ddiaz Design · CC BY-NC-SA 4.0'], // the licence requires the credit (viewer/MODEL_CREDITS.md)
     // The 30-day trial (see licTick): read when the row is drawn, so it follows a code just entered.
     ['info', 'Kullanım süresi', { toString: () => licText() }],
@@ -5186,7 +5186,6 @@ function permBlock() {
   const p = perms || {}, row = (ok, name, note) => `<div class="setRow"><span>${name}<small style="display:block;font-size:16px;color:var(--mu)">${note}</small></span>
     <i class="ti ti-${ok ? 'circle-check' : 'alert-circle'}" style="font-size:28px;color:${ok ? 'var(--ok)' : 'var(--dn)'}"></i></div>`;
   return `<p style="font-size:22px;color:var(--mu);margin:0 0 6px">İzinler</p>
-    ${row(p.car === p.carTotal && p.carTotal > 0, 'Araç verileri', `${p.car == null ? '…' : p.car}/${p.carTotal || 16} izin`)}
     ${row(!!p.location, 'Konum', 'Harita ve navigasyon')}
     ${row(!!p.media, 'Müzik kartı', 'Bildirim erişimi (çalan müzik)')}
     ${row(!!p.adb, 'Yardımcı (ADB)', 'Google Haritalar ve 3. pencere')}
