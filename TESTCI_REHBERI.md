@@ -37,6 +37,9 @@ Yunus'un kurulması ve araç verilerini okuması için aracında **kablosuz ADB 
 
 ## BYD ana ekranına geri dönmek
 - Ayarlar › Ana ekran uygulaması › **BYD ana ekranına dön**; BYD'nin üst ve alt çubukları da geri gelir.
+- **Kurtarma:** Yunus'un ekranı takılır ya da kullanılamaz hale gelirse direksiyondaki **sesli komut
+  tuşuna 8 saniye içinde 6 kez** bas; araç BYD ana ekranına ve çubuklarına döner. Yunus'u yeniden ana
+  ekran yapmak için Ayarlar › Ana ekran uygulaması › **Varsayılan yap**.
 - Bu da olmazsa: Android Ayarları › Uygulamalar › Yunus › **Kaldır**.
 
 ## Kullanım süresi

@@ -580,18 +580,52 @@ class MainActivity : Activity() {
     // mode: while it talks (it writes CONVERSATION_BEGIN / _END to this system setting) the helper
     // brings the status bar back on the screen, and takes it up again after.
     private val VOICE_KEY = "KEY_VOICE_DIALOGEVENT"
+    private val RECOVERY_OPENS = 3
+    private val RECOVERY_WINDOW_MS = 8000L
     private var voiceLifted = false
     private val voiceObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) = voiceLift()
     }
     private fun voiceLift() {
-        val talking = android.provider.Settings.System.getString(contentResolver, VOICE_KEY) == "CONVERSATION_BEGIN"
+        val voice = android.provider.Settings.System.getString(contentResolver, VOICE_KEY)
+        if (voice != lastVoice) android.util.Log.i("Yunus", "voice: $voice")
+        // Not on Yunus's first read (the assistant already open as Yunus starts is not a press).
+        if (voice == "CONVERSATION_BEGIN" && voiceRead && lastVoice != voice) recoveryTap()
+        lastVoice = voice; voiceRead = true
+        val talking = voice == "CONVERSATION_BEGIN"
         if (talking && !voiceLifted && barsOffScreen()) { voiceLifted = true; shell.send("voice 1") }
         else if (!talking && (voiceLifted || (isDefaultHome() && !barsOffScreen()))) { // (or left down by a Yunus restart mid-talk)
             voiceLifted = false
             shell.send("voice 0")
             window.decorView.postDelayed({ hideSystemBars() }, 800)
         }
+    }
+
+    // Recovery mode: the steering wheel's voice button pressed quickly 6 times (about 8 s) puts the
+    // car back on DiLink's home with BYD's bars, for when Yunus's screen is stuck or unusable. Each
+    // press that opens BYD's assistant writes CONVERSATION_BEGIN; a press while it is open closes it,
+    // so 6 presses make at least 3 openings, and 3 openings within 8 s are counted as the request
+    // (normal use never opens the assistant three times in 8 s). The choice is kept (wantHome off):
+    // Yunus does not take the home screen back on its next start, only from Settings › Varsayılan yap.
+    private var lastVoice: String? = null
+    private var voiceRead = false
+    private val voiceOpens = ArrayDeque<Long>()
+    private fun recoveryTap() {
+        val now = android.os.SystemClock.uptimeMillis()
+        while (voiceOpens.isNotEmpty() && now - voiceOpens.first() > RECOVERY_WINDOW_MS) voiceOpens.removeFirst()
+        voiceOpens.addLast(now)
+        if (voiceOpens.size < RECOVERY_OPENS) return
+        voiceOpens.clear()
+        android.util.Log.w("Yunus", "recovery: voice button pressed repeatedly, back to DiLink's home")
+        wantHome(this, false)
+        if (shellReady) shell.send("home byd")
+        // No helper (ADB off): the home choice can't be changed from the app, but DiLink's home is
+        // opened in front so the car can be used; its home key may still lead back to Yunus.
+        else try {
+            startActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME)
+                .setClassName("com.android.launcher3", "com.android.launcher3.home.MainActivity")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (t: Throwable) { android.util.Log.w("Yunus", "recovery: DiLink's home not opened: $t") }
     }
 
     private fun hideSystemBars() {
