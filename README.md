@@ -86,3 +86,10 @@ Yunus kişisel, resmî olmayan bir çalışmadır; BYD ile bağlantısı ve onay
 garanti verilmeden sunulur**; kuran/kullanan tüm riski kendisi üstlenir ve sahibi/geliştiricisi
 doğabilecek hiçbir zarardan sorumlu değildir. Ayrıntı: [DISCLAIMER.md](DISCLAIMER.md). Uygulama ilk
 açılışta bu bilgilendirmeyi bir kez gösterir ve kabul istenir.
+
+## Lisans
+
+Yunus açık kaynak **değildir**; tüm hakları saklıdır. Kod incelenmek için açıktır, uygulama kişisel ve
+ticari olmayan kullanım için ücretsizdir. Satmak, ücretli dağıtmak, yeniden yayımlamak ya da kodu/tasarımı
+başka bir üründe kullanmak yazılı izin olmadan yasaktır. Üçüncü taraf bileşenler kendi lisanslarına
+tabidir (3B modeller: CC BY-NC-SA 4.0). Ayrıntı: [LICENSE](LICENSE).

@@ -1,0 +1,73 @@
+Yunus — Lisans / License
+
+Telif hakkı (c) 2026 smallsword82. Tüm hakları saklıdır.
+Copyright (c) 2026 smallsword82. All rights reserved.
+
+============================================================
+TÜRKÇE
+============================================================
+
+Bu depodaki kaynak kod, tasarım ve belgeler ("Yazılım") yalnızca incelenmek ve
+kişisel, ticari olmayan kullanım için herkese açıktır. Yazılım açık kaynak
+DEĞİLDİR.
+
+İZİN VERİLENLER
+- Kaynak kodu okumak ve incelemek.
+- Geliştiricinin yayımladığı resmî Yunus APK'sını kendi aracına kurup kişisel,
+  ticari olmayan amaçla kullanmak.
+
+YASAK OLANLAR (geliştiricinin yazılı izni olmadan)
+- Yazılımı veya herhangi bir parçasını satmak, kiralamak, ücretli dağıtmak ya da
+  ücretli bir ürün veya hizmetin içinde kullanmak.
+- Yazılımı veya ondan türetilmiş bir çalışmayı yeniden dağıtmak, yayımlamak ya da
+  başka bir ad altında sunmak.
+- Lisans/deneme süresi denetimini, imzayı veya bu bildirimi kaldırmak ya da
+  atlatmak.
+- Kodu, arayüz tasarımını veya varlıkları başka bir ana ekran / launcher
+  ürününde kullanmak.
+
+ÜÇÜNCÜ TARAF BİLEŞENLER
+Depodaki üçüncü taraf kütüphaneler ve varlıklar bu lisansa değil, kendi
+lisanslarına tabidir. 3B araç modelleri: Ddiaz Design, CC BY-NC-SA 4.0
+(ayrıntı: viewer/MODEL_CREDITS.md).
+
+GARANTİ YOKTUR
+Yazılım "OLDUĞU GİBİ", hiçbir garanti verilmeden sunulur. Kullanımdan doğan her
+türlü risk kullanıcıya aittir; geliştirici hiçbir zarardan sorumlu değildir.
+Ayrıntı: DISCLAIMER.md.
+
+İzin talepleri için GitHub üzerinden geliştiriciyle iletişime geçin.
+
+============================================================
+ENGLISH
+============================================================
+
+The source code, design and documentation in this repository (the "Software")
+are made publicly visible for review and for personal, non-commercial use only.
+The Software is NOT open source.
+
+PERMITTED
+- Reading and studying the source code.
+- Installing the official Yunus APK published by the author on your own car and
+  using it for personal, non-commercial purposes.
+
+PROHIBITED (without the author's written permission)
+- Selling, renting or distributing the Software or any part of it for a fee, or
+  using it inside a paid product or service.
+- Redistributing or publishing the Software or any derivative work, or offering
+  it under another name.
+- Removing or circumventing the licence/trial check, the signature or this
+  notice.
+- Using the code, UI design or assets in another home-screen / launcher product.
+
+THIRD-PARTY COMPONENTS
+Third-party libraries and assets in this repository are governed by their own
+licences, not by this one. 3D car models: Ddiaz Design, CC BY-NC-SA 4.0
+(see viewer/MODEL_CREDITS.md).
+
+NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. YOU USE IT
+ENTIRELY AT YOUR OWN RISK; THE AUTHOR IS NOT LIABLE FOR ANY DAMAGE.
+See DISCLAIMER.md.
+
+For permission requests, contact the author through GitHub.
